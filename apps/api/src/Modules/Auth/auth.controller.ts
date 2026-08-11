@@ -34,7 +34,7 @@ export class AuthController extends BaseController {
 
     // 3. Remove sensitive information before sending it back to the client
     // (Alternatively, you can use Prisma's `omit` feature if you configure it)
-    const { password: _, ...userWithoutPassword } = newUser;
+    const { password_hash: _, ...userWithoutPassword } = newUser;
 
     // 4. Send the standardized response using BaseController's built-in method
     return this.sendCreatedResponse(

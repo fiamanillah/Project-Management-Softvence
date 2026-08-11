@@ -56,6 +56,9 @@ export const config = {
     level: process.env.LOG_LEVEL || "info",
     path: process.env.LOG_FILE_PATH || "logs/app.log",
   },
+  rabbitmq: {
+    url: process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672",
+  },
 };
 
 export default config;

@@ -1,0 +1,27 @@
+{
+  "name": "worker",
+  "version": "0.0.1",
+  "private": true,
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_ENV=development bun run --watch src/index.ts",
+    "build": "NODE_ENV=production bun build src/index.ts --target node --outdir dist",
+    "start": "NODE_ENV=production bun run dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "@workspace/shared": "workspace:*",
+    "@workspace/message-broker": "workspace:*",
+    "@workspace/logger": "workspace:*",
+    "amqplib": "^0.10.9",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.6",
+    "@types/bun": "latest",
+    "@types/node": "^25.0.3",
+    "typescript": "~6"
+  }
+}
