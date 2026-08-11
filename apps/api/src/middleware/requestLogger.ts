@@ -3,6 +3,8 @@ import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import config from "@/core/config";
 
+const logger = new AppLogger("HTTP");
+
 export function requestLogger() {
   return (req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
@@ -36,7 +38,7 @@ export function requestLogger() {
       };
 
       // Log as a single string
-      AppLogger.info(logMessage, payloadData);
+      logger.info(logMessage, payloadData);
     });
 
     // Listen for aborted requests
@@ -60,7 +62,7 @@ export function requestLogger() {
         }
 
         // Log as a single string
-        AppLogger.warn(abortMessage);
+        logger.warn(abortMessage);
       }
     });
 

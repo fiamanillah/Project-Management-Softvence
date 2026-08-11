@@ -19,6 +19,14 @@ export abstract class BaseModule implements IgnitorModule {
   protected router: Router;
   protected context!: Context;
 
+  private _logger?: AppLogger;
+  protected get logger(): AppLogger {
+    if (!this._logger) {
+      this._logger = new AppLogger(this.name || "BaseModule");
+    }
+    return this._logger;
+  }
+
   // Internal DI container for the module
   protected container: ModuleDependencies = {
     services: new Map(),
@@ -36,7 +44,7 @@ export abstract class BaseModule implements IgnitorModule {
   public async initialize(context: Context): Promise<void> {
     this.context = context;
 
-    AppLogger.info(`Initializing module: ${this.name} v${this.version}`);
+    this.logger.info(`Initializing module: ${this.name} v${this.version}`);
 
     // 1. Pre-init hooks
     await this.onBeforeInit();
@@ -53,7 +61,7 @@ export abstract class BaseModule implements IgnitorModule {
     // 5. Post-init hooks
     await this.onAfterInit();
 
-    AppLogger.info(`Module ${this.name} initialized successfully`);
+    this.logger.info(`Module ${this.name} initialized successfully`);
   }
 
   // ==========================================
@@ -103,7 +111,7 @@ export abstract class BaseModule implements IgnitorModule {
   protected async onAfterInit(): Promise<void> {}
 
   public async onShutdown(): Promise<void> {
-    AppLogger.info(`Shutting down module: ${this.name}`);
+    this.logger.info(`Shutting down module: ${this.name}`);
     await this.cleanup();
   }
 

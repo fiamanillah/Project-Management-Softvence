@@ -5,6 +5,8 @@ import { ApiResponse, PaginatedResponse } from "@/types/types";
 import { AppLogger } from "./logging/logger";
 
 export abstract class BaseController {
+  private baseLogger = new AppLogger("BaseController");
+
   /**
    * Send a standard successful response
    */
@@ -16,7 +18,7 @@ export abstract class BaseController {
     data?: T,
   ): Response<ApiResponse<T>> | void {
     if (req.timedout || res.headersSent) {
-      AppLogger.warn(
+      this.baseLogger.warn(
         `[Blocked] Prevented sending response for ${req.method} ${req.originalUrl} - Request timed out or was closed.`,
       );
       return;
@@ -46,7 +48,7 @@ export abstract class BaseController {
     data?: T[],
   ): Response<PaginatedResponse<T>> | void {
     if (req.timedout || res.headersSent || req.abortSignal.aborted) {
-      AppLogger.warn(
+      this.baseLogger.warn(
         `[Blocked] Prevented sending response for ${req.method} ${req.originalUrl} - Request timed out or was closed.`,
       );
       return;
