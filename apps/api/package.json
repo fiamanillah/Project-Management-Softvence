@@ -34,6 +34,7 @@
         "@workspace/shared": "workspace:*",
         "@workspace/message-broker": "workspace:*",
         "@workspace/logger": "workspace:*",
+        "@workspace/cache": "workspace:*",
         "@prisma/adapter-pg": "^7.5.0",
         "@prisma/client": "^7.2.0",
         "axios": "^1.12.2",

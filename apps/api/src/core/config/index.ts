@@ -46,6 +46,14 @@ export const config = {
   rabbitmq: {
     url: env.RABBITMQ_URL,
   },
+  redis: {
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    password: env.REDIS_PASSWORD,
+    db: env.REDIS_DB,
+    keyPrefix: env.REDIS_KEY_PREFIX,
+    defaultTTLSeconds: env.REDIS_DEFAULT_TTL,
+  },
 };
 
 export default config;

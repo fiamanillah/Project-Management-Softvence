@@ -6,6 +6,9 @@ import { config } from "./core/config";
 
 // Providers (Infrastructure)
 import { PrismaProvider } from "./providers/PrismaProvider";
+import { RedisProvider } from "./providers/RedisProvider";
+import { MessageBrokerProvider } from "./providers/MessageBrokerProvider";
+import { CacheManager } from "@workspace/cache";
 import { prisma } from "./lib/prisma";
 import { AuthModule } from "./Modules/Auth/AuthModule";
 
@@ -23,6 +26,10 @@ async function bootstrap() {
     // 2. Register Infrastructure Providers
     logger.info("⚙ Registering infrastructure...");
     app.getContext().registerProvider("prisma", new PrismaProvider(prisma));
+    
+    const cacheManager = new CacheManager(config.redis);
+    app.getContext().registerProvider("redis", new RedisProvider(cacheManager));
+    app.getContext().registerProvider("messageBroker", new MessageBrokerProvider(config.rabbitmq.url));
 
     // 3. Register Application Modules
     logger.info("⚙ Registering modules...");

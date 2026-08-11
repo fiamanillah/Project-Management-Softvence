@@ -15,6 +15,7 @@
     "@workspace/shared": "workspace:*",
     "@workspace/message-broker": "workspace:*",
     "@workspace/logger": "workspace:*",
+    "@workspace/cache": "workspace:*",
     "amqplib": "^0.10.9",
     "dotenv": "^17.2.3",
     "zod": "^4.1.1"

@@ -26,6 +26,12 @@ const envSchema = z.object({
     .default("info"),
   LOG_FILE_PATH: z.string().default("logs/app.log"),
   RABBITMQ_URL: z.string().default("amqp://guest:guest@localhost:5672"),
+  REDIS_HOST: z.string().default("127.0.0.1"),
+  REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_PASSWORD: z.string().optional(),
+  REDIS_DB: z.coerce.number().default(0),
+  REDIS_KEY_PREFIX: z.string().default("ignitor:"),
+  REDIS_DEFAULT_TTL: z.coerce.number().default(3600),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -1,9 +1,9 @@
 import { PrismaClient } from "@workspace/db";
-// import { Redis } from "ioredis";
-// import Stripe from "stripe";
+import { CacheManager } from "@workspace/cache";
+import { MessageBroker } from "@workspace/message-broker";
 
 export interface ServiceMap {
   prisma: PrismaClient;
-  // redis: Redis;
-  // stripe: Stripe;
+  redis: CacheManager;
+  messageBroker: MessageBroker;
 }

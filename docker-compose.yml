@@ -27,6 +27,15 @@ services:
         networks:
             - manage_project_network
 
+    redis:
+        image: redis:7-alpine
+        container_name: manage_project_redis
+        restart: unless-stopped
+        ports:
+            - '6379:6379'
+        networks:
+            - manage_project_network
+
 networks:
     manage_project_network:
         driver: bridge
