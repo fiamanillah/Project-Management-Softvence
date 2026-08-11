@@ -1,5 +1,5 @@
 import type { Channel, ConsumeMessage } from "amqplib";
-import { prisma, type NotificationType } from "@workspace/db";
+import { prisma, type NotificationType } from "../lib/prisma";
 import { Queues, type NotificationPayload } from "@workspace/message-broker";
 import { AppLogger } from "@workspace/logger";
 

@@ -1,10 +1,14 @@
-import dotenv from "dotenv";
-dotenv.config();
-
+import { env } from "./env";
 import { messageBroker } from "@workspace/message-broker";
-import { prisma } from "@workspace/db";
+import { prisma } from "./lib/prisma";
 import { AppLogger } from "@workspace/logger";
 import { registerConsumers } from "./consumers";
+
+AppLogger.configure({
+  isProduction: env.NODE_ENV === "production",
+  logFilePath: env.LOG_FILE_PATH,
+  logLevel: env.LOG_LEVEL,
+});
 
 const logger = new AppLogger("WorkerDaemon");
 
@@ -17,7 +21,7 @@ async function bootstrap() {
     logger.info("Database connection established.");
 
     logger.info("Connecting to RabbitMQ...");
-    const channel = await messageBroker.connect();
+    const channel = await messageBroker.connect(env.RABBITMQ_URL);
 
     await registerConsumers(channel);
 

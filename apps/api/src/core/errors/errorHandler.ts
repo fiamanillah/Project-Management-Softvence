@@ -9,6 +9,7 @@ import { AppLogger } from "../logging/logger";
 import { HTTPStatusCode } from "@/types/HTTPStatusCode";
 import { errorMapperRegistry } from "./ErrorMapperRegistry";
 import { MulterError } from "multer";
+import { env } from "@/env";
 
 interface ErrorResponse {
   success: false;
@@ -40,7 +41,7 @@ export function errorHandler() {
         timestamp: new Date().toISOString(),
         requestId: req.id || "unknown",
         ...(appError.details ? { details: appError.details } : {}),
-        ...(process.env.NODE_ENV === "development"
+        ...(env.NODE_ENV === "development"
           ? { stack: appError.stack }
           : {}),
       },

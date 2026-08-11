@@ -6,8 +6,9 @@ import {
   type UserWithoutPassword,
   type ApiResponse,
 } from "@workspace/shared";
+import { env } from "../env";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_BASE_URL = env.VITE_API_URL;
 
 export async function registerUser(input: CreateUserDTO): Promise<ApiResponse<UserWithoutPassword>> {
   // Validate input schema on client side before network request

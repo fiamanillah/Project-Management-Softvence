@@ -1,4 +1,5 @@
 // src/index.ts
+import "@/env";
 import { IgnitorApp } from "./core/IgnitorApp";
 import { AppLogger } from "./core/logging/logger";
 import { config } from "./core/config";

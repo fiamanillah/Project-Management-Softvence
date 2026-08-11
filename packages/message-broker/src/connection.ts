@@ -19,9 +19,7 @@ export class MessageBroker {
     return MessageBroker.instance;
   }
 
-  public async connect(
-    url: string = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672",
-  ): Promise<Channel> {
+  public async connect(url: string): Promise<Channel> {
     if (this.channel) return this.channel;
 
     if (this.isConnecting) {
@@ -87,7 +85,7 @@ export class MessageBroker {
     queueName: Queues,
     message: T,
   ): Promise<boolean> {
-    const channel = await this.connect();
+    const channel = this.getChannel();
     const buffer = Buffer.from(JSON.stringify(message));
     return channel.sendToQueue(queueName, buffer, { persistent: true });
   }

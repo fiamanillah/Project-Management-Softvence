@@ -39,20 +39,31 @@ const consoleFormat = printf(
   },
 );
 
+export interface LoggerOptions {
+  isProduction?: boolean;
+  logFilePath?: string;
+  logLevel?: string;
+}
+
 export class AppLogger {
   private static instance: Logger;
+  private static options: LoggerOptions = {};
   private context?: string;
 
   constructor(context?: string) {
     this.context = context;
   }
 
+  public static configure(options: LoggerOptions): void {
+    AppLogger.options = { ...AppLogger.options, ...options };
+    AppLogger.instance = undefined as any;
+  }
+
   private static init(): Logger {
     if (!AppLogger.instance) {
-      const isProduction = process.env.NODE_ENV === "production";
-      const logDir = process.env.LOG_FILE_PATH
-        ? process.env.LOG_FILE_PATH.split("/")[0]
-        : "logs";
+      const isProduction = AppLogger.options.isProduction ?? false;
+      const logFilePath = AppLogger.options.logFilePath || "logs/app.log";
+      const logDir = logFilePath.split("/")[0] || "logs";
 
       const baseFormat = combine(
         errors({ stack: true }),
