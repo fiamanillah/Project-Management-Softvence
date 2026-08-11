@@ -1,0 +1,78 @@
+// ==========================================
+// TEAMS & CLIENTS
+// ==========================================
+
+model Team {
+  id         String     @id @default(uuid()) @db.Uuid
+  name       String
+  slug       String     @unique
+  department Department
+  shift      String?
+  is_active  Boolean    @default(true)
+  created_at DateTime   @default(now())
+  updated_at DateTime?  @updatedAt
+
+  members               TeamMember[]
+  component_assignments ComponentTeamAssignment[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id          String         @id @default(uuid()) @db.Uuid
+  team_id     String         @db.Uuid
+  user_id     String         @db.Uuid
+  member_role AssignmentRole
+  joined_at   DateTime       @default(now())
+  left_at     DateTime?
+  note        String?
+
+  team Team @relation(fields: [team_id], references: [id])
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([team_id, user_id])
+  @@index([user_id, left_at])
+  @@map("team_members")
+}
+
+model Client {
+  id            String       @id @default(uuid()) @db.Uuid
+  name          String
+  platform      PlatformType
+  contact_notes String?      @db.Text
+  created_at    DateTime     @default(now())
+
+  projects Project[]
+
+  @@index([name])
+  @@map("clients")
+}
+
+model Profile {
+  id         String       @id @default(uuid()) @db.Uuid
+  platform   PlatformType
+  username   String
+  is_active  Boolean      @default(true)
+  created_at DateTime     @default(now())
+
+  sellers        ProfileSeller[]
+  projects       Project[]
+  client_updates ClientUpdate[]
+
+  @@unique([platform, username])
+  @@map("profiles")
+}
+
+model ProfileSeller {
+  id            String    @id @default(uuid()) @db.Uuid
+  profile_id    String    @db.Uuid
+  user_id       String    @db.Uuid
+  assigned_at   DateTime  @default(now())
+  unassigned_at DateTime?
+
+  profile Profile @relation(fields: [profile_id], references: [id])
+  user    User    @relation(fields: [user_id], references: [id])
+
+  @@index([profile_id, user_id])
+  @@map("profile_sellers")
+}

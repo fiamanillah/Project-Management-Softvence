@@ -1,0 +1,115 @@
+// ==========================================
+// CORE IDENTITY & ACCESS
+// ==========================================
+
+model User {
+  id             String     @id @default(uuid()) @db.Uuid
+  employee_id    String     @unique
+  email          String     @unique
+  password_hash  String
+  first_name     String
+  last_name      String
+  system_role    SystemRole @default(Staff)
+  designation_id String     @db.Uuid
+  is_active      Boolean    @default(true)
+  last_login_at  DateTime?
+  created_at     DateTime   @default(now())
+  updated_at     DateTime?  @updatedAt
+  deleted_at     DateTime?
+
+  designation Designation @relation(fields: [designation_id], references: [id])
+
+  // Reverse Relations
+  refresh_tokens           RefreshToken[]
+  permission_overrides     UserPermissionOverride[]
+  team_memberships         TeamMember[]
+  managed_profiles         ProfileSeller[]
+  project_assignments      ProjectAssignment[]
+  component_assignments    ComponentAssignment[]
+  authored_messages        Message[]                @relation("MessageAuthor")
+  edited_message_revisions MessageRevision[]        @relation("MessageEditor")
+  message_approvals        MessageApproval[]        @relation("MessageApprover")
+  received_client_updates  ClientUpdate[]           @relation("ClientUpdateReceiver")
+  authored_issues          Issue[]                  @relation("IssueAuthor")
+  authored_issue_comments  IssueComment[]           @relation("IssueCommentAuthor")
+  authored_support_tickets SupportTicket[]          @relation("SupportTicketAuthor")
+  uploaded_attachments     Attachment[]             @relation("AttachmentUploader")
+  notifications            Notification[]           @relation("NotificationRecipient")
+  delegations_as_delegator Delegation[]             @relation("Delegator")
+  delegations_as_delegatee Delegation[]             @relation("Delegatee")
+  delegations_created      Delegation[]             @relation("DelegationCreator")
+  audit_logs_as_actor      AuditLog[]               @relation("AuditActor")
+  audit_logs_on_behalf     AuditLog[]               @relation("AuditOnBehalf")
+
+  @@index([email])
+  @@index([designation_id])
+  @@index([is_active, deleted_at])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  user_id     String    @db.Uuid
+  token_hash  String    @unique
+  device_info String?
+  expires_at  DateTime
+  revoked_at  DateTime?
+  created_at  DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@map("refresh_tokens")
+}
+
+model Designation {
+  id              String     @id @default(uuid()) @db.Uuid
+  code            String     @unique
+  name            String
+  department      Department
+  hierarchy_level Int
+  is_leadership   Boolean    @default(false)
+  created_at      DateTime   @default(now())
+
+  users       User[]
+  permissions DesignationPermission[]
+
+  @@map("designations")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique
+  description String?
+
+  designations UserPermissionOverride[]
+  roles        DesignationPermission[]
+
+  @@map("permissions")
+}
+
+model DesignationPermission {
+  id             String @id @default(uuid()) @db.Uuid
+  designation_id String @db.Uuid
+  permission_id  String @db.Uuid
+
+  designation Designation @relation(fields: [designation_id], references: [id])
+  permission  Permission  @relation(fields: [permission_id], references: [id])
+
+  @@unique([designation_id, permission_id])
+  @@map("designation_permissions")
+}
+
+model UserPermissionOverride {
+  id            String   @id @default(uuid()) @db.Uuid
+  user_id       String   @db.Uuid
+  permission_id String   @db.Uuid
+  effect        String // 'GRANT' or 'REVOKE'
+  created_at    DateTime @default(now())
+
+  user       User       @relation(fields: [user_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+
+  @@unique([user_id, permission_id])
+  @@map("user_permission_overrides")
+}

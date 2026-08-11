@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum SystemRole {
+  SuperAdmin
+  Admin
+  Staff
+}
+
+enum Department {
+  Operations
+  Sales
+  Management
+}
+
+enum PlatformType {
+  Fiverr
+  Upwork
+}
+
+enum ProjectStatus {
+  NRA
+  WIP
+  Hold
+  Revision
+  Late
+  Delivered
+  Cancel
+}
+
+enum MessageStatus {
+  Draft
+  Pending
+  Approved
+  Hold
+  Rejected
+  Delivered
+}
+
+enum IssueStatus {
+  NRI
+  WIP
+  Solve
+  Wrong
+}
+
+enum AssignmentRole {
+  Lead
+  CoLead
+  Manager
+  Member
+  SQA
+  Sales
+}
+
+enum NotificationType {
+  MessageApprovalRequested
+  MessageApproved
+  MessageRejected
+  IssueOpened
+  IssueResolved
+  ProjectAssigned
+  DelegationStarted
+  DelegationEnded
+  ClientUpdateReceived
+  Mention
+}
+
+enum AttachmentEntity {
+  project
+  message
+  issue
+  support_ticket
+}

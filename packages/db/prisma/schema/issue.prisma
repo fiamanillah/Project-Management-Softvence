@@ -1,0 +1,54 @@
+// ==========================================
+// ISSUES & SUPPORT
+// ==========================================
+
+model Issue {
+  id         String      @id @default(uuid()) @db.Uuid
+  project_id String      @db.Uuid
+  author_id  String      @db.Uuid
+  title      String
+  content    String?     @db.Text
+  status     IssueStatus @default(NRI)
+  issue_type String?
+  created_at DateTime    @default(now())
+  updated_at DateTime?   @updatedAt
+
+  project  Project        @relation(fields: [project_id], references: [id])
+  author   User           @relation("IssueAuthor", fields: [author_id], references: [id])
+  comments IssueComment[]
+
+  @@index([project_id])
+  @@index([status])
+  @@map("issues")
+}
+
+model IssueComment {
+  id         String   @id @default(uuid()) @db.Uuid
+  issue_id   String   @db.Uuid
+  author_id  String   @db.Uuid
+  content    String   @db.Text
+  created_at DateTime @default(now())
+
+  issue  Issue @relation(fields: [issue_id], references: [id])
+  author User  @relation("IssueCommentAuthor", fields: [author_id], references: [id])
+
+  @@index([issue_id])
+  @@map("issue_comments")
+}
+
+model SupportTicket {
+  id         String    @id @default(uuid()) @db.Uuid
+  project_id String    @db.Uuid
+  ticket_ref String    @unique
+  author_id  String    @db.Uuid
+  subject    String
+  status     String    @default("Open")
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+
+  project Project @relation(fields: [project_id], references: [id])
+  author  User    @relation("SupportTicketAuthor", fields: [author_id], references: [id])
+
+  @@index([project_id])
+  @@map("support_tickets")
+}

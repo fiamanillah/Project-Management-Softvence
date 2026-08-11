@@ -1,0 +1,99 @@
+// ==========================================
+// PROJECT ARCHITECTURE
+// ==========================================
+
+model Project {
+  id              String        @id @default(uuid()) @db.Uuid
+  client_id       String        @db.Uuid
+  profile_id      String        @db.Uuid
+  order_id        String        @unique
+  project_name    String
+  value           Decimal
+  status          ProjectStatus @default(NRA)
+  order_sheet_url String?
+  start_date      DateTime?
+  delivery_date   DateTime?
+  created_at      DateTime      @default(now())
+  updated_at      DateTime?     @updatedAt
+  deleted_at      DateTime?
+
+  client          Client              @relation(fields: [client_id], references: [id])
+  profile         Profile             @relation(fields: [profile_id], references: [id])
+  components      ProjectComponent[]
+  assignments     ProjectAssignment[]
+  messages        Message[]
+  client_updates  ClientUpdate[]
+  issues          Issue[]
+  support_tickets SupportTicket[]
+
+  @@index([profile_id])
+  @@index([client_id])
+  @@index([status])
+  @@index([status, deleted_at])
+  @@map("projects")
+}
+
+model ProjectComponent {
+  id         String        @id @default(uuid()) @db.Uuid
+  project_id String        @db.Uuid
+  name       String
+  status     ProjectStatus @default(NRA)
+  created_at DateTime      @default(now())
+  updated_at DateTime?     @updatedAt
+
+  project          Project                   @relation(fields: [project_id], references: [id])
+  team_assignments ComponentTeamAssignment[]
+  user_assignments ComponentAssignment[]
+
+  @@index([project_id])
+  @@map("project_components")
+}
+
+model ComponentTeamAssignment {
+  id            String    @id @default(uuid()) @db.Uuid
+  component_id  String    @db.Uuid
+  team_id       String    @db.Uuid
+  assigned_at   DateTime  @default(now())
+  unassigned_at DateTime?
+  note          String?
+
+  component ProjectComponent @relation(fields: [component_id], references: [id])
+  team      Team             @relation(fields: [team_id], references: [id])
+
+  @@index([component_id, unassigned_at])
+  @@index([team_id])
+  @@map("component_team_assignments")
+}
+
+model ProjectAssignment {
+  id              String         @id @default(uuid()) @db.Uuid
+  project_id      String         @db.Uuid
+  user_id         String         @db.Uuid
+  assignment_role AssignmentRole
+  assigned_at     DateTime       @default(now())
+  unassigned_at   DateTime?
+  note            String?
+
+  project Project @relation(fields: [project_id], references: [id])
+  user    User    @relation(fields: [user_id], references: [id])
+
+  @@index([project_id, user_id])
+  @@index([user_id, unassigned_at])
+  @@map("project_assignments")
+}
+
+model ComponentAssignment {
+  id              String         @id @default(uuid()) @db.Uuid
+  component_id    String         @db.Uuid
+  user_id         String         @db.Uuid
+  assignment_role AssignmentRole
+  assigned_at     DateTime       @default(now())
+  unassigned_at   DateTime?
+  note            String?
+
+  component ProjectComponent @relation(fields: [component_id], references: [id])
+  user      User             @relation(fields: [user_id], references: [id])
+
+  @@index([component_id, user_id])
+  @@map("component_assignments")
+}

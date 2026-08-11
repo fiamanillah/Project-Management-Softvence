@@ -1,0 +1,23 @@
+services:
+    postgres:
+        image: postgres:17
+        container_name: manage_project_postgres
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: fiamanillah
+            POSTGRES_PASSWORD: fiamanillah
+            POSTGRES_DB: manage_project
+        ports:
+            - '5439:5432'
+        volumes:
+            - manage_project:/var/lib/postgresql/data
+        networks:
+            - manage_project_network
+
+networks:
+    manage_project_network:
+        driver: bridge
+
+volumes:
+    manage_project:
+        driver: local

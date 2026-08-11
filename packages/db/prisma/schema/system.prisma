@@ -1,0 +1,84 @@
+// ==========================================
+// ATTACHMENTS
+// ==========================================
+
+model Attachment {
+  id          String           @id @default(uuid()) @db.Uuid
+  entity_type AttachmentEntity
+  entity_id   String           @db.Uuid
+  file_url    String
+  file_name   String
+  mime_type   String?
+  uploaded_by String           @db.Uuid
+  created_at  DateTime         @default(now())
+
+  uploader User @relation("AttachmentUploader", fields: [uploaded_by], references: [id])
+
+  @@index([entity_type, entity_id])
+  @@map("attachments")
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id           String           @id @default(uuid()) @db.Uuid
+  recipient_id String           @db.Uuid
+  type         NotificationType
+  title        String
+  body         String?
+  entity_type  String?
+  entity_id    String?          @db.Uuid
+  is_read      Boolean          @default(false)
+  created_at   DateTime         @default(now())
+
+  recipient User @relation("NotificationRecipient", fields: [recipient_id], references: [id])
+
+  @@index([recipient_id, is_read])
+  @@index([created_at])
+  @@map("notifications")
+}
+
+// ==========================================
+// DELEGATION & AUDIT
+// ==========================================
+
+model Delegation {
+  id           String   @id @default(uuid()) @db.Uuid
+  delegator_id String   @db.Uuid
+  delegatee_id String   @db.Uuid
+  scope        String
+  valid_from   DateTime
+  valid_until  DateTime
+  created_by   String   @db.Uuid
+  created_at   DateTime @default(now())
+
+  delegator User @relation("Delegator", fields: [delegator_id], references: [id])
+  delegatee User @relation("Delegatee", fields: [delegatee_id], references: [id])
+  creator   User @relation("DelegationCreator", fields: [created_by], references: [id])
+
+  @@index([delegator_id, valid_from, valid_until])
+  @@index([delegatee_id, valid_from, valid_until])
+  @@map("delegations")
+}
+
+model AuditLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  entity_table    String
+  entity_id       String   @db.Uuid
+  action          String
+  actor_id        String   @db.Uuid
+  on_behalf_of_id String?  @db.Uuid
+  old_payload     Json?
+  new_payload     Json?
+  created_at      DateTime @default(now())
+
+  actor        User  @relation("AuditActor", fields: [actor_id], references: [id])
+  on_behalf_of User? @relation("AuditOnBehalf", fields: [on_behalf_of_id], references: [id])
+
+  @@index([entity_table, entity_id])
+  @@index([actor_id])
+  @@index([created_at])
+  @@map("audit_logs")
+}
