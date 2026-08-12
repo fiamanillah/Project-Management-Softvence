@@ -92,4 +92,16 @@ export class UsersController {
       });
     }
   }
+
+  public async listDesignations(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await this.usersService.listDesignations();
+      return res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      return next(error);
+    }
+  }
 }

@@ -178,4 +178,18 @@ export class UsersService {
 
     return { success: true, message: "User deactivated successfully" };
   }
+
+  public async listDesignations() {
+    const designations = await this.prisma.designation.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        department: true,
+      },
+    });
+
+    return designations;
+  }
 }

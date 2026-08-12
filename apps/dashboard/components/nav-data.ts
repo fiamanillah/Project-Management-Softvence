@@ -65,6 +65,7 @@ export const data = {
       title: 'Users & Roles',
       url: '/dashboard/users',
       icon: Shield,
+      permission: 'user.manage',
     },
     {
       title: 'Settings',

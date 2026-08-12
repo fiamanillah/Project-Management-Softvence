@@ -48,5 +48,11 @@ export class UsersModule extends BaseModule {
       authorize("user.deactivate"),
       controller.deactivateUser.bind(controller)
     );
+
+    this.router.get(
+      "/designations",
+      authenticate,
+      controller.listDesignations.bind(controller)
+    );
   }
 }
