@@ -48,16 +48,10 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    --color-status-active: var(--status-active);
-    --color-status-inactive: var(--status-inactive);
-    --color-status-pending: var(--status-pending);
     --font-sans: 'Inter Variable', sans-serif;
 }
 
 :root {
-    --status-active: oklch(0.627 0.194 149.214);
-    --status-inactive: oklch(0.56 0.021 213.5);
-    --status-pending: oklch(0.75 0.15 60);
     --background: oklch(1 0 0);
     --foreground: oklch(0.148 0.004 228.8);
     --card: oklch(1 0 0);
@@ -93,9 +87,6 @@
 }
 
 .dark {
-    --status-active: oklch(0.723 0.219 149.579);
-    --status-inactive: oklch(0.56 0.021 213.5);
-    --status-pending: oklch(0.75 0.15 60);
     --background: oklch(0.148 0.004 228.8);
     --foreground: oklch(0.987 0.002 197.1);
     --card: oklch(0.218 0.008 223.9);

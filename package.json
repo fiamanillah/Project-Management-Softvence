@@ -11,7 +11,6 @@
     "db:generate": "turbo db:generate",
     "db:push": "turbo db:push",
     "db:migrate": "bun --filter @workspace/db db:migrate",
-    "db:seed": "bun --filter @workspace/db db:seed",
     "db:studio": "bun --filter @workspace/db db:studio"
   },
   "devDependencies": {

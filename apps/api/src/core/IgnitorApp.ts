@@ -56,8 +56,7 @@ export class IgnitorApp {
         // 3. Register module routes automatically if it's a BaseModule
         if (module instanceof BaseModule) {
           this.app.use(module.basePath, module.getRouter());
-          this.app.use(`/api/v1${module.basePath}`, module.getRouter());
-          this.logger.info(`↩ Registered routes for module: ${module.name} (at ${module.basePath} & /api/v1${module.basePath})`);
+          this.logger.info(`↩ Registered routes for module: ${module.name}`);
         }
       }
 
@@ -68,22 +67,6 @@ export class IgnitorApp {
           uptime: process.uptime(),
         });
       });
-
-      const designationsHandler = async (req: any, res: any, next: any) => {
-        try {
-          const usersModule = this.modules.find((m) => m.name === "UsersModule") as any;
-          if (usersModule) {
-            const controller = usersModule.getController("UsersController");
-            return await controller.listDesignations(req, res, next);
-          }
-          return res.status(200).json({ success: true, data: [] });
-        } catch (err) {
-          next(err);
-        }
-      };
-
-      this.app.get("/designations", designationsHandler);
-      this.app.get("/api/v1/designations", designationsHandler);
 
       // 4. Global 404 and Error Handlers (MUST be last)
       this.app.use(notFoundHandler());
