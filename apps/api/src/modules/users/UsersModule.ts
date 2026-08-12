@@ -35,11 +35,25 @@ export class UsersModule extends BaseModule {
       controller.inviteUser.bind(controller)
     );
 
-    this.router.get(
-      "/",
+    this.router.post(
+      "/:id/invite-link",
       authenticate,
       authorize("user.manage"),
-      controller.listUsers.bind(controller)
+      controller.regenerateInviteLink.bind(controller)
+    );
+
+    this.router.post(
+      "/:id/revoke-invite",
+      authenticate,
+      authorize("user.manage"),
+      controller.revokeInvite.bind(controller)
+    );
+
+    this.router.post(
+      "/:id/reactivate",
+      authenticate,
+      authorize("user.deactivate"),
+      controller.reactivateUser.bind(controller)
     );
 
     this.router.patch(
@@ -53,6 +67,13 @@ export class UsersModule extends BaseModule {
       "/designations",
       authenticate,
       controller.listDesignations.bind(controller)
+    );
+
+    this.router.get(
+      "/",
+      authenticate,
+      authorize("user.manage"),
+      controller.listUsers.bind(controller)
     );
   }
 }

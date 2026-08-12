@@ -5,8 +5,8 @@
 model User {
   id             String     @id @default(uuid()) @db.Uuid
   employee_id    String     @unique
-  email          String     @unique
-  password_hash  String
+  email          String
+  password_hash  String?
   first_name     String
   last_name      String
   system_role    SystemRole @default(Staff)
@@ -41,6 +41,7 @@ model User {
   auth_tokens              AuthToken[]
 
 
+  @@unique([email])
   @@index([email])
   @@index([designation_id])
   @@index([is_active, deleted_at])

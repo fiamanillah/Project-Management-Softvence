@@ -25,38 +25,42 @@ interface UserItem {
   email: string
 }
 
-interface DeactivateUserDialogProps {
+interface ReactivateUserDialogProps {
   user: UserItem | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
 }
 
-export function DeactivateUserDialog({
+export function ReactivateUserDialog({
   user,
   open,
   onOpenChange,
   onSuccess,
-}: DeactivateUserDialogProps) {
-  const [isDeactivating, setIsDeactivating] = useState(false)
+}: ReactivateUserDialogProps) {
+  const [isReactivating, setIsReactivating] = useState(false)
 
   if (!user) return null
 
-  const handleDeactivate = async () => {
-    setIsDeactivating(true)
+  const fullName =
+    `${user.firstName || user.first_name || ''} ${user.lastName || user.last_name || ''}`.trim() ||
+    user.email
+
+  const handleReactivate = async () => {
+    setIsReactivating(true)
     try {
-      await apiClient.patch(`/users/${user.id}/deactivate`)
-      toast.success(`User ${user.firstName} ${user.lastName} has been deactivated.`)
+      await apiClient.post(`/users/${user.id}/reactivate`)
+      toast.success(`User account for ${fullName} has been reactivated.`)
       onOpenChange(false)
       onSuccess()
     } catch (err) {
       if (err instanceof ApiError) {
-        toast.error(err.message || 'Failed to deactivate user.')
+        toast.error(err.message || 'Failed to reactivate user account.')
       } else {
-        toast.error('An unexpected error occurred while deactivating user.')
+        toast.error('An unexpected error occurred while reactivating user.')
       }
     } finally {
-      setIsDeactivating(false)
+      setIsReactivating(false)
     }
   }
 
@@ -64,32 +68,28 @@ export function DeactivateUserDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Deactivate User Account</AlertDialogTitle>
+          <AlertDialogTitle>Reactivate User Account</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to deactivate{' '}
-            <strong className="text-foreground">
-              {user.firstName} {user.lastName} ({user.email})
-            </strong>
-            ? They will immediately lose access to the system.
+            Are you sure you want to reactivate access for{' '}
+            <strong className="text-foreground">{fullName}</strong> ({user.email})? They will immediately regain login access to the system.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeactivating}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isReactivating}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault()
-              handleDeactivate()
+              handleReactivate()
             }}
-            disabled={isDeactivating}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={isReactivating}
           >
-            {isDeactivating ? (
+            {isReactivating ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />
-                Deactivating...
+                Reactivating...
               </>
             ) : (
-              'Deactivate User'
+              'Reactivate User'
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

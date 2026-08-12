@@ -39,7 +39,7 @@ export class AuthService {
       include: { designation: true },
     });
 
-    if (!user || !user.is_active || user.deleted_at !== null) {
+    if (!user || !user.is_active || user.deleted_at !== null || !user.password_hash) {
       throw new Error(genericErrorMessage);
     }
 
@@ -222,7 +222,7 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.is_active || user.deleted_at !== null) {
+    if (!user || !user.is_active || user.deleted_at !== null || !user.password_hash) {
       throw new Error("User not found or inactive");
     }
 

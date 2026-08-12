@@ -83,38 +83,54 @@ describe("Auth & Users Integration Tests", () => {
     const hashedPassword = await hashPassword(defaultPassword);
 
     // Create SuperAdmin user
-    const superAdmin = await prisma.user.upsert({
-      where: { email: testSuperAdminEmail },
-      update: { password_hash: hashedPassword, is_active: true },
-      create: {
-        employee_id: "INT-EMP-001",
-        email: testSuperAdminEmail,
-        first_name: "Integration",
-        last_name: "SuperAdmin",
-        system_role: SystemRole.SuperAdmin,
-        designation_id: gmDesignationId,
-        is_active: true,
-        password_hash: hashedPassword,
-      },
-    });
+    let superAdmin = await prisma.user.findFirst({ where: { email: testSuperAdminEmail, deleted_at: null } });
+    if (superAdmin) {
+      superAdmin = await prisma.user.update({
+        where: { id: superAdmin.id },
+        data: { password_hash: hashedPassword, is_active: true },
+      });
+    } else {
+      superAdmin = await prisma.user.create({
+        data: {
+          employee_id: "INT-EMP-001",
+          email: testSuperAdminEmail,
+          first_name: "Integration",
+          last_name: "SuperAdmin",
+          system_role: SystemRole.SuperAdmin,
+          designation_id: gmDesignationId,
+          is_active: true,
+          password_hash: hashedPassword,
+        },
+      });
+    }
     superAdminId = superAdmin.id;
 
     // Create Staff user
-    const staffUser = await prisma.user.upsert({
-      where: { email: testStaffEmail },
-      update: { password_hash: hashedPassword, is_active: true },
-      create: {
-        employee_id: "INT-EMP-002",
-        email: testStaffEmail,
-        first_name: "Integration",
-        last_name: "Staff",
-        system_role: SystemRole.Staff,
-        designation_id: memberDesignationId,
-        is_active: true,
-        password_hash: hashedPassword,
-      },
-    });
+    let staffUser = await prisma.user.findFirst({ where: { email: testStaffEmail, deleted_at: null } });
+    if (staffUser) {
+      staffUser = await prisma.user.update({
+        where: { id: staffUser.id },
+        data: { password_hash: hashedPassword, is_active: true },
+      });
+    } else {
+      staffUser = await prisma.user.create({
+        data: {
+          employee_id: "INT-EMP-002",
+          email: testStaffEmail,
+          first_name: "Integration",
+          last_name: "Staff",
+          system_role: SystemRole.Staff,
+          designation_id: memberDesignationId,
+          is_active: true,
+          password_hash: hashedPassword,
+        },
+      });
+    }
     staffUserId = staffUser.id;
+    // Clean up any lingering permission overrides for test staff user
+    await prisma.userPermissionOverride.deleteMany({
+      where: { user_id: staffUserId },
+    });
 
     // 2. Setup Express App
     app = express();
@@ -435,5 +451,235 @@ describe("Auth & Users Integration Tests", () => {
     });
 
     expect(refreshRes.status).toBe(401);
+
+    // Restore staff user password for remaining tests
+    const restoredHash = await hashPassword(defaultPassword);
+    await prisma.user.update({
+      where: { id: staffUserId },
+      data: { password_hash: restoredHash, is_active: true, deleted_at: null },
+    });
+  });
+
+  it("9. Non-SuperAdmin attempting to invite with systemRole 'Admin' gets 403", async () => {
+    // Grant user.manage override to Staff user so they can attempt invite
+    await prisma.userPermissionOverride.upsert({
+      where: {
+        user_id_permission_id: {
+          user_id: staffUserId,
+          permission_id: userManagePermId,
+        },
+      },
+      update: { effect: "GRANT" },
+      create: {
+        user_id: staffUserId,
+        permission_id: userManagePermId,
+        effect: "GRANT",
+      },
+    });
+
+    const staffLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testStaffEmail, password: defaultPassword }),
+    });
+    const staffCookies = parseCookies(staffLogin);
+
+    const inviteRes = await fetch(`${baseUrl}/users/invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `access_token=${staffCookies["access_token"]}`,
+      },
+      body: JSON.stringify({
+        email: `failed_admin_${Date.now()}@agency.local`,
+        firstName: "StaffInviter",
+        lastName: "Test",
+        designationId: memberDesignationId,
+        systemRole: "Admin",
+      }),
+    });
+
+    // Clean up override after test
+    await prisma.userPermissionOverride.deleteMany({
+      where: { user_id: staffUserId },
+    });
+
+    expect(inviteRes.status).toBe(403);
+    const json = await inviteRes.json();
+    expect(json.success).toBe(false);
+  });
+
+  it("10. Regenerating an invite link invalidates the previous token", async () => {
+    const saLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testSuperAdminEmail, password: defaultPassword }),
+    });
+    const saCookies = parseCookies(saLogin);
+
+    const email = `regen_test_${Date.now()}@agency.local`;
+    const inviteRes = await fetch(`${baseUrl}/users/invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `access_token=${saCookies["access_token"]}`,
+      },
+      body: JSON.stringify({
+        email,
+        firstName: "Regen",
+        lastName: "User",
+        designationId: memberDesignationId,
+      }),
+    });
+
+    const inviteData = await inviteRes.json();
+    const oldToken = inviteData.data.inviteToken;
+    const userId = inviteData.data.user.id;
+
+    // Regenerate invite link
+    const regenRes = await fetch(`${baseUrl}/users/${userId}/invite-link`, {
+      method: "POST",
+      headers: { Cookie: `access_token=${saCookies["access_token"]}` },
+    });
+
+    expect(regenRes.status).toBe(200);
+    const regenJson = await regenRes.json();
+    const newToken = regenJson.data.inviteToken;
+    expect(newToken).toBeDefined();
+    expect(newToken).not.toBe(oldToken);
+
+    // Old token fails
+    const oldAcceptRes = await fetch(`${baseUrl}/auth/accept-invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: oldToken, password: "NewPassword123!" }),
+    });
+    expect(oldAcceptRes.status).toBe(400);
+
+    // New token succeeds
+    const newAcceptRes = await fetch(`${baseUrl}/auth/accept-invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: newToken, password: "NewPassword123!" }),
+    });
+    expect(newAcceptRes.status).toBe(200);
+  });
+
+  it("11. Revoking a pending invite soft-deletes user & same email can be re-invited", async () => {
+    const saLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testSuperAdminEmail, password: defaultPassword }),
+    });
+    const saCookies = parseCookies(saLogin);
+
+    const email = `revoke_me_${Date.now()}@agency.local`;
+    const inviteRes = await fetch(`${baseUrl}/users/invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `access_token=${saCookies["access_token"]}`,
+      },
+      body: JSON.stringify({
+        email,
+        firstName: "Revoke",
+        lastName: "User",
+        designationId: memberDesignationId,
+      }),
+    });
+
+    const userId = (await inviteRes.json()).data.user.id;
+
+    // Revoke pending invite
+    const revokeRes = await fetch(`${baseUrl}/users/${userId}/revoke-invite`, {
+      method: "POST",
+      headers: { Cookie: `access_token=${saCookies["access_token"]}` },
+    });
+    expect(revokeRes.status).toBe(200);
+
+    // Re-invite same email
+    const reInviteRes = await fetch(`${baseUrl}/users/invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `access_token=${saCookies["access_token"]}`,
+      },
+      body: JSON.stringify({
+        email,
+        firstName: "Reinvited",
+        lastName: "User",
+        designationId: memberDesignationId,
+      }),
+    });
+
+    expect(reInviteRes.status).toBe(201);
+  });
+
+  it("12. Revoking an active user is rejected with 400", async () => {
+    const saLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testSuperAdminEmail, password: defaultPassword }),
+    });
+    const saCookies = parseCookies(saLogin);
+
+    const revokeRes = await fetch(`${baseUrl}/users/${superAdminId}/revoke-invite`, {
+      method: "POST",
+      headers: { Cookie: `access_token=${saCookies["access_token"]}` },
+    });
+
+    expect(revokeRes.status).toBe(400);
+  });
+
+  it("13. Reactivating a deactivated user allows them to log in again", async () => {
+    const saLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testSuperAdminEmail, password: defaultPassword }),
+    });
+    const saCookies = parseCookies(saLogin);
+
+    // Reactivate staffUser (who was deactivated in test #7 or can be deactivated then reactivated)
+    await fetch(`${baseUrl}/users/${staffUserId}/deactivate`, {
+      method: "PATCH",
+      headers: { Cookie: `access_token=${saCookies["access_token"]}` },
+    });
+
+    const reactRes = await fetch(`${baseUrl}/users/${staffUserId}/reactivate`, {
+      method: "POST",
+      headers: { Cookie: `access_token=${saCookies["access_token"]}` },
+    });
+
+    expect(reactRes.status).toBe(200);
+
+    // Verify login succeeds
+    const loginRes = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testStaffEmail, password: defaultPassword }),
+    });
+
+    expect(loginRes.status).toBe(200);
+  });
+
+  it("14. GET /users returns correct computed status for all four states & supports filtering", async () => {
+    const saLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testSuperAdminEmail, password: defaultPassword }),
+    });
+    const saCookies = parseCookies(saLogin);
+
+    const res = await fetch(`${baseUrl}/users?status=active`, {
+      headers: { Cookie: `access_token=${saCookies["access_token"]}` },
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(Array.isArray(json.data)).toBe(true);
+    for (const u of json.data) {
+      expect(u.status).toBe("active");
+    }
   });
 });
+

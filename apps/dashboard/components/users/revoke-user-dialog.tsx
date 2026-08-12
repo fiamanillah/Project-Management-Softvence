@@ -25,38 +25,42 @@ interface UserItem {
   email: string
 }
 
-interface DeactivateUserDialogProps {
+interface RevokeUserDialogProps {
   user: UserItem | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
 }
 
-export function DeactivateUserDialog({
+export function RevokeUserDialog({
   user,
   open,
   onOpenChange,
   onSuccess,
-}: DeactivateUserDialogProps) {
-  const [isDeactivating, setIsDeactivating] = useState(false)
+}: RevokeUserDialogProps) {
+  const [isRevoking, setIsRevoking] = useState(false)
 
   if (!user) return null
 
-  const handleDeactivate = async () => {
-    setIsDeactivating(true)
+  const fullName =
+    `${user.firstName || user.first_name || ''} ${user.lastName || user.last_name || ''}`.trim() ||
+    user.email
+
+  const handleRevoke = async () => {
+    setIsRevoking(true)
     try {
-      await apiClient.patch(`/users/${user.id}/deactivate`)
-      toast.success(`User ${user.firstName} ${user.lastName} has been deactivated.`)
+      await apiClient.post(`/users/${user.id}/revoke-invite`)
+      toast.success(`Invitation for ${user.email} has been revoked.`)
       onOpenChange(false)
       onSuccess()
     } catch (err) {
       if (err instanceof ApiError) {
-        toast.error(err.message || 'Failed to deactivate user.')
+        toast.error(err.message || 'Failed to revoke invitation.')
       } else {
-        toast.error('An unexpected error occurred while deactivating user.')
+        toast.error('An unexpected error occurred while revoking invitation.')
       }
     } finally {
-      setIsDeactivating(false)
+      setIsRevoking(false)
     }
   }
 
@@ -64,32 +68,29 @@ export function DeactivateUserDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Deactivate User Account</AlertDialogTitle>
+          <AlertDialogTitle>Revoke Invitation</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to deactivate{' '}
-            <strong className="text-foreground">
-              {user.firstName} {user.lastName} ({user.email})
-            </strong>
-            ? They will immediately lose access to the system.
+            This will cancel the invitation for{' '}
+            <strong className="text-foreground">{fullName}</strong> ({user.email}). The email will be free to invite again.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeactivating}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isRevoking}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault()
-              handleDeactivate()
+              handleRevoke()
             }}
-            disabled={isDeactivating}
+            disabled={isRevoking}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeactivating ? (
+            {isRevoking ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />
-                Deactivating...
+                Revoking...
               </>
             ) : (
-              'Deactivate User'
+              'Revoke Invite'
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
