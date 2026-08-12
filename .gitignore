@@ -33,3 +33,10 @@ dist-ssr
 
 # typescript
 *.tsbuildinfo
+
+# Prisma generated files
+packages/db/src/generated
+**/src/generated
+
+
+

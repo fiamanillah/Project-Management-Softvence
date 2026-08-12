@@ -1,13 +1,31 @@
 export interface AuditLogPayload {
+  auditId?: string;
+  module: string;
+  action: string;
   entityTable: string;
   entityId: string;
-  action: string;
-  actorId: string;
+  actorId?: string;
+  actorEmail?: string;
+  actorRole?: string;
   onBehalfOfId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  httpContext?: {
+    method?: string;
+    path?: string;
+    statusCode?: number;
+    durationMs?: number;
+    requestId?: string;
+  };
   oldPayload?: Record<string, any>;
   newPayload?: Record<string, any>;
+  diff?: Record<string, any>;
+  metadata?: Record<string, any>;
+  status?: "SUCCESS" | "FAILED";
+  errorMessage?: string;
   createdAt?: string;
 }
+
 
 export interface NotificationPayload {
   recipientId: string;

@@ -36,6 +36,21 @@ services:
         networks:
             - manage_project_network
 
+    mongodb:
+        image: mongo:7.0
+        container_name: manage_project_mongodb
+        restart: unless-stopped
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: root
+            MONGO_INITDB_ROOT_PASSWORD: rootpassword
+            MONGO_INITDB_DATABASE: audit_db
+        ports:
+            - '27017:27017'
+        volumes:
+            - manage_project_mongo:/data/db
+        networks:
+            - manage_project_network
+
 networks:
     manage_project_network:
         driver: bridge
@@ -43,3 +58,6 @@ networks:
 volumes:
     manage_project:
         driver: local
+    manage_project_mongo:
+        driver: local
+

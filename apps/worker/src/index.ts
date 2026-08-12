@@ -1,7 +1,9 @@
 import { env } from "./env";
 import { messageBroker } from "@workspace/message-broker";
 import { prisma } from "./lib/prisma";
+import { connectMongo, disconnectMongo } from "@workspace/db";
 import { AppLogger } from "@workspace/logger";
+
 import { registerConsumers } from "./consumers";
 
 AppLogger.configure({
@@ -16,9 +18,13 @@ async function bootstrap() {
   logger.info("⚙ Starting Worker Microservice Daemon...");
 
   try {
-    logger.info("Connecting to database...");
+    logger.info("Connecting to PostgreSQL database...");
     await prisma.$connect();
-    logger.info("Database connection established.");
+    logger.info("PostgreSQL connection established.");
+
+    logger.info("Connecting to MongoDB database for Audit Logging...");
+    await connectMongo(env.MONGO_URI);
+    logger.info("MongoDB connection established.");
 
     logger.info("Connecting to RabbitMQ...");
     const channel = await messageBroker.connect(env.RABBITMQ_URL);
@@ -30,6 +36,7 @@ async function bootstrap() {
       try {
         await messageBroker.close();
         await prisma.$disconnect();
+        await disconnectMongo();
         logger.info("Clean shutdown complete.");
         process.exit(0);
       } catch (err) {
@@ -37,6 +44,7 @@ async function bootstrap() {
         process.exit(1);
       }
     };
+
 
     process.on("SIGINT", () => gracefulShutdown("SIGINT"));
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

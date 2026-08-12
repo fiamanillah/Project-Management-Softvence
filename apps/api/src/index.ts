@@ -11,6 +11,7 @@ import { MessageBrokerProvider } from "./providers/MessageBrokerProvider";
 import { CacheManager } from "@workspace/cache";
 import { prisma } from "./lib/prisma";
 import { AuthModule } from "./Modules/Auth/AuthModule";
+import { AuditLogModule } from "./Modules/AuditLog/AuditLogModule";
 
 // Modules (Business Logic)
 
@@ -34,8 +35,9 @@ async function bootstrap() {
     // 3. Register Application Modules
     logger.info("⚙ Registering modules...");
     app.registerModule(new AuthModule());
-    // app.registerModule(new ProductModule());
+    app.registerModule(new AuditLogModule());
     logger.info("✔ All modules registered successfully");
+
 
     // 4. Spark the server!
     await app.spark(config.server.port);

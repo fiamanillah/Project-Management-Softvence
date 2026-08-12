@@ -10,7 +10,13 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3030),
   REQUEST_TIMEOUT: z.coerce.number().default(30000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  MONGO_URI: z
+    .string()
+    .default(
+      "mongodb://root:rootpassword@localhost:27017/audit_db?authSource=admin",
+    ),
   DB_LOGGING: z
+
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .default(false),
   ALLOWED_ORIGINS: z.string().default("http://localhost:3000"),

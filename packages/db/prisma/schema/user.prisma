@@ -38,8 +38,7 @@ model User {
   delegations_as_delegator Delegation[]             @relation("Delegator")
   delegations_as_delegatee Delegation[]             @relation("Delegatee")
   delegations_created      Delegation[]             @relation("DelegationCreator")
-  audit_logs_as_actor      AuditLog[]               @relation("AuditActor")
-  audit_logs_on_behalf     AuditLog[]               @relation("AuditOnBehalf")
+
 
   @@index([email])
   @@index([designation_id])

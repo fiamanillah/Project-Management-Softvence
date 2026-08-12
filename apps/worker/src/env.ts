@@ -9,9 +9,15 @@ const envSchema = z.object({
     .default("development"),
   RABBITMQ_URL: z.string().default("amqp://guest:guest@localhost:5672"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  MONGO_URI: z
+    .string()
+    .default(
+      "mongodb://root:rootpassword@localhost:27017/audit_db?authSource=admin",
+    ),
   LOG_LEVEL: z
     .enum(["error", "warn", "info", "http", "verbose", "debug", "silly"])
     .default("info"),
+
   LOG_FILE_PATH: z.string().default("logs/worker.log"),
 });
 

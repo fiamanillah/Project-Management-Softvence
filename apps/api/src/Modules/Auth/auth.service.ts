@@ -1,7 +1,8 @@
 import { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
 import { ConflictError, NotFoundError } from "@/core/errors/AppError";
-import { publishAuditLog, publishNotification } from "@workspace/message-broker";
+import { publishNotification } from "@workspace/message-broker";
+import { AuditLogService } from "@/core/audit/audit.service";
 
 export class AuthServices {
   // 1. Initialize the contextual logger for this specific service
@@ -47,15 +48,24 @@ export class AuthServices {
 
     // Push async events to RabbitMQ for background processing by apps/worker
     try {
-      await publishAuditLog({
+      await AuditLogService.log({
+        module: "AUTH",
+        action: "USER_REGISTERED",
         entityTable: "users",
         entityId: newUser.id,
-        action: "USER_REGISTERED",
-        actorId: newUser.id,
-        newPayload: { email: newUser.email, firstName: newUser.first_name, lastName: newUser.last_name },
+        actor: {
+          id: newUser.id,
+          email: newUser.email,
+        },
+        newPayload: {
+          email: newUser.email,
+          firstName: newUser.first_name,
+          lastName: newUser.last_name,
+        },
       });
 
       await publishNotification({
+
         recipientId: newUser.id,
         type: "Mention",
         title: "Welcome to Project Management Softvence!",
