@@ -10,7 +10,8 @@ import { RedisProvider } from "./providers/RedisProvider";
 import { MessageBrokerProvider } from "./providers/MessageBrokerProvider";
 import { CacheManager } from "@workspace/cache";
 import { prisma } from "./lib/prisma";
-import { AuthModule } from "./Modules/Auth/AuthModule";
+import { AuthModule } from "./modules/auth/AuthModule";
+import { UsersModule } from "./modules/users/UsersModule";
 import { AuditLogModule } from "./Modules/AuditLog/AuditLogModule";
 
 // Modules (Business Logic)
@@ -35,6 +36,7 @@ async function bootstrap() {
     // 3. Register Application Modules
     logger.info("⚙ Registering modules...");
     app.registerModule(new AuthModule());
+    app.registerModule(new UsersModule());
     app.registerModule(new AuditLogModule());
     logger.info("✔ All modules registered successfully");
 

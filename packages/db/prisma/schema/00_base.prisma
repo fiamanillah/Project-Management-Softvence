@@ -17,6 +17,11 @@ enum SystemRole {
   Staff
 }
 
+enum AuthTokenType {
+  INVITE
+  PASSWORD_RESET
+}
+
 enum Department {
   Operations
   Sales

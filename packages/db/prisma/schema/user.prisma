@@ -38,6 +38,7 @@ model User {
   delegations_as_delegator Delegation[]             @relation("Delegator")
   delegations_as_delegatee Delegation[]             @relation("Delegatee")
   delegations_created      Delegation[]             @relation("DelegationCreator")
+  auth_tokens              AuthToken[]
 
 
   @@index([email])
@@ -59,6 +60,22 @@ model RefreshToken {
 
   @@index([user_id])
   @@map("refresh_tokens")
+}
+
+model AuthToken {
+  id         String        @id @default(uuid()) @db.Uuid
+  user_id    String        @db.Uuid
+  token_hash String        @unique
+  type       AuthTokenType
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime      @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([token_hash])
+  @@map("auth_tokens")
 }
 
 model Designation {

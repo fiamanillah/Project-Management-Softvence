@@ -38,5 +38,8 @@ dist-ssr
 packages/db/src/generated
 **/src/generated
 
+# Seed Credentials
+.SEED_CREDENTIALS.md
+
 
 

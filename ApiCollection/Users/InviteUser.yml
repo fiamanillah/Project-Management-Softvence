@@ -1,0 +1,25 @@
+info:
+  name: Invite User
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/users/invite"
+  body: json
+  auth: none
+
+body:json: |-
+  {
+    "email": "newmember@agency.local",
+    "first_name": "New",
+    "last_name": "Member",
+    "employee_id": "EMP-999",
+    "designation_id": "<DESIGNATION_UUID_HERE>",
+    "system_role": "Staff"
+  }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true

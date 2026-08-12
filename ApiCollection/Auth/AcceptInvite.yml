@@ -1,0 +1,21 @@
+info:
+  name: Accept Invite
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/accept-invite"
+  body: json
+  auth: none
+
+body:json: |-
+  {
+    "token": "<INVITE_TOKEN_HERE>",
+    "password": "MyNewAccountPassword123!"
+  }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
