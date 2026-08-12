@@ -1,15 +1,16 @@
-info:
+meta {
   name: Logout
   type: http
   seq: 3
+}
 
-http:
-  method: POST
-  url: "{{baseUrl}}/auth/logout"
+post {
+  url: {{baseUrl}}/auth/logout
   body: none
   auth: none
+}
 
-docs: |-
+docs {
   ### Logout User
   Invalidates active refresh tokens and clears HTTP-only authentication cookies.
 
@@ -17,8 +18,4 @@ docs: |-
 
   **Response:**
   - `200 OK`: Clears `access_token` and `refresh_token` cookies and logs `USER_LOGOUT` audit event.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}

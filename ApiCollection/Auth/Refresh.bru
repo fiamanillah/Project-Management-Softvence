@@ -1,22 +1,24 @@
-info:
+meta {
   name: Refresh Token
   type: http
   seq: 2
+}
 
-http:
-  method: POST
-  url: "{{baseUrl}}/auth/refresh"
+post {
+  url: {{baseUrl}}/auth/refresh
   body: json
   auth: none
+}
 
-headers:
-  - name: Content-Type
-    value: application/json
+headers {
+  Content-Type: application/json
+}
 
-body:json: |-
+body:json {
   {}
+}
 
-docs: |-
+docs {
   ### Refresh Access Token
   Rotates the user's refresh token and issues a new 15-minute access token JWT.
 
@@ -28,8 +30,4 @@ docs: |-
   **Response:**
   - `200 OK`: Rotates refresh token, sets updated `access_token` and `refresh_token` HTTP-only cookies.
   - `401 Unauthorized`: Returned if refresh token is missing, revoked, or expired.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}

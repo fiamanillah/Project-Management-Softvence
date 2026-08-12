@@ -1,25 +1,27 @@
-info:
+meta {
   name: Accept Invite
   type: http
   seq: 8
+}
 
-http:
-  method: POST
-  url: "{{baseUrl}}/auth/accept-invite"
+post {
+  url: {{baseUrl}}/auth/accept-invite
   body: json
   auth: none
+}
 
-headers:
-  - name: Content-Type
-    value: application/json
+headers {
+  Content-Type: application/json
+}
 
-body:json: |-
+body:json {
   {
     "token": "{{inviteToken}}",
     "password": "MyNewAccountPassword123!"
   }
+}
 
-docs: |-
+docs {
   ### Accept User Invitation
   Sets password and activates account for a newly invited user.
 
@@ -32,8 +34,4 @@ docs: |-
   **Response:**
   - `200 OK`: Sets account password, marks user `is_active = true`, and invalidates invite token.
   - `400 Bad Request`: Returned if token is invalid, expired, or already used.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}

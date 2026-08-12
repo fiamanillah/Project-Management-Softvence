@@ -1,0 +1,23 @@
+info:
+  name: List Designations
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/users/designations"
+  auth: none
+
+docs: |-
+  ### List Designations
+  Retrieves all job designations configured in the system for dropdown selection during user invitation.
+
+  **Authentication:** Requires `access_token`.
+
+  **Response:**
+  - `200 OK`: Returns array of designation objects `{ success: true, data: [{ id, name, code, is_active }] }`.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true

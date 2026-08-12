@@ -1,19 +1,20 @@
-info:
+meta {
   name: Invite User
   type: http
   seq: 1
+}
 
-http:
-  method: POST
-  url: "{{baseUrl}}/users/invite"
+post {
+  url: {{baseUrl}}/users/invite
   body: json
   auth: none
+}
 
-headers:
-  - name: Content-Type
-    value: application/json
+headers {
+  Content-Type: application/json
+}
 
-body:json: |-
+body:json {
   {
     "email": "newmember@agency.local",
     "first_name": "New",
@@ -22,8 +23,9 @@ body:json: |-
     "designation_id": "{{designationId}}",
     "system_role": "Staff"
   }
+}
 
-docs: |-
+docs {
   ### Invite User
   Invites a new staff/team member to the organization.
 
@@ -41,8 +43,4 @@ docs: |-
   - `201 Created`: Creates inactive user (`is_active = false`), generates invite token, and dispatches invite notification.
   - `400 Bad Request`: Returned if email or employee_id already exists.
   - `403 Forbidden`: Returned if authenticated user lacks `user.manage` permission.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}

@@ -1,18 +1,20 @@
-info:
+meta {
   name: Deactivate User
   type: http
   seq: 3
+}
 
-http:
-  method: PATCH
-  url: "{{baseUrl}}/users/:id/deactivate"
+patch {
+  url: {{baseUrl}}/users/:id/deactivate
+  body: none
   auth: none
+}
 
-params:path:
-  - name: id
-    value: "{{userId}}"
+params:path {
+  id: {{userId}}
+}
 
-docs: |-
+docs {
   ### Deactivate User
   Deactivates a user account, preventing future logins and revoking refresh tokens.
 
@@ -25,8 +27,4 @@ docs: |-
   - `200 OK`: Sets `is_active = false` and revokes all active refresh tokens for the target user.
   - `404 Not Found`: Returned if user ID is not found.
   - `403 Forbidden`: Returned if authenticated user lacks `user.deactivate` permission.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}

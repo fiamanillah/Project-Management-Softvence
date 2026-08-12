@@ -1,0 +1,31 @@
+info:
+  name: Get Audit Log By Id
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{baseUrl}}/audit-logs/:id"
+  auth: none
+
+params:path:
+  - name: id
+    value: "{{auditLogId}}"
+
+docs: |-
+  ### Get Audit Log By ID
+  Fetches details for a single MongoDB audit log record.
+
+  **Authentication:** Requires `access_token`.
+
+  **Path Parameters:**
+  - `id` (string, required): MongoDB ObjectId of the audit log record.
+
+  **Response:**
+  - `200 OK`: Returns single audit log entry `{ success: true, data: { _id, actor_id, action, module, entity_type, entity_id, ip_address, user_agent, timestamp, metadata } }`.
+  - `404 Not Found`: Returned if audit log entry is not found.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true

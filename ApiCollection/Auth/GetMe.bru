@@ -1,14 +1,16 @@
-info:
+meta {
   name: Get Current User Profile
   type: http
   seq: 4
+}
 
-http:
-  method: GET
-  url: "{{baseUrl}}/auth/me"
+get {
+  url: {{baseUrl}}/auth/me
+  body: none
   auth: none
+}
 
-docs: |-
+docs {
   ### Get Current User Profile
   Retrieves profile information, role, designation, and resolved permission list for the currently logged-in user.
 
@@ -17,8 +19,4 @@ docs: |-
   **Response:**
   - `200 OK`: Returns `{ success: true, data: { id, email, first_name, last_name, system_role, designation, permissions } }`.
   - `401 Unauthorized`: Returned if access token is missing or expired.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}

@@ -1,25 +1,27 @@
-info:
+meta {
   name: Login
   type: http
   seq: 1
+}
 
-http:
-  method: POST
-  url: "{{baseUrl}}/auth/login"
+post {
+  url: {{baseUrl}}/auth/login
   body: json
   auth: none
+}
 
-headers:
-  - name: Content-Type
-    value: application/json
+headers {
+  Content-Type: application/json
+}
 
-body:json: |-
+body:json {
   {
     "email": "{{email}}",
     "password": "{{password}}"
   }
+}
 
-docs: |-
+docs {
   ### Login User
   Authenticates a user with valid email and password credentials.
 
@@ -32,8 +34,4 @@ docs: |-
   **Response:**
   - `200 OK`: Returns authenticated user profile and sets HTTP-only cookies (`access_token` for 15m, `refresh_token` for 30 days).
   - `401 Unauthorized`: Returned if credentials are invalid or user account is inactive/deleted.
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
+}
