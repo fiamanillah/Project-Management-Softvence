@@ -11,9 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+.next
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
 
 # turbo
 .turbo
