@@ -13,6 +13,8 @@ import { prisma } from "./lib/prisma";
 import { AuthModule } from "./Modules/Auth/AuthModule";
 import { AuditLogModule } from "./Modules/AuditLog/AuditLogModule";
 
+import { PermissionRegistry } from "./core/permissions/PermissionRegistry";
+
 // Modules (Business Logic)
 
 const logger = new AppLogger("Bootstrap");
@@ -38,8 +40,11 @@ async function bootstrap() {
     app.registerModule(new AuditLogModule());
     logger.info("✔ All modules registered successfully");
 
+    // 4. Permission Registry Sync Step
+    logger.info("🔐 Syncing permission registry...");
+    await PermissionRegistry.getInstance().sync(prisma);
 
-    // 4. Spark the server!
+    // 5. Spark the server!
     await app.spark(config.server.port);
 
     logger.info("✷ Ignitor sparked successfully");

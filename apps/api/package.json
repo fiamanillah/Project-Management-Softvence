@@ -28,7 +28,8 @@
         "docker:down": "docker-compose down",
         "docker:logs": "docker-compose logs -f",
         "add:module": "bun scripts/generate-module.ts",
-        "bootstrap:admin": "bun scripts/bootstrap-superadmin.ts"
+        "bootstrap:admin": "bun scripts/bootstrap-superadmin.ts",
+        "sync:permissions": "bun scripts/sync-permissions.ts"
     },
     "dependencies": {
         "@prisma/adapter-pg": "^7.5.0",
