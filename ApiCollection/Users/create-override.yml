@@ -1,0 +1,26 @@
+info:
+  name: Create Permission Override
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/users/overrides"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "userId": "00000000-0000-0000-0000-000000000000",
+        "permissionId": "00000000-0000-0000-0000-000000000000",
+        "isDeny": false,
+        "reason": "Special project requirement"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

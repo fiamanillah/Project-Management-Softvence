@@ -60,7 +60,7 @@ export function CreateDelegationModal({
 
     setIsLoading(true);
     try {
-      await api.post("/admin/delegations", {
+      await api.post("/users/delegations", {
         delegatorId,
         delegateeId,
         scope: scope || "*",

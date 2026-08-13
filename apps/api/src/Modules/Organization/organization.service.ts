@@ -1,0 +1,340 @@
+// src/Modules/Organization/organization.service.ts
+
+import type { PrismaClient } from "@workspace/db";
+import { AppLogger } from "@/core/logging/logger";
+import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
+import type {
+  CreateDepartmentDTO,
+  UpdateDepartmentDTO,
+  AssignDepartmentManagerDTO,
+  CreateDesignationDTO,
+  SavePermissionAssignmentsDTO,
+} from "./OrganizationDTO";
+
+export class OrganizationService {
+  private logger = new AppLogger("OrganizationService");
+
+  constructor(private readonly prisma: PrismaClient) {}
+
+  // ==========================================
+  // DEPARTMENTS MANAGEMENT
+  // ==========================================
+
+  public async getDepartments() {
+    const departments = await this.prisma.department.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        managers: {
+          where: { unassignedAt: null },
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            designations: true,
+            teams: true,
+          },
+        },
+      },
+    });
+    return departments;
+  }
+
+  public async getDepartmentById(id: string) {
+    const department = await this.prisma.department.findUnique({
+      where: { id },
+      include: {
+        managers: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { assignedAt: "desc" },
+        },
+        designations: true,
+        teams: true,
+        _count: {
+          select: {
+            designations: true,
+            teams: true,
+          },
+        },
+      },
+    });
+    if (!department) throw new NotFoundError("Department");
+    return department;
+  }
+
+  public async createDepartment(data: CreateDepartmentDTO) {
+    const existing = await this.prisma.department.findUnique({
+      where: { code: data.code },
+    });
+    if (existing) {
+      throw new ConflictError(`Department code '${data.code}' already exists`);
+    }
+
+    const dept = await this.prisma.department.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        isActive: data.isActive ?? true,
+      },
+    });
+    this.logger.info(`Department created: ${dept.code} (${dept.id})`);
+    return dept;
+  }
+
+  public async updateDepartment(id: string, data: UpdateDepartmentDTO) {
+    const dept = await this.prisma.department.findUnique({ where: { id } });
+    if (!dept) throw new NotFoundError("Department");
+
+    const updated = await this.prisma.department.update({
+      where: { id },
+      data: {
+        ...(data.name && { name: data.name }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+      },
+    });
+    return updated;
+  }
+
+  public async deleteDepartment(id: string) {
+    const dept = await this.prisma.department.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            designations: true,
+            teams: true,
+          },
+        },
+      },
+    });
+    if (!dept) throw new NotFoundError("Department");
+
+    if (dept._count.designations > 0 || dept._count.teams > 0) {
+      throw new BadRequestError(
+        `Cannot delete department containing ${dept._count.designations} designations and ${dept._count.teams} teams. Deactivate it instead.`,
+      );
+    }
+
+    await this.prisma.department.delete({ where: { id } });
+    return { message: "Department deleted successfully" };
+  }
+
+  public async assignDepartmentManager(departmentId: string, dto: AssignDepartmentManagerDTO) {
+    const dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
+    if (!dept) throw new NotFoundError("Department");
+
+    const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundError("User");
+
+    // Unassign currently active manager(s) for this department
+    await this.prisma.departmentManager.updateMany({
+      where: {
+        departmentId,
+        unassignedAt: null,
+      },
+      data: {
+        unassignedAt: new Date(),
+      },
+    });
+
+    const managerRecord = await this.prisma.departmentManager.create({
+      data: {
+        departmentId,
+        userId: dto.userId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return managerRecord;
+  }
+
+  public async removeDepartmentManager(departmentId: string, managerId: string) {
+    const record = await this.prisma.departmentManager.findFirst({
+      where: {
+        id: managerId,
+        departmentId,
+      },
+    });
+    if (!record) throw new NotFoundError("Department manager assignment");
+
+    await this.prisma.departmentManager.update({
+      where: { id: managerId },
+      data: { unassignedAt: new Date() },
+    });
+
+    return { message: "Department manager unassigned successfully" };
+  }
+
+  // ==========================================
+  // DESIGNATIONS & PERMISSION MATRIX
+  // ==========================================
+
+  public async getDesignations() {
+    const designations = await this.prisma.designation.findMany({
+      orderBy: { hierarchyLevel: "asc" },
+      include: {
+        department: true,
+        _count: {
+          select: {
+            permissions: true,
+            users: true,
+          },
+        },
+      },
+    });
+    return designations;
+  }
+
+  public async createDesignation(data: CreateDesignationDTO) {
+    const existing = await this.prisma.designation.findUnique({
+      where: { code: data.code },
+    });
+    if (existing) {
+      throw new ConflictError(`Designation code '${data.code}' already exists`);
+    }
+
+    const dept = await this.prisma.department.findUnique({
+      where: { id: data.departmentId },
+    });
+    if (!dept) throw new NotFoundError("Department");
+
+    const desig = await this.prisma.designation.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        departmentId: data.departmentId,
+        hierarchyLevel: data.hierarchyLevel,
+        isLeadership: data.isLeadership,
+      },
+      include: { department: true },
+    });
+    return desig;
+  }
+
+  public async getDesignationPermissions(designationId: string) {
+    const designation = await this.prisma.designation.findUnique({
+      where: { id: designationId },
+      include: { department: true },
+    });
+    if (!designation) throw new NotFoundError("Designation");
+
+    const permissions = await this.prisma.designationPermission.findMany({
+      where: { designationId, isActive: true },
+      include: {
+        permission: true,
+        scopeType: true,
+        scopeTargets: {
+          include: {
+            department: true,
+            team: true,
+            project: true,
+          },
+        },
+      },
+    });
+
+    return {
+      designation,
+      permissions,
+    };
+  }
+
+  public async saveDesignationPermissions(
+    designationId: string,
+    dto: SavePermissionAssignmentsDTO,
+  ) {
+    const designation = await this.prisma.designation.findUnique({
+      where: { id: designationId },
+    });
+    if (!designation) throw new NotFoundError("Designation");
+
+    await this.prisma.$transaction(async (tx) => {
+      const existingGrants = await tx.designationPermission.findMany({
+        where: { designationId },
+        select: { id: true },
+      });
+      const grantIds = existingGrants.map((g) => g.id);
+
+      if (grantIds.length > 0) {
+        await tx.designationPermissionScopeTarget.deleteMany({
+          where: { designationPermissionId: { in: grantIds } },
+        });
+        await tx.designationPermission.deleteMany({
+          where: { designationId },
+        });
+      }
+
+      for (const item of dto.assignments) {
+        const grant = await tx.designationPermission.create({
+          data: {
+            designationId,
+            permissionId: item.permissionId,
+            scopeTypeId: item.scopeTypeId,
+            grantedBy: designationId,
+          },
+        });
+
+        if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
+          for (const deptId of item.targetDepartmentIds) {
+            await tx.designationPermissionScopeTarget.create({
+              data: {
+                designationPermissionId: grant.id,
+                departmentId: deptId,
+              },
+            });
+          }
+        }
+
+        if (item.targetTeamIds && item.targetTeamIds.length > 0) {
+          for (const teamId of item.targetTeamIds) {
+            await tx.designationPermissionScopeTarget.create({
+              data: {
+                designationPermissionId: grant.id,
+                teamId: teamId,
+              },
+            });
+          }
+        }
+
+        if (item.targetProjectIds && item.targetProjectIds.length > 0) {
+          for (const projId of item.targetProjectIds) {
+            await tx.designationPermissionScopeTarget.create({
+              data: {
+                designationPermissionId: grant.id,
+                projectId: projId,
+              },
+            });
+          }
+        }
+      }
+    });
+
+    return { message: "Designation permissions updated successfully" };
+  }
+}

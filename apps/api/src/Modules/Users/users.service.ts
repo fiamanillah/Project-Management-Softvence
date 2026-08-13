@@ -1,21 +1,19 @@
-// src/Modules/Admin/admin.service.ts
+// src/Modules/Users/users.service.ts
 
 import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
-import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
+import { NotFoundError, ConflictError } from "@/core/errors/AppError";
 import { hashPassword } from "@/utils/crypto";
 import { AuthorizationEngine } from "@/core/authorization/AuthorizationEngine";
 import type {
   CreateAdminUserDTO,
   UpdateAdminUserDTO,
-  CreateDesignationDTO,
-  SavePermissionAssignmentsDTO,
   CreateOverrideDTO,
   CreateDelegationDTO,
-} from "./AdminDTO";
+} from "./UserDTO";
 
-export class AdminService {
-  private logger = new AppLogger("AdminService");
+export class UsersService {
+  private logger = new AppLogger("UsersService");
 
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -148,182 +146,6 @@ export class AdminService {
 
     const { passwordHash, ...result } = updated;
     return result;
-  }
-
-  // ==========================================
-  // DESIGNATIONS & PERMISSION MATRIX
-  // ==========================================
-
-  public async getDesignations() {
-    const designations = await this.prisma.designation.findMany({
-      orderBy: { hierarchyLevel: "asc" },
-      include: {
-        department: true,
-        _count: {
-          select: {
-            permissions: true,
-            users: true,
-          },
-        },
-      },
-    });
-    return designations;
-  }
-
-  public async createDesignation(data: CreateDesignationDTO) {
-    const existing = await this.prisma.designation.findUnique({
-      where: { code: data.code },
-    });
-    if (existing) {
-      throw new ConflictError(`Designation code '${data.code}' already exists`);
-    }
-
-    const dept = await this.prisma.department.findUnique({
-      where: { id: data.departmentId },
-    });
-    if (!dept) throw new NotFoundError("Department");
-
-    const desig = await this.prisma.designation.create({
-      data: {
-        code: data.code,
-        name: data.name,
-        departmentId: data.departmentId,
-        hierarchyLevel: data.hierarchyLevel,
-        isLeadership: data.isLeadership,
-      },
-      include: { department: true },
-    });
-    return desig;
-  }
-
-  public async getDesignationPermissions(designationId: string) {
-    const designation = await this.prisma.designation.findUnique({
-      where: { id: designationId },
-      include: { department: true },
-    });
-    if (!designation) throw new NotFoundError("Designation");
-
-    const permissions = await this.prisma.designationPermission.findMany({
-      where: { designationId, isActive: true },
-      include: {
-        permission: true,
-        scopeType: true,
-        scopeTargets: {
-          include: {
-            department: true,
-            team: true,
-            project: true,
-          },
-        },
-      },
-    });
-
-    return {
-      designation,
-      permissions,
-    };
-  }
-
-  public async saveDesignationPermissions(
-    designationId: string,
-    dto: SavePermissionAssignmentsDTO,
-  ) {
-    const designation = await this.prisma.designation.findUnique({
-      where: { id: designationId },
-    });
-    if (!designation) throw new NotFoundError("Designation");
-
-    // Perform atomic transaction: delete existing grants & insert new ones
-    await this.prisma.$transaction(async (tx) => {
-      // 1. Delete scope targets for existing designation permissions
-      const existingGrants = await tx.designationPermission.findMany({
-        where: { designationId },
-        select: { id: true },
-      });
-      const grantIds = existingGrants.map((g) => g.id);
-
-      if (grantIds.length > 0) {
-        await tx.designationPermissionScopeTarget.deleteMany({
-          where: { designationPermissionId: { in: grantIds } },
-        });
-        await tx.designationPermission.deleteMany({
-          where: { designationId },
-        });
-      }
-
-      // 2. Create new designation permissions & scope targets
-      for (const item of dto.assignments) {
-        const grant = await tx.designationPermission.create({
-          data: {
-            designationId,
-            permissionId: item.permissionId,
-            scopeTypeId: item.scopeTypeId,
-            grantedBy: designationId, // reference designation or granter
-          },
-        });
-
-        // Insert department targets
-        if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
-          for (const deptId of item.targetDepartmentIds) {
-            await tx.designationPermissionScopeTarget.create({
-              data: {
-                designationPermissionId: grant.id,
-                departmentId: deptId,
-              },
-            });
-          }
-        }
-
-        // Insert team targets
-        if (item.targetTeamIds && item.targetTeamIds.length > 0) {
-          for (const teamId of item.targetTeamIds) {
-            await tx.designationPermissionScopeTarget.create({
-              data: {
-                designationPermissionId: grant.id,
-                teamId,
-              },
-            });
-          }
-        }
-
-        // Insert project targets
-        if (item.targetProjectIds && item.targetProjectIds.length > 0) {
-          for (const projId of item.targetProjectIds) {
-            await tx.designationPermissionScopeTarget.create({
-              data: {
-                designationPermissionId: grant.id,
-                projectId: projId,
-              },
-            });
-          }
-        }
-      }
-    });
-
-    // Invalidate Redis permission version cache instantly!
-    await AuthorizationEngine.getInstance().invalidateCache();
-
-    return { message: "Permission assignments saved successfully" };
-  }
-
-  // ==========================================
-  // PERMISSIONS & SCOPE TYPES
-  // ==========================================
-
-  public async getAllPermissions() {
-    const permissions = await this.prisma.permission.findMany({
-      where: { isActive: true },
-      orderBy: [{ module: "asc" }, { code: "asc" }],
-    });
-    return permissions;
-  }
-
-  public async getScopeTypes() {
-    const scopeTypes = await this.prisma.permissionScopeType.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
-    return scopeTypes;
   }
 
   // ==========================================

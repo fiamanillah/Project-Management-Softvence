@@ -48,7 +48,7 @@ export function CreateDesignationModal({ open, onOpenChange, departments, onSucc
 
     setIsLoading(true);
     try {
-      await api.post("/admin/designations", {
+      await api.post("/organization/designations", {
         code: code.toUpperCase(),
         name,
         departmentId,

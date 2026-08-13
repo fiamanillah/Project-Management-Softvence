@@ -62,9 +62,9 @@ export function PermissionMatrixModal({
     setIsLoading(true);
     try {
       const [perms, scopes, desigData] = await Promise.all([
-        api.get("/admin/permissions"),
-        api.get("/admin/scope-types"),
-        api.get(`/admin/designations/${designation.id}/permissions`),
+        api.get("/permissions"),
+        api.get("/permissions/scope-types"),
+        api.get(`/organization/designations/${designation.id}/permissions`),
       ]);
 
       setAllPermissions(perms || []);
@@ -112,7 +112,7 @@ export function PermissionMatrixModal({
         scopeTypeId,
       }));
 
-      await api.put(`/admin/designations/${designation.id}/permissions`, {
+      await api.put(`/organization/designations/${designation.id}/permissions`, {
         assignments,
       });
 

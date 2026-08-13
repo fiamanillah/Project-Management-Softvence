@@ -1,0 +1,28 @@
+info:
+  name: Save Designation Permissions
+  type: http
+  seq: 11
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/organization/designations/:id/permissions"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "assignments": [
+          {
+            "permissionId": "00000000-0000-0000-0000-000000000000",
+            "scopeTypeId": "00000000-0000-0000-0000-000000000000"
+          }
+        ]
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

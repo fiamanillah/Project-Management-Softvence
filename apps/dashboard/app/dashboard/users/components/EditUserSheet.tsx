@@ -51,7 +51,7 @@ export function EditUserSheet({ user, open, onOpenChange, designations, onSucces
 
     setIsLoading(true);
     try {
-      await api.patch(`/admin/users/${user.id}`, {
+      await api.patch(`/users/${user.id}`, {
         systemRole,
         designationId: designationId || undefined,
         isActive,

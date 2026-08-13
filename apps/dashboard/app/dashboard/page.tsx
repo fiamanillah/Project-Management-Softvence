@@ -23,9 +23,9 @@ export default function DashboardOverviewPage() {
     setLoading(true);
     try {
       const [usersRes, desigRes, overridesRes, logsRes] = await Promise.all([
-        api.get("/admin/users?limit=1"),
-        api.get("/admin/designations"),
-        api.get("/admin/overrides"),
+        api.get("/users?limit=1"),
+        api.get("/organization/designations"),
+        api.get("/users/overrides"),
         api.get("/audit-logs?limit=5"),
       ]);
 

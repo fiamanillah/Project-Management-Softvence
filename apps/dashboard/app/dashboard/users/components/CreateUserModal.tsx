@@ -54,7 +54,7 @@ export function CreateUserModal({ open, onOpenChange, designations, onSuccess }:
 
     setIsLoading(true);
     try {
-      await api.post("/admin/users", {
+      await api.post("/users", {
         email,
         password,
         firstName,

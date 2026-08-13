@@ -1,0 +1,23 @@
+info:
+  name: Assign Department Manager
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organization/departments/:id/managers"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "userId": "00000000-0000-0000-0000-000000000000"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -26,10 +26,10 @@ export default function OverridesPage() {
     setIsLoading(true);
     try {
       const [resOv, resDel, resUsers, resPerms] = await Promise.all([
-        api.get("/admin/overrides"),
-        api.get("/admin/delegations"),
-        api.get("/admin/users?limit=100"),
-        api.get("/admin/permissions"),
+        api.get("/users/overrides"),
+        api.get("/users/delegations"),
+        api.get("/users?limit=100"),
+        api.get("/permissions"),
       ]);
 
       setOverrides(resOv || []);
@@ -49,7 +49,7 @@ export default function OverridesPage() {
 
   const handleRevokeOverride = async (id: string) => {
     try {
-      await api.delete(`/admin/overrides/${id}`);
+      await api.delete(`/users/overrides/${id}`);
       toast.success("User permission override revoked");
       fetchData();
     } catch (err: any) {
@@ -59,7 +59,7 @@ export default function OverridesPage() {
 
   const handleRevokeDelegation = async (id: string) => {
     try {
-      await api.delete(`/admin/delegations/${id}`);
+      await api.delete(`/users/delegations/${id}`);
       toast.success("Delegation revoked");
       fetchData();
     } catch (err: any) {

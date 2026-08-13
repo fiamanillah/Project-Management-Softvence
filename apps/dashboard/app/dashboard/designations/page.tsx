@@ -22,7 +22,7 @@ export default function DesignationsPage() {
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const resDesig = await api.get("/admin/designations");
+      const resDesig = await api.get("/organization/designations");
       setDesignations(resDesig || []);
       // Map departments from designations if available
       const deptsMap = new Map();

@@ -37,8 +37,8 @@ export default function UsersPage() {
       if (roleFilter !== "all") queryParams.set("role", roleFilter);
 
       const [resUsers, resDesig] = await Promise.all([
-        api.get(`/admin/users?${queryParams.toString()}`),
-        api.get("/admin/designations"),
+        api.get(`/users?${queryParams.toString()}`),
+        api.get("/organization/designations"),
       ]);
 
       setUsers(resUsers.data || []);
@@ -56,7 +56,7 @@ export default function UsersPage() {
 
   const handleToggleActive = async (user: AdminUser, active: boolean) => {
     try {
-      await api.patch(`/admin/users/${user.id}`, { isActive: active });
+      await api.patch(`/users/${user.id}`, { isActive: active });
       toast.success(`User ${active ? "activated" : "disabled"} successfully`);
       fetchUsers();
     } catch (err: any) {

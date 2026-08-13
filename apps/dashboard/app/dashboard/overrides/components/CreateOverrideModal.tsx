@@ -55,7 +55,7 @@ export function CreateOverrideModal({
 
     setIsLoading(true);
     try {
-      await api.post("/admin/overrides", {
+      await api.post("/users/overrides", {
         userId,
         permissionId,
         isDeny,

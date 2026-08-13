@@ -1,0 +1,27 @@
+info:
+  name: Create Designation
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organization/designations"
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "code": "SENIOR_DEV",
+        "name": "Senior Developer",
+        "departmentId": "00000000-0000-0000-0000-000000000000",
+        "hierarchyLevel": 3,
+        "isLeadership": false
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

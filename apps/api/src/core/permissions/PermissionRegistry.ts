@@ -41,7 +41,7 @@ export class PermissionRegistry {
    * e.g. permissions.manifest.ts
    */
   public async discoverManifests(
-    modulesDir: string = path.join(process.cwd(), "src/Modules"),
+    modulesDir: string = path.resolve(__dirname, "../../Modules"),
   ): Promise<PermissionManifestItem[]> {
     const discoveredItems: PermissionManifestItem[] = [];
 
