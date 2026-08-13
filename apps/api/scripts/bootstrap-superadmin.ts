@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import { createPrismaClient } from "@workspace/db";
 import { hashPassword } from "../src/utils/crypto";
+import { PermissionRegistry } from "../src/core/permissions/PermissionRegistry";
+import { AuditLogService } from "../src/core/audit/audit.service";
 
 dotenv.config();
 
@@ -22,7 +24,12 @@ async function main() {
 
   console.log(`🔐 Bootstrapping SuperAdmin user: ${email}...`);
 
-  // Ensure a default system department and designation exist
+  // Step 1: Ensure Permission Registry is synced
+  console.log("⚡ Syncing Permission Registry...");
+  const syncResult = await PermissionRegistry.getInstance().sync(prisma as any);
+  console.log(`✔ Permissions synced: +${syncResult.insertedCount} new, ~${syncResult.updatedCount} changed, -${syncResult.deprecatedCount} deprecated`);
+
+  // Step 2: Ensure default system department and designation exist
   let dept = await prisma.department.findFirst({
     where: { code: "SYS" },
   });
@@ -60,6 +67,8 @@ async function main() {
     where: { email },
   });
 
+  let userId: string;
+
   if (existingUser) {
     const updatedUser = await prisma.user.update({
       where: { id: existingUser.id },
@@ -69,6 +78,7 @@ async function main() {
         isActive: true,
       },
     });
+    userId = updatedUser.id;
     console.log(`✅ SuperAdmin user updated successfully! User ID: ${updatedUser.id}`);
   } else {
     const newUser = await prisma.user.create({
@@ -83,8 +93,27 @@ async function main() {
         isActive: true,
       },
     });
+    userId = newUser.id;
     console.log(`✅ SuperAdmin user created successfully! User ID: ${newUser.id}`);
   }
+
+  // Dispatch audit log event
+  AuditLogService.log({
+    module: "Auth",
+    action: "SUPER_ADMIN_BOOTSTRAP",
+    entityTable: "users",
+    entityId: userId,
+    actor: {
+      id: userId,
+      email,
+      role: "SuperAdmin",
+    },
+    metadata: {
+      email,
+      bootstrappedAt: new Date().toISOString(),
+    },
+    status: "SUCCESS",
+  });
 }
 
 main()
