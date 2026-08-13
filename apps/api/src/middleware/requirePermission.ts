@@ -3,6 +3,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthenticationError, AuthorizationError } from "@/core/errors/AppError";
 import { can } from "@/core/authorization/AuthorizationEngine";
+import { AuditLogService } from "@/core/audit/audit.service";
 import type { AuthorizationResourceContext } from "@/core/authorization/authorization.types";
 
 export type ResourceLoader = (
@@ -40,11 +41,30 @@ export function requirePermission(
       const isAllowed = await can(user, permissionCode, resource);
 
       if (!isAllowed) {
-        return next(
-          new AuthorizationError(
-            `Access denied: Missing required permission '${permissionCode}'`,
-          ),
-        );
+        // Log non-blocking 403 access denial event to RabbitMQ -> MongoDB pipeline
+        AuditLogService.log({
+          module: "Authorization",
+          action: "ACCESS_DENIED",
+          entityTable: "permissions",
+          entityId: permissionCode,
+          actor: {
+            id: user.id,
+            email: user.email,
+            role: user.systemRole,
+            ipAddress,
+            userAgent,
+          },
+          req,
+          metadata: {
+            permissionCode,
+            resource,
+          },
+          status: "FAILED",
+          errorMessage: "You don't have access to this resource",
+        });
+
+        // Always return generic 403 error message (no information disclosure)
+        return next(new AuthorizationError("You don't have access to this resource"));
       }
 
       next();

@@ -149,6 +149,21 @@ export class AuthController extends BaseController {
   }
 
   /**
+   * Endpoint: GET /auth/permissions & GET /auth/v1/permissions
+   */
+  public async getUserPermissions(req: Request, res: Response) {
+    const userId = (req as any).user?.sub || (req as any).user?.id;
+    if (!userId) {
+      throw new AuthenticationError("User not authenticated");
+    }
+
+    const permissions = await this.authService.getUserPermissions(userId);
+    return this.sendResponse(req, res, "User permissions retrieved successfully", 200, {
+      permissions,
+    });
+  }
+
+  /**
    * Helper to attach HttpOnly cookie for refresh token
    */
   private setRefreshCookie(res: Response, rawRefreshToken: string) {

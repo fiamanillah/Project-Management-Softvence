@@ -99,6 +99,18 @@ export class AuthModule extends BaseModule {
       controller.forgotPassword.bind(controller),
     );
 
+    // GET /auth/permissions & /auth/v1/permissions (Frontend permission map for UI rendering)
+    this.router.get(
+      "/permissions",
+      authenticate,
+      controller.getUserPermissions.bind(controller),
+    );
+    this.router.get(
+      "/v1/permissions",
+      authenticate,
+      controller.getUserPermissions.bind(controller),
+    );
+
     // POST /auth/reset-password
     this.router.post(
       "/reset-password",

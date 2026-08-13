@@ -332,6 +332,42 @@ export class AuthorizationEngine {
     }
   }
 
+  /**
+   * Compute full permission map for a user (for frontend UI element visibility rendering)
+   */
+  public async getUserPermissions(
+    user: AuthenticatedUser,
+    prisma: PrismaClient = defaultPrisma,
+  ): Promise<Record<string, { allowed: boolean; scope: string; module: string | null; description: string | null }>> {
+    const allPermissions = await prisma.permission.findMany({
+      where: { isActive: true },
+    });
+
+    const userGrants = await this.getDesignationGrants(user.designationId, prisma);
+    const resultMap: Record<string, { allowed: boolean; scope: string; module: string | null; description: string | null }> = {};
+
+    for (const perm of allPermissions) {
+      const allowed = await this.can(user, perm.code, undefined, prisma);
+      
+      let scope = "None";
+      if (user.systemRole === "SuperAdmin") {
+        scope = "Global";
+      } else if (allowed) {
+        const grant = userGrants.find((g) => g.permissionCode === perm.code);
+        scope = grant ? grant.resolutionStrategy : "Override";
+      }
+
+      resultMap[perm.code] = {
+        allowed,
+        scope,
+        module: perm.module,
+        description: perm.description,
+      };
+    }
+
+    return resultMap;
+  }
+
   private async getPermissionVersion(): Promise<number> {
     try {
       const version = await this.cacheManager.get<number>("permission_version");
@@ -350,4 +386,10 @@ export async function can(
   resource?: AuthorizationResourceContext,
 ): Promise<boolean> {
   return AuthorizationEngine.getInstance().can(user, permissionCode, resource);
+}
+
+export async function getUserPermissions(
+  user: AuthenticatedUser,
+) {
+  return AuthorizationEngine.getInstance().getUserPermissions(user);
 }

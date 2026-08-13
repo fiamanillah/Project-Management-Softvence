@@ -3,6 +3,7 @@ import type { CacheManager } from "@workspace/cache";
 import { AppLogger } from "@/core/logging/logger";
 import { AuthenticationError, BadRequestError, ConflictError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
+import { getUserPermissions as fetchUserPermissions } from "@/core/authorization/AuthorizationEngine";
 import { publishNotification } from "@workspace/message-broker";
 import { env } from "@/env";
 import {
@@ -458,6 +459,28 @@ export class AuthServices {
     });
 
     return { message: "Password reset successful. Please log in with your new password." };
+  }
+
+  /**
+   * Fetch permission map for the authenticated user (for UI visibility rendering)
+   */
+  public async getUserPermissions(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive || user.deletedAt) {
+      throw new AuthenticationError("User account disabled or non-existent");
+    }
+
+    const authenticatedUser = {
+      id: user.id,
+      systemRole: user.systemRole,
+      designationId: user.designationId,
+      email: user.email,
+    };
+
+    return fetchUserPermissions(authenticatedUser);
   }
 
   /**
