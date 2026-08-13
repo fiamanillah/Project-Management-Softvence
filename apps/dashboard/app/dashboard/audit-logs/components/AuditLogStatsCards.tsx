@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Card, CardContent } from "@workspace/ui/components/card";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import { ShieldCheck, ShieldAlert, Activity, FileSpreadsheet, Layers } from "lucide-react";
 
 export interface AuditStatsData {
@@ -32,10 +33,14 @@ export function AuditLogStatsCards({ stats, isLoading }: AuditLogStatsCardsProps
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="h-24 rounded-xl border bg-card/60 animate-pulse p-4 flex flex-col justify-between"
+            className="h-[92px] rounded-xl border bg-card p-4 flex items-center justify-between shadow-2xs"
           >
-            <div className="h-4 w-24 bg-muted rounded" />
-            <div className="h-7 w-16 bg-muted rounded" />
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <Skeleton className="size-10 rounded-xl" />
           </div>
         ))}
       </div>

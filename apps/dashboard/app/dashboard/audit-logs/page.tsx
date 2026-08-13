@@ -52,7 +52,7 @@ export default function AuditLogsPage() {
   const fetchStats = React.useCallback(async () => {
     setIsStatsLoading(true);
     try {
-      const res = await api.get("/audit-logs/stats");
+      const res = await api.get(`/audit-logs/stats?_t=${Date.now()}`);
       setStats(res);
     } catch {
       // Non-critical if stats fail
@@ -68,6 +68,7 @@ export default function AuditLogsPage() {
       const queryParams = new URLSearchParams();
       queryParams.set("page", String(currentPage));
       queryParams.set("limit", String(limit));
+      queryParams.set("_t", String(Date.now()));
 
       if (debouncedSearch.trim()) queryParams.set("search", debouncedSearch.trim());
       if (moduleFilter !== "all") queryParams.set("module", moduleFilter);

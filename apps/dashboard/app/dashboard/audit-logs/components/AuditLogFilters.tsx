@@ -77,13 +77,12 @@ export function AuditLogFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Modules</SelectItem>
-            <SelectItem value="Auth">Auth</SelectItem>
+            <SelectItem value="ORGANIZATION">Organization</SelectItem>
+            <SelectItem value="USERS">Users</SelectItem>
+            <SelectItem value="AUTH">Auth</SelectItem>
+            <SelectItem value="PERMISSIONS">Permissions</SelectItem>
             <SelectItem value="Authorization">Authorization</SelectItem>
-            <SelectItem value="Admin">Admin</SelectItem>
-            <SelectItem value="Projects">Projects</SelectItem>
-            <SelectItem value="BdOrders">BdOrders</SelectItem>
-            <SelectItem value="Billing">Billing</SelectItem>
-            <SelectItem value="System">System</SelectItem>
+            <SelectItem value="SYSTEM">System</SelectItem>
           </SelectContent>
         </Select>
 

@@ -12,6 +12,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import {
   Eye,
   ShieldAlert,
@@ -68,21 +69,21 @@ interface AuditLogTableProps {
 
 export function AuditLogTable({ logs, onViewDetails, isLoading }: AuditLogTableProps) {
   const getModuleBadge = (module: string) => {
-    switch (module) {
-      case "Auth":
+    switch (module?.toUpperCase()) {
+      case "AUTH":
         return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
-      case "Authorization":
+      case "AUTHORIZATION":
         return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
-      case "Admin":
-        return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20";
-      case "Projects":
-        return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
-      case "BdOrders":
+      case "ORGANIZATION":
         return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20";
-      case "Billing":
-        return "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20";
-      default:
+      case "USERS":
+        return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20";
+      case "PERMISSIONS":
+        return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
+      case "SYSTEM":
         return "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20";
+      default:
+        return "bg-primary/10 text-primary border-primary/20";
     }
   };
 
@@ -123,11 +124,38 @@ export function AuditLogTable({ logs, onViewDetails, isLoading }: AuditLogTableP
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <TableRow key={i}>
-                <TableCell colSpan={7} className="h-12">
-                  <div className="h-5 w-full bg-muted/60 rounded animate-pulse" />
+            Array.from({ length: 20 }).map((_, i) => (
+              <TableRow key={i} className="hover:bg-transparent">
+                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                <TableCell>
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-5 w-24 rounded-md" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
                 </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="size-7 rounded-full" />
+                    <div className="space-y-1">
+                      <Skeleton className="h-3.5 w-28" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1">
+                    <Skeleton className="h-3.5 w-20" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1">
+                    <Skeleton className="h-3.5 w-24" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </TableCell>
+                <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                <TableCell className="text-right"><Skeleton className="h-7 w-20 ml-auto rounded-md" /></TableCell>
               </TableRow>
             ))
           ) : logs.length === 0 ? (

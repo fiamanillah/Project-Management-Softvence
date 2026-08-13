@@ -1,26 +1,45 @@
-// src/core/audit/diffCalculator.ts
-
-const SENSITIVE_KEYS = new Set([
-  "password",
-  "passwordhash",
-  "password_hash",
-  "tokenhash",
-  "token_hash",
-  "rawrefreshtoken",
-  "refreshtoken",
-  "resettoken",
-  "accesstoken",
-  "secret",
-  "authorization",
-]);
+const SENSITIVE_PATTERNS = [
+  /pass(word)?/i,
+  /token/i,
+  /secret/i,
+  /auth(orization)?/i,
+  /cookie/i,
+  /api[_-]?key/i,
+  /private[_-]?key/i,
+  /credit[_-]?card/i,
+  /card[_-]?number/i,
+  /cvv/i,
+  /cvc/i,
+  /ssn/i,
+  /social[_-]?security/i,
+];
 
 /**
- * Recursively sanitize an object by stripping sensitive keys (e.g. passwords, tokens).
+ * Check if a key name matches any known sensitive patterns.
+ */
+export function isSensitiveKey(key: string): boolean {
+  const lowerKey = key.toLowerCase();
+  return SENSITIVE_PATTERNS.some((pattern) => pattern.test(lowerKey));
+}
+
+/**
+ * Recursively sanitize an object by stripping sensitive keys (e.g. passwords, tokens, API keys, credentials)
+ * and masking JWT/Bearer string patterns.
  */
 export function sanitizePayload<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj;
 
-  if (typeof obj !== "object") return obj;
+  if (typeof obj !== "object") {
+    if (typeof obj === "string") {
+      if (
+        (obj as string).startsWith("Bearer ") ||
+        /^eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/.test(obj as string)
+      ) {
+        return "[REDACTED TOKEN]" as unknown as T;
+      }
+    }
+    return obj;
+  }
 
   if (Array.isArray(obj)) {
     return obj.map((item) => sanitizePayload(item)) as unknown as T;
@@ -33,8 +52,10 @@ export function sanitizePayload<T>(obj: T): T {
   const cleaned: Record<string, any> = {};
 
   for (const [key, value] of Object.entries(obj)) {
-    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+    if (isSensitiveKey(key)) {
       cleaned[key] = "[REDACTED]";
+    } else if (typeof value === "string" && (value.startsWith("Bearer ") || /^eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/.test(value))) {
+      cleaned[key] = "[REDACTED TOKEN]";
     } else if (typeof value === "object" && value !== null) {
       cleaned[key] = sanitizePayload(value);
     } else {

@@ -92,8 +92,13 @@ export async function apiRequest<T = any>(
     : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
   const response = await fetch(url, {
+    cache: "no-store",
     ...options,
-    headers,
+    headers: {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      ...headers,
+    },
     credentials: "include", // send HttpOnly cookies for refresh token
   });
 

@@ -58,12 +58,23 @@ export class AuditLogService {
       const rawBody = (req as any)?.validatedBody || req?.body;
       const cleanBody = rawBody && typeof rawBody === "object" && Object.keys(rawBody).length > 0 ? sanitizePayload(rawBody) : undefined;
 
+      const reqId =
+        (req as any)?.id ||
+        (req as any)?.requestId ||
+        (req?.headers ? (req.headers["x-request-id"] || req.headers["x-correlation-id"]) : undefined) ||
+        ((req as any)?.res?.getHeader ? (req as any).res.getHeader("x-request-id") : undefined);
+
+      const startTime = (req as any)?._startTime;
+      const durationMs = startTime ? Date.now() - startTime : undefined;
+      const statusCode = (req as any)?.res?.statusCode || 200;
+
       const httpContext = req
         ? {
             method: req.method,
             path: req.originalUrl || req.url,
-            statusCode: (req as any).res?.statusCode,
-            requestId: (req.headers["x-request-id"] as string) || undefined,
+            statusCode,
+            durationMs,
+            requestId: typeof reqId === "string" ? reqId : undefined,
             query: cleanQuery,
             params: cleanParams,
             requestBody: cleanBody,

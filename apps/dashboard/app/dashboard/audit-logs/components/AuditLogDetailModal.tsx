@@ -242,7 +242,7 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                     </div>
                     <div>
                       <span className="block text-[10px] text-muted-foreground">Request ID</span>
-                      <span className="font-mono text-foreground text-[10px] truncate block">{log.httpContext.requestId || "N/A"}</span>
+                      <span className="font-mono text-foreground text-[10px] truncate block select-all" title={log.httpContext.requestId || undefined}>{log.httpContext.requestId || "N/A"}</span>
                     </div>
                     <div className="col-span-2 md:col-span-4">
                       <span className="block text-[10px] text-muted-foreground">Request Path</span>
