@@ -38,6 +38,11 @@ export const data = {
       icon: Users,
     },
     {
+      title: "Departments",
+      url: "/dashboard/departments",
+      icon: Building2,
+    },
+    {
       title: "Designations & Matrix",
       url: "/dashboard/designations",
       icon: Lock,
