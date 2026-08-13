@@ -1,0 +1,22 @@
+info:
+  name: Revoke Session
+  type: http
+  seq: 5
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/auth/sessions/:sessionId"
+  params:
+    - name: sessionId
+      value: "SESSION_UUID_HERE"
+      type: path
+  headers:
+    - name: Authorization
+      value: "Bearer {{accessToken}}"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -27,16 +27,19 @@
         "docker:up": "docker-compose up -d",
         "docker:down": "docker-compose down",
         "docker:logs": "docker-compose logs -f",
-        "add:module": "bun scripts/generate-module.ts"
+        "add:module": "bun scripts/generate-module.ts",
+        "bootstrap:admin": "bun scripts/bootstrap-superadmin.ts"
     },
     "dependencies": {
-        "@workspace/db": "workspace:*",
-        "@workspace/shared": "workspace:*",
-        "@workspace/message-broker": "workspace:*",
-        "@workspace/logger": "workspace:*",
-        "@workspace/cache": "workspace:*",
         "@prisma/adapter-pg": "^7.5.0",
         "@prisma/client": "^7.2.0",
+        "@prisma/client-runtime-utils": "^7.9.1",
+        "@workspace/cache": "workspace:*",
+        "@workspace/db": "workspace:*",
+        "@workspace/logger": "workspace:*",
+        "@workspace/message-broker": "workspace:*",
+        "@workspace/shared": "workspace:*",
+        "argon2": "^0.45.1",
         "axios": "^1.12.2",
         "bcrypt": "^6.0.0",
         "chalk": "^5.6.0",
@@ -53,7 +56,6 @@
         "lodash": "^4.17.21",
         "mongoose": "^8.9.0",
         "multer": "^2.0.2",
-
         "pg": "^8.16.3",
         "prisma": "^7.2.0",
         "uuid": "^11.1.0",

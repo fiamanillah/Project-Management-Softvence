@@ -5,5 +5,6 @@ import { MessageBroker } from "@workspace/message-broker";
 export interface ServiceMap {
   prisma: PrismaClient;
   redis: CacheManager;
+  cache?: CacheManager;
   messageBroker: MessageBroker;
 }

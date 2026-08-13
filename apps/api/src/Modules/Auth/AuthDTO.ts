@@ -3,7 +3,15 @@ export {
   createUserBodySchema,
   loginUserSchema,
   loginUserBodySchema,
+  refreshSchema,
+  refreshBodySchema,
+  forgotPasswordSchema,
+  forgotPasswordBodySchema,
+  resetPasswordSchema,
+  resetPasswordBodySchema,
   type CreateUserDTO,
   type LoginUserDTO,
+  type RefreshDTO,
+  type ForgotPasswordDTO,
+  type ResetPasswordDTO,
 } from "@workspace/shared";
-

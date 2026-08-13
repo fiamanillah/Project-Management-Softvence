@@ -35,36 +35,37 @@ export class PrismaProvider implements InfrastructureProvider<PrismaClient> {
   private mapPrismaError(err: unknown): AppError | null {
     // 1. Handle Known Errors (these have .code and .meta)
     if (err instanceof PrismaClientKnownRequestError) {
-      switch (err.code) {
+      const prismaErr = err as any;
+      switch (prismaErr.code) {
         case "P2002":
           return new ConflictError("A record with this data already exists", {
-            fields: err.meta?.target,
+            fields: prismaErr.meta?.target,
             constraint: "unique_constraint",
           });
         case "P2025":
           return new NotFoundError("Record to update not found", {
-            operation: err.meta,
+            operation: prismaErr.meta,
           });
         case "P2003":
           return new AppError({
             statusCode: HTTPStatusCode.BAD_REQUEST,
             message: "Foreign key constraint failed",
             code: "FOREIGN_KEY_ERROR",
-            details: { constraint: err.meta },
+            details: { constraint: prismaErr.meta },
           });
         case "P2014":
           return new AppError({
             statusCode: HTTPStatusCode.BAD_REQUEST,
             message: "Invalid data provided",
             code: "INVALID_DATA",
-            details: { relation: err.meta },
+            details: { relation: prismaErr.meta },
           });
         default:
           return new AppError({
             statusCode: HTTPStatusCode.INTERNAL_SERVER_ERROR,
             message: "Database operation failed",
             code: "DATABASE_ERROR",
-            details: { prismaCode: err.code, meta: err.meta },
+            details: { prismaCode: prismaErr.code, meta: prismaErr.meta },
           });
       }
     }

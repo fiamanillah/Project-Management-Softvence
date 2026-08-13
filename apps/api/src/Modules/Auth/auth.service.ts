@@ -1,52 +1,74 @@
 import { PrismaClient } from "@workspace/db";
+import type { CacheManager } from "@workspace/cache";
 import { AppLogger } from "@/core/logging/logger";
-import { ConflictError, NotFoundError } from "@/core/errors/AppError";
-import { publishNotification } from "@workspace/message-broker";
+import { AuthenticationError, BadRequestError, ConflictError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
+import { publishNotification } from "@workspace/message-broker";
+import { env } from "@/env";
+import {
+  hashPassword,
+  verifyPassword,
+  generateOpaqueToken,
+  hashToken,
+  signAccessToken,
+} from "@/utils/crypto";
 
 export class AuthServices {
-  // 1. Initialize the contextual logger for this specific service
   private logger = new AppLogger("AuthServices");
 
-  // 2. Use 'private readonly' so TypeScript automatically creates 'this.prisma'
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly cache?: CacheManager,
+  ) {}
 
   /**
-   * Example Use Case: Register a new user
+   * Register a new user with Argon2id password hashing
    */
   public async register(
     email: string,
     firstName: string,
     lastName: string,
-    passwordHash: string,
+    password: string,
+    designationId?: string,
   ) {
     this.logger.info("Attempting to register user", { email });
 
-    // 3. Business Logic & Database Interaction
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (existingUser) {
       this.logger.warn("Registration failed: User already exists", { email });
-      // Throw your custom AppError. The global error handler will catch this!
       throw new ConflictError("A user with this email already exists");
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    // Fallback default designation if not provided
+    let finalDesignationId = designationId;
+    if (!finalDesignationId) {
+      const defaultDesignation = await this.prisma.designation.findFirst();
+      if (!defaultDesignation) {
+        throw new BadRequestError("No default designation configured in system");
+      }
+      finalDesignationId = defaultDesignation.id;
     }
 
     const newUser = await this.prisma.user.create({
       data: {
         email,
-        employee_id: `EMP-${Date.now()}`,
-        first_name: firstName,
-        last_name: lastName,
-        password_hash: passwordHash,
-        designation_id: "00000000-0000-0000-0000-000000000000",
+        employeeId: `EMP-${Date.now().toString().slice(-6)}`,
+        firstName,
+        lastName,
+        passwordHash: hashedPassword,
+        systemRole: "Staff",
+        designationId: finalDesignationId,
+        isActive: true,
       },
     });
 
     this.logger.info("User registered successfully", { userId: newUser.id });
 
-    // Push async events to RabbitMQ for background processing by apps/worker
     try {
       await AuditLogService.log({
         module: "AUTH",
@@ -59,25 +81,404 @@ export class AuthServices {
         },
         newPayload: {
           email: newUser.email,
-          firstName: newUser.first_name,
-          lastName: newUser.last_name,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
         },
       });
 
       await publishNotification({
-
         recipientId: newUser.id,
         type: "Mention",
         title: "Welcome to Project Management Softvence!",
-        body: `Hello ${newUser.first_name}, your account has been successfully created.`,
+        body: `Hello ${newUser.firstName}, your account has been successfully created.`,
         entityType: "User",
         entityId: newUser.id,
       });
     } catch (brokerError) {
-      this.logger.error("Failed to publish RabbitMQ events", { error: brokerError });
-      // We log the error but don't break HTTP response as user registration succeeded
+      this.logger.error("Failed to publish notification/audit events", { error: brokerError });
     }
 
-    return newUser;
+    return this.sanitizeUser(newUser);
+  }
+
+  /**
+   * POST /auth/login: Verify Argon2id password, issue 15-min JWT & 30-day opaque refresh token
+   */
+  public async login(email: string, password: string, deviceInfo?: string) {
+    this.logger.info("Login attempt", { email });
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.isActive || user.deletedAt) {
+      this.logger.warn("Login failed: Invalid credentials or inactive user", { email });
+      throw new AuthenticationError("Invalid email or password");
+    }
+
+    const isPasswordValid = await verifyPassword(user.passwordHash, password);
+    if (!isPasswordValid) {
+      this.logger.warn("Login failed: Password mismatch", { email });
+      throw new AuthenticationError("Invalid email or password");
+    }
+
+    // 1. Sign Access Token with strict identity claims
+    const accessToken = signAccessToken({
+      sub: user.id,
+      systemRole: user.systemRole,
+      designationId: user.designationId,
+    });
+
+    // 2. Generate opaque 64-byte refresh token and hash with SHA-256
+    const rawRefreshToken = generateOpaqueToken();
+    const tokenHash = hashToken(rawRefreshToken);
+
+    const refreshDays = env.REFRESH_TOKEN_EXPIRES_DAYS || 30;
+    const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
+
+    // Save hashed refresh token to DB
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        deviceInfo: deviceInfo || "Unknown Device",
+        expiresAt,
+      },
+    });
+
+    // Cache in Redis for performance
+    if (this.cache) {
+      const cacheKey = `auth:refresh:${tokenHash}`;
+      const userRefreshPatternKey = `auth:refresh:user:${user.id}:${tokenHash}`;
+      const cacheData = { userId: user.id, expiresAt: expiresAt.toISOString() };
+      const ttlSeconds = refreshDays * 86400;
+
+      await this.cache.set(cacheKey, cacheData, { ttlSeconds });
+      await this.cache.set(userRefreshPatternKey, cacheData, { ttlSeconds });
+      await this.cache.del(`auth:sessions:${user.id}`);
+    }
+
+    // Update last login timestamp
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    this.logger.info("User logged in successfully", { userId: user.id });
+
+    return {
+      accessToken,
+      rawRefreshToken,
+      user: this.sanitizeUser(user),
+    };
+  }
+
+  /**
+   * POST /auth/refresh: Rotation & Theft Detection
+   */
+  public async refresh(rawRefreshToken: string, deviceInfo?: string) {
+    if (!rawRefreshToken) {
+      throw new AuthenticationError("Refresh token required");
+    }
+
+    const tokenHash = hashToken(rawRefreshToken);
+    let userId: string | null = null;
+
+    // Check Redis cache first
+    let cachedSession: { userId: string; expiresAt: string } | null = null;
+    if (this.cache) {
+      cachedSession = await this.cache.get<{ userId: string; expiresAt: string }>(`auth:refresh:${tokenHash}`);
+    }
+
+    const existingToken = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    // --- TOKEN THEFT DETECTION ---
+    // If incoming refresh token hash is NOT found or revoked, assume token was stolen and reused!
+    if (!existingToken || existingToken.revokedAt) {
+      this.logger.error("🚨 REFRESH TOKEN THEFT DETECTED! Token reuse or non-existent token presented", { tokenHash });
+
+      if (cachedSession) {
+        userId = cachedSession.userId;
+      } else if (existingToken) {
+        userId = existingToken.userId;
+      }
+
+      if (userId) {
+        // Revoke ALL active sessions for this user immediately across DB & Redis
+        await this.invalidateAllUserSessions(userId);
+      }
+
+      throw new AuthenticationError("Security alert: Stolen or invalid refresh token. All active sessions invalidated.");
+    }
+
+    userId = existingToken.userId;
+    const user = existingToken.user;
+
+    // Check expiration
+    if (existingToken.expiresAt < new Date() || !user.isActive || user.deletedAt) {
+      await this.invalidateAllUserSessions(userId);
+      throw new AuthenticationError("Refresh token expired or account disabled. Please log in again.");
+    }
+
+    // --- ROTATION ---
+    // 1. Instantly delete consumed refresh token from DB & Redis
+    await this.prisma.refreshToken.delete({
+      where: { id: existingToken.id },
+    });
+
+    if (this.cache) {
+      await this.cache.del(`auth:refresh:${tokenHash}`);
+      await this.cache.del(`auth:refresh:user:${userId}:${tokenHash}`);
+    }
+
+    // 2. Generate new Access Token & new Refresh Token
+    const newAccessToken = signAccessToken({
+      sub: user.id,
+      systemRole: user.systemRole,
+      designationId: user.designationId,
+    });
+
+    const newRawRefreshToken = generateOpaqueToken();
+    const newTokenHash = hashToken(newRawRefreshToken);
+
+    const refreshDays = env.REFRESH_TOKEN_EXPIRES_DAYS || 30;
+    const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
+
+    // 3. Save new refresh token
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: newTokenHash,
+        deviceInfo: deviceInfo || existingToken.deviceInfo || "Unknown Device",
+        expiresAt,
+      },
+    });
+
+    if (this.cache) {
+      const ttlSeconds = refreshDays * 86400;
+      const cacheData = { userId: user.id, expiresAt: expiresAt.toISOString() };
+      await this.cache.set(`auth:refresh:${newTokenHash}`, cacheData, { ttlSeconds });
+      await this.cache.set(`auth:refresh:user:${user.id}:${newTokenHash}`, cacheData, { ttlSeconds });
+      await this.cache.del(`auth:sessions:${user.id}`);
+    }
+
+    return {
+      accessToken: newAccessToken,
+      rawRefreshToken: newRawRefreshToken,
+      user: this.sanitizeUser(user),
+    };
+  }
+
+  /**
+   * GET /auth/sessions: Return active user sessions (NEVER returning tokenHash)
+   */
+  public async getSessions(userId: string) {
+    const cacheKey = `auth:sessions:${userId}`;
+
+    if (this.cache) {
+      const cachedSessions = await this.cache.get<any[]>(cacheKey);
+      if (cachedSessions) return cachedSessions;
+    }
+
+    const sessions = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        expiresAt: { gt: new Date() },
+        revokedAt: null,
+      },
+      select: {
+        id: true,
+        deviceInfo: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (this.cache) {
+      await this.cache.set(cacheKey, sessions, { ttlSeconds: 300 });
+    }
+
+    return sessions;
+  }
+
+  /**
+   * DELETE /auth/sessions/:id: Remotely revoke a specific session
+   */
+  public async revokeSession(userId: string, sessionId: string) {
+    const session = await this.prisma.refreshToken.findFirst({
+      where: { id: sessionId, userId },
+    });
+
+    if (!session) {
+      throw new BadRequestError("Session not found or does not belong to user");
+    }
+
+    await this.prisma.refreshToken.delete({
+      where: { id: sessionId },
+    });
+
+    if (this.cache) {
+      await this.cache.del(`auth:refresh:${session.tokenHash}`);
+      await this.cache.del(`auth:refresh:user:${userId}:${session.tokenHash}`);
+      await this.cache.del(`auth:sessions:${userId}`);
+    }
+
+    return { message: "Session revoked successfully" };
+  }
+
+  /**
+   * POST /auth/logout: Revoke current session
+   */
+  public async logout(rawRefreshToken?: string, userId?: string) {
+    if (rawRefreshToken) {
+      const tokenHash = hashToken(rawRefreshToken);
+      const tokenRecord = await this.prisma.refreshToken.findUnique({
+        where: { tokenHash },
+      });
+
+      if (tokenRecord) {
+        await this.prisma.refreshToken.delete({
+          where: { id: tokenRecord.id },
+        });
+
+        if (this.cache) {
+          await this.cache.del(`auth:refresh:${tokenHash}`);
+          await this.cache.del(`auth:refresh:user:${tokenRecord.userId}:${tokenHash}`);
+          await this.cache.del(`auth:sessions:${tokenRecord.userId}`);
+        }
+      }
+    } else if (userId) {
+      await this.invalidateAllUserSessions(userId);
+    }
+
+    return { message: "Logged out successfully" };
+  }
+
+  /**
+   * POST /auth/forgot-password: Issue single-use password reset token
+   */
+  public async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.isActive || user.deletedAt) {
+      // Do not reveal email absence for security
+      return { message: "If that email is registered, password reset instructions have been sent." };
+    }
+
+    const rawResetToken = generateOpaqueToken();
+    const tokenHash = hashToken(rawResetToken);
+    const expiresAt = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes
+
+    // Delete previous reset tokens for user
+    await this.prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id },
+    });
+
+    // Create new reset token record
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    if (this.cache) {
+      await this.cache.set(
+        `auth:reset:${tokenHash}`,
+        { userId: user.id, expiresAt: expiresAt.toISOString() },
+        { ttlSeconds: 1200 },
+      );
+    }
+
+    this.logger.info("Password reset token generated", { userId: user.id });
+
+    // Send email / broker notification
+    try {
+      await publishNotification({
+        recipientId: user.id,
+        type: "Mention",
+        title: "Password Reset Request",
+        body: `Use this single-use reset token: ${rawResetToken}`,
+        entityType: "User",
+        entityId: user.id,
+      });
+    } catch (e) {
+      this.logger.error("Failed to publish password reset notification", { error: e });
+    }
+
+    return {
+      message: "If that email is registered, password reset instructions have been sent.",
+      resetToken: env.NODE_ENV === "development" || env.NODE_ENV === "test" ? rawResetToken : undefined,
+    };
+  }
+
+  /**
+   * POST /auth/reset-password: Accept single-use token and update password
+   */
+  public async resetPassword(rawToken: string, newPassword: string) {
+    const tokenHash = hashToken(rawToken);
+
+    const resetTokenRecord = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!resetTokenRecord || resetTokenRecord.expiresAt < new Date()) {
+      throw new BadRequestError("Invalid or expired password reset token.");
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update user password
+    await this.prisma.user.update({
+      where: { id: resetTokenRecord.userId },
+      data: { passwordHash: hashedPassword },
+    });
+
+    // Delete used reset token
+    await this.prisma.passwordResetToken.delete({
+      where: { id: resetTokenRecord.id },
+    });
+
+    if (this.cache) {
+      await this.cache.del(`auth:reset:${tokenHash}`);
+    }
+
+    // Force logout on all active devices
+    await this.invalidateAllUserSessions(resetTokenRecord.userId);
+
+    this.logger.info("Password reset successfully. Cleared all user sessions.", {
+      userId: resetTokenRecord.userId,
+    });
+
+    return { message: "Password reset successful. Please log in with your new password." };
+  }
+
+  /**
+   * Helper to invalidate all active refresh tokens and caches for a user
+   */
+  private async invalidateAllUserSessions(userId: string) {
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    if (this.cache) {
+      await this.cache.delByPattern(`auth:refresh:user:${userId}:*`);
+      await this.cache.del(`auth:sessions:${userId}`);
+    }
+  }
+
+  /**
+   * Helper to remove passwordHash and sensitive attributes from User model
+   */
+  private sanitizeUser(user: any) {
+    const { passwordHash, ...sanitized } = user;
+    return sanitized;
   }
 }

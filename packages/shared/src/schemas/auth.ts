@@ -25,15 +25,47 @@ export const loginUserSchema = {
 
 export type LoginUserDTO = z.infer<typeof loginUserBodySchema>;
 
+export const refreshBodySchema = z.object({
+  refreshToken: z.string().optional(),
+});
+
+export const refreshSchema = {
+  body: refreshBodySchema,
+};
+
+export type RefreshDTO = z.infer<typeof refreshBodySchema>;
+
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+export const forgotPasswordSchema = {
+  body: forgotPasswordBodySchema,
+};
+
+export type ForgotPasswordDTO = z.infer<typeof forgotPasswordBodySchema>;
+
+export const resetPasswordBodySchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export const resetPasswordSchema = {
+  body: resetPasswordBodySchema,
+};
+
+export type ResetPasswordDTO = z.infer<typeof resetPasswordBodySchema>;
+
 export const authResponseDataSchema = z.object({
   user: z.object({
     id: z.string(),
     email: z.string(),
     firstName: z.string(),
     lastName: z.string(),
-    role: z.string(),
+    systemRole: z.string(),
+    designationId: z.string(),
   }),
-  token: z.string().optional(),
+  accessToken: z.string().optional(),
 });
 
 export type AuthResponseData = z.infer<typeof authResponseDataSchema>;

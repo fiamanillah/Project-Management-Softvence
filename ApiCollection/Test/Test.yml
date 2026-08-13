@@ -5,13 +5,8 @@ info:
 
 http:
   method: GET
-  url: "{{baseurl}}/test"
+  url: "{{baseUrl}}/test"
   auth: inherit
-
-runtime:
-  variables:
-    - name: baseurl
-      value: http://localhost:3030
 
 settings:
   encodeUrl: true

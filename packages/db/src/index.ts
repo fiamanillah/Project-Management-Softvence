@@ -28,7 +28,7 @@ export {
   PrismaClientInitializationError,
   PrismaClientKnownRequestError,
   PrismaClientUnknownRequestError,
-} from "@prisma/client/runtime/client";
+} from "./generated/client/runtime/client.js";
 
 export * from "./mongo/audit-log.model";
 export * from "./mongo/connection";
