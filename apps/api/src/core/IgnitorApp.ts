@@ -56,7 +56,8 @@ export class IgnitorApp {
         // 3. Register module routes automatically if it's a BaseModule
         if (module instanceof BaseModule) {
           this.app.use(module.basePath, module.getRouter());
-          this.logger.info(`↩ Registered routes for module: ${module.name}`);
+          this.app.use(`/api/v1${module.basePath}`, module.getRouter());
+          this.logger.info(`↩ Registered routes for module: ${module.name} (${module.basePath} & /api/v1${module.basePath})`);
         }
       }
 

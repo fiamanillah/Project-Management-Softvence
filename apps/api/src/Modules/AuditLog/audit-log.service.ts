@@ -32,12 +32,12 @@ export class AuditLogQueryService {
 
     const query: Record<string, any> = {};
 
-    if (filters.module) query.module = filters.module;
+    if (filters.module && filters.module !== "all") query.module = filters.module;
     if (filters.action) query.action = filters.action;
     if (filters.entityTable) query.entityTable = filters.entityTable;
     if (filters.entityId) query.entityId = filters.entityId;
     if (filters.actorId) query["actor.id"] = filters.actorId;
-    if (filters.status) query.status = filters.status;
+    if (filters.status && filters.status !== "all") query.status = filters.status;
 
     if (filters.startDate || filters.endDate) {
       query.createdAt = {};
@@ -45,8 +45,21 @@ export class AuditLogQueryService {
       if (filters.endDate) query.createdAt.$lte = new Date(filters.endDate);
     }
 
-    if (filters.search) {
-      query.$text = { $search: filters.search };
+    if (filters.search && filters.search.trim() !== "") {
+      const searchRegex = new RegExp(
+        filters.search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i",
+      );
+      query.$or = [
+        { action: searchRegex },
+        { module: searchRegex },
+        { entityTable: searchRegex },
+        { entityId: searchRegex },
+        { "actor.email": searchRegex },
+        { "actor.id": searchRegex },
+        { "actor.ipAddress": searchRegex },
+        { errorMessage: searchRegex },
+      ];
     }
 
     const [logs, total] = await Promise.all([
@@ -60,7 +73,7 @@ export class AuditLogQueryService {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit) || 1,
       },
     };
   }
@@ -78,23 +91,28 @@ export class AuditLogQueryService {
 
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const [totalLogs, logsLast24h, moduleStats, topActions] = await Promise.all([
-      AuditLogModel.countDocuments({}),
-      AuditLogModel.countDocuments({ createdAt: { $gte: last24Hours } }),
-      AuditLogModel.aggregate([
-        { $group: { _id: "$module", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-      ]),
-      AuditLogModel.aggregate([
-        { $group: { _id: "$action", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 10 },
-      ]),
-    ]);
+    const [totalLogs, logsLast24h, successCount, failedCount, moduleStats, topActions] =
+      await Promise.all([
+        AuditLogModel.countDocuments({}),
+        AuditLogModel.countDocuments({ createdAt: { $gte: last24Hours } }),
+        AuditLogModel.countDocuments({ status: "SUCCESS" }),
+        AuditLogModel.countDocuments({ status: "FAILED" }),
+        AuditLogModel.aggregate([
+          { $group: { _id: "$module", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+        ]),
+        AuditLogModel.aggregate([
+          { $group: { _id: "$action", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+        ]),
+      ]);
 
     return {
       totalLogs,
       logsLast24h,
+      successCount,
+      failedCount,
       moduleStats,
       topActions,
     };

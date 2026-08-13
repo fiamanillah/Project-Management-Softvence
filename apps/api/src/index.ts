@@ -12,6 +12,7 @@ import { CacheManager } from "@workspace/cache";
 import { prisma } from "./lib/prisma";
 import { AuthModule } from "./Modules/Auth/AuthModule";
 import { AuditLogModule } from "./Modules/AuditLog/AuditLogModule";
+import { AdminModule } from "./Modules/Admin/AdminModule";
 
 import { PermissionRegistry } from "./core/permissions/PermissionRegistry";
 
@@ -38,6 +39,7 @@ async function bootstrap() {
     logger.info("⚙ Registering modules...");
     app.registerModule(new AuthModule());
     app.registerModule(new AuditLogModule());
+    app.registerModule(new AdminModule());
     logger.info("✔ All modules registered successfully");
 
     // 4. Permission Registry Sync Step

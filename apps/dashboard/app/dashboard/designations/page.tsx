@@ -1,0 +1,103 @@
+"use client";
+
+import * as React from "react";
+import { Button } from "@workspace/ui/components/button";
+import { Plus, RefreshCw, Lock } from "lucide-react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { DesignationTable, type DesignationItem } from "./components/DesignationTable";
+import { CreateDesignationModal } from "./components/CreateDesignationModal";
+import { PermissionMatrixModal } from "./components/PermissionMatrixModal";
+
+export default function DesignationsPage() {
+  const [designations, setDesignations] = React.useState<DesignationItem[]>([]);
+  const [departments, setDepartments] = React.useState<{ id: string; name: string; code: string }[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  // Modals
+  const [createModalOpen, setCreateModalOpen] = React.useState(false);
+  const [matrixModalOpen, setMatrixModalOpen] = React.useState(false);
+  const [selectedDesignation, setSelectedDesignation] = React.useState<DesignationItem | null>(null);
+
+  const fetchData = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const resDesig = await api.get("/admin/designations");
+      setDesignations(resDesig || []);
+      // Map departments from designations if available
+      const deptsMap = new Map();
+      for (const d of resDesig || []) {
+        if (d.department) {
+          deptsMap.set(d.department.id, d.department);
+        }
+      }
+      setDepartments(Array.from(deptsMap.values()));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load designations");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleOpenMatrix = (desig: DesignationItem) => {
+    setSelectedDesignation(desig);
+    setMatrixModalOpen(true);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Lock className="size-6 text-primary" /> Designations & Permission Matrix
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Manage organizational roles and configure fine-grained permission scope matrix assignments.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => fetchData()}>
+            <RefreshCw className="mr-2 size-4" /> Refresh
+          </Button>
+          <Button size="sm" onClick={() => setCreateModalOpen(true)}>
+            <Plus className="mr-2 size-4" /> Add Designation
+          </Button>
+        </div>
+      </div>
+
+      {/* Designation Table */}
+      {isLoading ? (
+        <div className="h-64 flex items-center justify-center border rounded-xl bg-card">
+          <RefreshCw className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <DesignationTable
+          designations={designations}
+          onOpenMatrix={handleOpenMatrix}
+        />
+      )}
+
+      {/* Create Designation Modal */}
+      <CreateDesignationModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        departments={departments}
+        onSuccess={fetchData}
+      />
+
+      {/* Permission Matrix Modal */}
+      <PermissionMatrixModal
+        designation={selectedDesignation}
+        open={matrixModalOpen}
+        onOpenChange={setMatrixModalOpen}
+        onSuccess={fetchData}
+      />
+    </div>
+  );
+}

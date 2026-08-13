@@ -1,19 +1,21 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Button } from "@workspace/ui/components/button"
-import { Input } from "@workspace/ui/components/input"
-import { Label } from "@workspace/ui/components/label"
-import { Card } from "@workspace/ui/components/card"
-import { Checkbox } from "@workspace/ui/components/checkbox"
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Check } from "lucide-react"
+import * as React from "react";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
+import { Label } from "@workspace/ui/components/label";
+import { Card } from "@workspace/ui/components/card";
+import { Checkbox } from "@workspace/ui/components/checkbox";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Check } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
 interface LoginFormProps {
-  onForgotPasswordClick: () => void
-  onRequestAccessClick: () => void
-  onSuccess: () => void
-  email: string
-  setEmail: (email: string) => void
+  onForgotPasswordClick: () => void;
+  onRequestAccessClick: () => void;
+  onSuccess: () => void;
+  email: string;
+  setEmail: (email: string) => void;
 }
 
 export function LoginForm({
@@ -23,23 +25,29 @@ export function LoginForm({
   email,
   setEmail,
 }: LoginFormProps) {
-  const [password, setPassword] = React.useState("")
-  const [showPassword, setShowPassword] = React.useState(false)
-  const [isLoading, setIsLoading] = React.useState(false)
-  const [authSuccess, setAuthSuccess] = React.useState(false)
-  const [rememberMe, setRememberMe] = React.useState(true)
+  const { login } = useAuth();
+  const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [authSuccess, setAuthSuccess] = React.useState(false);
+  const [rememberMe, setRememberMe] = React.useState(true);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
-      setAuthSuccess(true)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await login(email, password);
+      setAuthSuccess(true);
+      toast.success("Successfully logged in!");
       setTimeout(() => {
-        onSuccess()
-      }, 800)
-    }, 1000)
-  }
+        onSuccess();
+      }, 600);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to log in. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (authSuccess) {
     return (
@@ -52,7 +60,7 @@ export function LoginForm({
           <p className="text-xs text-muted-foreground">Redirecting to dashboard...</p>
         </div>
       </Card>
-    )
+    );
   }
 
   return (
@@ -158,5 +166,5 @@ export function LoginForm({
         </p>
       </div>
     </Card>
-  )
+  );
 }

@@ -9,79 +9,48 @@ import {
   Settings,
   HelpCircle,
   Send,
-} from 'lucide-react';
+  Lock,
+  FileSpreadsheet,
+  KeyRound,
+} from "lucide-react";
 
 export const data = {
   user: {
-    name: 'Admin User',
-    email: 'admin@softvence.com',
-    avatar: 'https://github.com/shadcn.png',
+    name: "Admin User",
+    email: "admin@softvence.com",
+    avatar: "https://github.com/shadcn.png",
   },
   teams: [
     {
-      name: 'Softvence PM',
-      plan: 'Enterprise',
+      name: "Softvence PM",
+      plan: "Enterprise",
     },
   ],
   navMain: [
     {
-      title: 'Overview',
-      url: '/dashboard',
+      title: "Overview",
+      url: "/dashboard",
       icon: LayoutDashboard,
     },
     {
-      title: 'Projects',
-      url: '/dashboard/projects',
-      icon: Briefcase,
-      items: [
-        { title: 'All Projects', url: '/dashboard/projects' },
-        { title: 'Components', url: '/dashboard/projects?tab=components' },
-        { title: 'Assignments', url: '/dashboard/projects?tab=assignments' },
-      ],
-    },
-    {
-      title: 'Teams & Members',
-      url: '/dashboard/teams',
+      title: "Users Management",
+      url: "/dashboard/users",
       icon: Users,
     },
     {
-      title: 'Clients & Profiles',
-      url: '/dashboard/clients',
-      icon: Building2,
+      title: "Designations & Matrix",
+      url: "/dashboard/designations",
+      icon: Lock,
     },
     {
-      title: 'Issues & Support',
-      url: '/dashboard/issues',
-      icon: AlertCircle,
-      badge: 5,
+      title: "Overrides & Delegations",
+      url: "/dashboard/overrides",
+      icon: KeyRound,
     },
     {
-      title: 'Messages',
-      url: '/dashboard/messages',
-      icon: MessageSquare,
-      badge: 3,
-    },
-    {
-      title: 'Users & Roles',
-      url: '/dashboard/users',
-      icon: Shield,
-    },
-    {
-      title: 'Settings',
-      url: '/dashboard/settings',
-      icon: Settings,
-    },
-  ],
-  navSecondary: [
-    {
-      title: 'Support',
-      url: '#',
-      icon: HelpCircle,
-    },
-    {
-      title: 'Feedback',
-      url: '#',
-      icon: Send,
+      title: "Security Audit Logs",
+      url: "/dashboard/audit-logs",
+      icon: FileSpreadsheet,
     },
   ],
 };

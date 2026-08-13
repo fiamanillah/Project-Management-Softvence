@@ -5,7 +5,7 @@ import { AuditLogController } from "./audit-log.controller";
 export class AuditLogModule extends BaseModule {
   public name: string = "AuditLogModule";
   public version: string = "1.0.0";
-  public basePath: string = "/audit-logs/v1";
+  public basePath: string = "/audit-logs";
   public dependencies?: string[] = [];
 
 
@@ -21,13 +21,13 @@ export class AuditLogModule extends BaseModule {
   protected async setupRoutes(): Promise<void> {
     const controller = this.getController<AuditLogController>("AuditLogController");
 
-    // GET /audit-logs/v1/
+    // GET /audit-logs/
     this.router.get("/", controller.getAuditLogs.bind(controller));
 
-    // GET /audit-logs/v1/stats
+    // GET /audit-logs/stats
     this.router.get("/stats", controller.getAuditStats.bind(controller));
 
-    // GET /audit-logs/v1/:id
+    // GET /audit-logs/:id
     this.router.get("/:id", controller.getAuditLogById.bind(controller));
   }
 }

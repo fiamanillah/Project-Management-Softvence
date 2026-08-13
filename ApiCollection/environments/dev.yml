@@ -4,5 +4,5 @@ variables:
     value: http://localhost:3030
     description: ""
   - name: accessToken
-    value: weg43ty
+    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MWEwOTgxYS00MTE1LTQ1NjAtYjI1My0zMWI0YTY2OTZiY2YiLCJzeXN0ZW1Sb2xlIjoiU3VwZXJBZG1pbiIsImRlc2lnbmF0aW9uSWQiOiI0NDJjMjk2NS1mMmZhLTRkMDMtOTdiMS02ZTk1YTFlYWJmNmEiLCJpYXQiOjE3ODY2MjIxNjEsImV4cCI6MTc4NjYyMzA2MSwiaXNzIjoiaWduaXRvci1hcHAifQ.3_QeLKKewg1oZw2nlvIHn5Yx1ZFfTO_gzH45c_Rp3mo
     description: ""

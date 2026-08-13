@@ -1,55 +1,151 @@
-import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@workspace/ui/components/card'
-import { Badge } from '@workspace/ui/components/badge'
-import { Button } from '@workspace/ui/components/button'
-import { Shield, UserPlus, CheckCircle } from 'lucide-react'
+"use client";
+
+import * as React from "react";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { UserPlus, Search, Shield, RefreshCw } from "lucide-react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { UserTable, type AdminUser } from "./components/UserTable";
+import { CreateUserModal } from "./components/CreateUserModal";
+import { EditUserSheet } from "./components/EditUserSheet";
 
 export default function UsersPage() {
-  const users = [
-    { id: '1', name: 'John Doe', email: 'john@softvence.com', employeeId: 'EMP-001', role: 'SuperAdmin', designation: 'Engineering Manager', status: 'Active' },
-    { id: '2', name: 'Sarah Jenkins', email: 'sarah@softvence.com', employeeId: 'EMP-014', role: 'Staff', designation: 'Senior Frontend Developer', status: 'Active' },
-    { id: '3', name: 'Alex Rivera', email: 'alex@softvence.com', employeeId: 'EMP-022', role: 'Staff', designation: 'Lead System Architect', status: 'Active' },
-  ]
+  const [users, setUsers] = React.useState<AdminUser[]>([]);
+  const [designations, setDesignations] = React.useState<{ id: string; name: string; code: string }[]>([]);
+  const [search, setSearch] = React.useState("");
+  const [roleFilter, setRoleFilter] = React.useState("all");
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  // Modal states
+  const [createModalOpen, setCreateModalOpen] = React.useState(false);
+  const [editSheetOpen, setEditSheetOpen] = React.useState(false);
+  const [selectedUser, setSelectedUser] = React.useState<AdminUser | null>(null);
+
+  const fetchUsers = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (search) queryParams.set("search", search);
+      if (roleFilter !== "all") queryParams.set("role", roleFilter);
+
+      const [resUsers, resDesig] = await Promise.all([
+        api.get(`/admin/users?${queryParams.toString()}`),
+        api.get("/admin/designations"),
+      ]);
+
+      setUsers(resUsers.data || []);
+      setDesignations(resDesig || []);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load users");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [search, roleFilter]);
+
+  React.useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const handleToggleActive = async (user: AdminUser, active: boolean) => {
+    try {
+      await api.patch(`/admin/users/${user.id}`, { isActive: active });
+      toast.success(`User ${active ? "activated" : "disabled"} successfully`);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update user status");
+    }
+  };
+
+  const handleEditClick = (user: AdminUser) => {
+    setSelectedUser(user);
+    setEditSheetOpen(true);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Users & Roles</h1>
-          <p className="text-muted-foreground text-sm">
-            System user directory, designations, and system roles based on Prisma User & Identity Schema.
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Shield className="size-6 text-primary" /> Users Management
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Manage system roles, designations, and account access statuses across your organization.
           </p>
         </div>
-        <Button>
-          <UserPlus className="mr-2 size-4" /> Add User
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => fetchUsers()}>
+            <RefreshCw className="mr-2 size-4" /> Refresh
+          </Button>
+          <Button size="sm" onClick={() => setCreateModalOpen(true)}>
+            <UserPlus className="mr-2 size-4" /> Add User
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {users.map((u) => (
-          <Card key={u.id}>
-            <CardContent className="p-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
-                  {u.name.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{u.name}</p>
-                    <Badge variant="outline" className="font-mono text-[10px]">{u.employeeId}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{u.email} • {u.designation}</p>
-                </div>
-              </div>
+      {/* Filters bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, employee ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-10 text-sm"
+          />
+        </div>
 
-              <div className="flex items-center gap-3">
-                <Badge variant={u.role === 'SuperAdmin' ? 'default' : 'secondary'}>{u.role}</Badge>
-                <Button variant="ghost" size="sm" className="h-8 text-xs">Edit Permissions</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <Select value={roleFilter} onValueChange={(val: any) => val && setRoleFilter(val)}>
+          <SelectTrigger className="w-full sm:w-44 h-10">
+            <SelectValue placeholder="Filter by Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All System Roles</SelectItem>
+            <SelectItem value="SuperAdmin">SuperAdmin</SelectItem>
+            <SelectItem value="Admin">Admin</SelectItem>
+            <SelectItem value="Staff">Staff</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* User Table */}
+      {isLoading ? (
+        <div className="h-64 flex items-center justify-center border rounded-xl bg-card">
+          <RefreshCw className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <UserTable
+          users={users}
+          onEdit={handleEditClick}
+          onToggleActive={handleToggleActive}
+        />
+      )}
+
+      {/* Create User Modal */}
+      <CreateUserModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        designations={designations}
+        onSuccess={fetchUsers}
+      />
+
+      {/* Edit User Sheet */}
+      <EditUserSheet
+        user={selectedUser}
+        open={editSheetOpen}
+        onOpenChange={setEditSheetOpen}
+        designations={designations}
+        onSuccess={fetchUsers}
+      />
     </div>
-  )
+  );
 }

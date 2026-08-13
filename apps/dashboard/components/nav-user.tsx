@@ -6,8 +6,10 @@ import {
   ChevronsUpDown,
   LogOut,
   Settings,
+  Shield,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import * as React from 'react'
 
 import {
@@ -15,6 +17,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from '@workspace/ui/components/avatar'
+import { Badge } from '@workspace/ui/components/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,24 +33,47 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@workspace/ui/components/sidebar'
+import { useAuth } from '@/lib/auth-context'
+import { toast } from 'sonner'
 
 export function NavUser({
-  user,
+  user: defaultUser,
 }: {
-  user: {
+  user?: {
     name: string
     email: string
     avatar: string
   }
 }) {
   const { isMobile } = useSidebar()
+  const { user, logout } = useAuth()
+  const router = useRouter()
 
-  const initials = user.name
+  const displayName = user
+    ? user.firstName || user.lastName
+      ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+      : user.email
+    : defaultUser?.name || 'Super Admin'
+
+  const displayEmail = user?.email || defaultUser?.email || 'admin@example.com'
+  const displayRole = user?.systemRole || 'SuperAdmin'
+
+  const initials = displayName
     .split(' ')
     .map((n) => n[0])
     .join('')
     .toUpperCase()
     .slice(0, 2)
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      toast.success('Successfully logged out')
+      router.push('/login')
+    } catch (err: any) {
+      toast.error('Failed to log out')
+    }
+  }
 
   return (
     <SidebarMenu>
@@ -57,17 +83,22 @@ export function NavUser({
             render={
               <SidebarMenuButton
                 size="lg"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground w-full"
               >
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">
+                  <AvatarImage src={defaultUser?.avatar} alt={displayName} />
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                  <span className="truncate font-semibold flex items-center gap-1">
+                    {displayName}
+                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-mono">
+                      {displayRole}
+                    </Badge>
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
                 </div>
                 <ChevronsUpDown className="ml-auto size-4" />
               </SidebarMenuButton>
@@ -83,14 +114,13 @@ export function NavUser({
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="h-8 w-8 rounded-lg">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback className="rounded-lg">
+                    <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold">
                       {initials}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{user.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                    <span className="truncate font-semibold">{displayName}</span>
+                    <span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>
@@ -99,25 +129,14 @@ export function NavUser({
             <DropdownMenuGroup>
               <Link href="/dashboard/users">
                 <DropdownMenuItem className="cursor-pointer">
-                  <BadgeCheck className="mr-2 size-4" />
-                  Account & Profile
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/dashboard/settings">
-                <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 size-4" />
-                  Settings
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/dashboard/issues">
-                <DropdownMenuItem className="cursor-pointer">
-                  <Bell className="mr-2 size-4" />
-                  Notifications
+                  <Shield className="mr-2 size-4" />
+                  User & Role Admin
                 </DropdownMenuItem>
               </Link>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
+              onClick={handleLogout}
               className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
             >
               <LogOut className="mr-2 size-4" />
