@@ -22,7 +22,27 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`🔐 Bootstrapping SuperAdmin user: ${email}...`);
+  // Step 0: Ensure Scope Types are seeded
+  console.log("⚡ Seeding PermissionScopeType lookup records...");
+  const SCOPE_TYPES = [
+    { code: "GLOBAL", name: "Global Access", description: "Applies system-wide with no resource boundary constraints", resolutionStrategy: "Global" as const },
+    { code: "OWN_DEPARTMENT", name: "Own Department", description: "Restricted to resources belonging to the user's department", resolutionStrategy: "OwnDepartment" as const },
+    { code: "OWN_TEAM", name: "Own Team", description: "Restricted to resources belonging to teams the user actively belongs to", resolutionStrategy: "OwnTeam" as const },
+    { code: "OWN_PROJECT", name: "Own Project", description: "Restricted to projects where the user is directly assigned", resolutionStrategy: "OwnProject" as const },
+    { code: "OWN_PROFILE", name: "Own Profile", description: "Restricted to profiles assigned to the user", resolutionStrategy: "OwnProfile" as const },
+    { code: "EXPLICIT_DEPARTMENTS", name: "Explicit Departments", description: "Restricted to specifically selected department scope targets", resolutionStrategy: "ExplicitDepartments" as const },
+    { code: "EXPLICIT_TEAMS", name: "Explicit Teams", description: "Restricted to specifically selected team scope targets", resolutionStrategy: "ExplicitTeams" as const },
+    { code: "EXPLICIT_PROJECTS", name: "Explicit Projects", description: "Restricted to specifically selected project scope targets", resolutionStrategy: "ExplicitProjects" as const },
+  ];
+
+  for (const st of SCOPE_TYPES) {
+    await prisma.permissionScopeType.upsert({
+      where: { code: st.code },
+      update: { name: st.name, description: st.description, resolutionStrategy: st.resolutionStrategy, isActive: true },
+      create: { code: st.code, name: st.name, description: st.description, resolutionStrategy: st.resolutionStrategy, isActive: true },
+    });
+  }
+  console.log("✔ PermissionScopeType lookup records synced!");
 
   // Step 1: Ensure Permission Registry is synced
   console.log("⚡ Syncing Permission Registry...");

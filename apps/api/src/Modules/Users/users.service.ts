@@ -1,10 +1,10 @@
-// src/Modules/Users/users.service.ts
-
 import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError } from "@/core/errors/AppError";
 import { hashPassword } from "@/utils/crypto";
 import { AuthorizationEngine } from "@/core/authorization/AuthorizationEngine";
+import { AuditLogService } from "@/core/audit/audit.service";
+import type { Request } from "express";
 import type {
   CreateAdminUserDTO,
   UpdateAdminUserDTO,
@@ -72,7 +72,7 @@ export class UsersService {
     };
   }
 
-  public async createAdminUser(data: CreateAdminUserDTO) {
+  public async createAdminUser(data: CreateAdminUserDTO, req?: Request) {
     const existing = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -111,10 +111,21 @@ export class UsersService {
     });
 
     const { passwordHash, ...result } = user;
+
+    await AuditLogService.log({
+      module: "USERS",
+      action: "USER_CREATE",
+      entityTable: "users",
+      entityId: result.id,
+      oldPayload: undefined,
+      newPayload: result,
+      req,
+    });
+
     return result;
   }
 
-  public async updateAdminUser(userId: string, data: UpdateAdminUserDTO) {
+  public async updateAdminUser(userId: string, data: UpdateAdminUserDTO, req?: Request) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -122,6 +133,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundError("User");
     }
+
+    const { passwordHash: _, ...oldUserSanitized } = user;
 
     if (data.designationId) {
       const desig = await this.prisma.designation.findUnique({
@@ -145,6 +158,17 @@ export class UsersService {
     });
 
     const { passwordHash, ...result } = updated;
+
+    await AuditLogService.log({
+      module: "USERS",
+      action: "USER_UPDATE",
+      entityTable: "users",
+      entityId: result.id,
+      oldPayload: oldUserSanitized,
+      newPayload: result,
+      req,
+    });
+
     return result;
   }
 
@@ -167,7 +191,7 @@ export class UsersService {
     return overrides;
   }
 
-  public async createOverride(data: CreateOverrideDTO, granterId: string) {
+  public async createOverride(data: CreateOverrideDTO, granterId: string, req?: Request) {
     const user = await this.prisma.user.findUnique({ where: { id: data.userId } });
     if (!user) throw new NotFoundError("User");
 
@@ -193,10 +217,21 @@ export class UsersService {
     });
 
     await AuthorizationEngine.getInstance().invalidateCache();
+
+    await AuditLogService.log({
+      module: "PERMISSIONS",
+      action: "PERMISSION_OVERRIDE_CREATE",
+      entityTable: "user_permission_overrides",
+      entityId: override.id,
+      oldPayload: undefined,
+      newPayload: override,
+      req,
+    });
+
     return override;
   }
 
-  public async revokeOverride(overrideId: string) {
+  public async revokeOverride(overrideId: string, req?: Request) {
     const override = await this.prisma.userPermissionOverride.findUnique({
       where: { id: overrideId },
     });
@@ -207,6 +242,17 @@ export class UsersService {
     });
 
     await AuthorizationEngine.getInstance().invalidateCache();
+
+    await AuditLogService.log({
+      module: "PERMISSIONS",
+      action: "PERMISSION_OVERRIDE_REVOKE",
+      entityTable: "user_permission_overrides",
+      entityId: overrideId,
+      oldPayload: override,
+      newPayload: undefined,
+      req,
+    });
+
     return { message: "Override revoked successfully" };
   }
 
@@ -222,7 +268,7 @@ export class UsersService {
     return delegations;
   }
 
-  public async createDelegation(data: CreateDelegationDTO, creatorId: string) {
+  public async createDelegation(data: CreateDelegationDTO, creatorId: string, req?: Request) {
     const delegator = await this.prisma.user.findUnique({ where: { id: data.delegatorId } });
     if (!delegator) throw new NotFoundError("Delegator User");
 
@@ -244,10 +290,20 @@ export class UsersService {
       },
     });
 
+    await AuditLogService.log({
+      module: "PERMISSIONS",
+      action: "DELEGATION_CREATE",
+      entityTable: "delegations",
+      entityId: delegation.id,
+      oldPayload: undefined,
+      newPayload: delegation,
+      req,
+    });
+
     return delegation;
   }
 
-  public async revokeDelegation(delegationId: string) {
+  public async revokeDelegation(delegationId: string, req?: Request) {
     const del = await this.prisma.delegation.findUnique({
       where: { id: delegationId },
     });
@@ -255,6 +311,16 @@ export class UsersService {
 
     await this.prisma.delegation.delete({
       where: { id: delegationId },
+    });
+
+    await AuditLogService.log({
+      module: "PERMISSIONS",
+      action: "DELEGATION_REVOKE",
+      entityTable: "delegations",
+      entityId: delegationId,
+      oldPayload: del,
+      newPayload: undefined,
+      req,
     });
 
     return { message: "Delegation revoked successfully" };

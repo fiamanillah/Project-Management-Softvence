@@ -22,18 +22,14 @@ export default function DesignationsPage() {
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const resDesig = await api.get("/organization/designations");
+      const [resDesig, resDepts] = await Promise.all([
+        api.get("/organization/designations"),
+        api.get("/organization/departments"),
+      ]);
       setDesignations(resDesig || []);
-      // Map departments from designations if available
-      const deptsMap = new Map();
-      for (const d of resDesig || []) {
-        if (d.department) {
-          deptsMap.set(d.department.id, d.department);
-        }
-      }
-      setDepartments(Array.from(deptsMap.values()));
+      setDepartments(resDepts || []);
     } catch (err: any) {
-      toast.error(err.message || "Failed to load designations");
+      toast.error(err.message || "Failed to load designations data");
     } finally {
       setIsLoading(false);
     }

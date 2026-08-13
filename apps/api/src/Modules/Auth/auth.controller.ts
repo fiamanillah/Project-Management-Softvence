@@ -25,7 +25,7 @@ export class AuthController extends BaseController {
     this.logger.info("Received request to create a new user");
     const { email, firstName, lastName, password } = req.validatedBody as CreateUserDTO;
 
-    const user = await this.authService.register(email, firstName, lastName, password);
+    const user = await this.authService.register(email, firstName, lastName, password, undefined, req);
     return this.sendCreatedResponse(req, res, user, "User registered successfully");
   }
 
@@ -41,6 +41,7 @@ export class AuthController extends BaseController {
       email,
       password,
       deviceInfo,
+      req,
     );
 
     this.setRefreshCookie(res, rawRefreshToken);
@@ -71,7 +72,7 @@ export class AuthController extends BaseController {
     const deviceInfo = req.headers["user-agent"] || "Unknown Device";
 
     const { accessToken, rawRefreshToken: newRawRefreshToken, user } =
-      await this.authService.refresh(rawRefreshToken, deviceInfo);
+      await this.authService.refresh(rawRefreshToken, deviceInfo, req);
 
     this.setRefreshCookie(res, newRawRefreshToken);
 
@@ -107,7 +108,7 @@ export class AuthController extends BaseController {
     }
 
     const sessionId = req.params.id as string;
-    const result = await this.authService.revokeSession(userId, sessionId);
+    const result = await this.authService.revokeSession(userId, sessionId, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 
@@ -122,7 +123,7 @@ export class AuthController extends BaseController {
     res.clearCookie("refreshToken", { path: "/" });
     res.clearCookie("refreshToken", { path: "/auth" });
 
-    const result = await this.authService.logout(rawRefreshToken, userId);
+    const result = await this.authService.logout(rawRefreshToken, userId, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 
@@ -131,7 +132,7 @@ export class AuthController extends BaseController {
    */
   public async forgotPassword(req: Request, res: Response) {
     const { email } = req.validatedBody as ForgotPasswordDTO;
-    const result = await this.authService.forgotPassword(email);
+    const result = await this.authService.forgotPassword(email, req);
     return this.sendResponse(req, res, result.message, 200, {
       resetToken: result.resetToken,
     });
@@ -146,7 +147,7 @@ export class AuthController extends BaseController {
     res.clearCookie("refreshToken", { path: "/" });
     res.clearCookie("refreshToken", { path: "/auth" });
 
-    const result = await this.authService.resetPassword(token, password);
+    const result = await this.authService.resetPassword(token, password, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 

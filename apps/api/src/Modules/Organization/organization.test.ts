@@ -119,4 +119,54 @@ describe("OrganizationService (Department & Designation Management)", () => {
 
     expect(orgService.deleteDepartment(dept.id)).rejects.toThrow("Cannot delete department");
   });
+
+  it("should create a designation with initial permission assignments", async () => {
+    const dept = await orgService.createDepartment({
+      code: "FIN",
+      name: "Finance",
+    });
+
+    // Create seed permission & scope type if needed
+    const perm = await prisma.permission.upsert({
+      where: { code: "finance.view" },
+      update: {},
+      create: {
+        code: "finance.view",
+        description: "View financial records",
+        module: "Finance",
+      },
+    });
+
+    const scopeType = await prisma.permissionScopeType.upsert({
+      where: { code: "DEPARTMENT" },
+      update: {},
+      create: {
+        code: "DEPARTMENT",
+        name: "Department Scope",
+        resolutionStrategy: "OwnDepartment",
+      },
+    });
+
+    const desig = await orgService.createDesignation({
+      code: "FIN_ANALYST",
+      name: "Financial Analyst",
+      departmentId: dept.id,
+      hierarchyLevel: 3,
+      isLeadership: false,
+      assignments: [
+        {
+          permissionId: perm.id,
+          scopeTypeId: scopeType.id,
+        },
+      ],
+    });
+
+    expect(desig).toBeDefined();
+    expect(desig.code).toBe("FIN_ANALYST");
+
+    const desigPerms = await orgService.getDesignationPermissions(desig.id);
+    expect(desigPerms.permissions.length).toBe(1);
+    expect(desigPerms.permissions[0].permissionId).toBe(perm.id);
+    expect(desigPerms.permissions[0].scopeTypeId).toBe(scopeType.id);
+  });
 });

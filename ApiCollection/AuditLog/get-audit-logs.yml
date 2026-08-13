@@ -8,7 +8,7 @@ http:
   url: "{{baseUrl}}/audit-logs?page=1&limit=20"
   headers:
     - name: Authorization
-      value: "Bearer {{accessToken}}"
+      value: Bearer {{accessToken}}
 
 settings:
   encodeUrl: true

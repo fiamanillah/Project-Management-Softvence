@@ -16,6 +16,9 @@ export interface AuditLogPayload {
     statusCode?: number;
     durationMs?: number;
     requestId?: string;
+    query?: Record<string, any>;
+    params?: Record<string, any>;
+    requestBody?: Record<string, any>;
   };
   oldPayload?: Record<string, any>;
   newPayload?: Record<string, any>;

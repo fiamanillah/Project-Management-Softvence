@@ -30,34 +30,34 @@ export class OrganizationController extends BaseController {
 
   public async createDepartment(req: Request, res: Response) {
     const dto = req.validatedBody as CreateDepartmentDTO;
-    const department = await this.organizationService.createDepartment(dto);
+    const department = await this.organizationService.createDepartment(dto, req);
     return this.sendCreatedResponse(req, res, department, "Department created successfully");
   }
 
   public async updateDepartment(req: Request, res: Response) {
     const id = req.params.id as string;
     const dto = req.validatedBody as UpdateDepartmentDTO;
-    const updated = await this.organizationService.updateDepartment(id, dto);
+    const updated = await this.organizationService.updateDepartment(id, dto, req);
     return this.sendResponse(req, res, "Department updated successfully", 200, updated);
   }
 
   public async deleteDepartment(req: Request, res: Response) {
     const id = req.params.id as string;
-    const result = await this.organizationService.deleteDepartment(id);
+    const result = await this.organizationService.deleteDepartment(id, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 
   public async assignDepartmentManager(req: Request, res: Response) {
     const departmentId = req.params.id as string;
     const dto = req.validatedBody as AssignDepartmentManagerDTO;
-    const manager = await this.organizationService.assignDepartmentManager(departmentId, dto);
+    const manager = await this.organizationService.assignDepartmentManager(departmentId, dto, req);
     return this.sendCreatedResponse(req, res, manager, "Department manager assigned successfully");
   }
 
   public async removeDepartmentManager(req: Request, res: Response) {
     const departmentId = req.params.id as string;
     const managerId = req.params.managerId as string;
-    const result = await this.organizationService.removeDepartmentManager(departmentId, managerId);
+    const result = await this.organizationService.removeDepartmentManager(departmentId, managerId, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 
@@ -69,7 +69,7 @@ export class OrganizationController extends BaseController {
 
   public async createDesignation(req: Request, res: Response) {
     const dto = req.validatedBody as CreateDesignationDTO;
-    const designation = await this.organizationService.createDesignation(dto);
+    const designation = await this.organizationService.createDesignation(dto, req.user?.sub, req);
     return this.sendCreatedResponse(req, res, designation, "Designation created successfully");
   }
 
@@ -82,7 +82,12 @@ export class OrganizationController extends BaseController {
   public async saveDesignationPermissions(req: Request, res: Response) {
     const designationId = req.params.id as string;
     const dto = req.validatedBody as SavePermissionAssignmentsDTO;
-    const result = await this.organizationService.saveDesignationPermissions(designationId, dto);
+    const result = await this.organizationService.saveDesignationPermissions(
+      designationId,
+      dto,
+      req.user?.sub,
+      req,
+    );
     return this.sendResponse(req, res, result.message, 200);
   }
 }

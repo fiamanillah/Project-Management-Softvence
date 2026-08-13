@@ -23,14 +23,14 @@ export class UsersController extends BaseController {
 
   public async createUser(req: Request, res: Response) {
     const dto = req.validatedBody as CreateAdminUserDTO;
-    const user = await this.usersService.createAdminUser(dto);
+    const user = await this.usersService.createAdminUser(dto, req);
     return this.sendCreatedResponse(req, res, user, "Admin user created successfully");
   }
 
   public async updateUser(req: Request, res: Response) {
     const userId = req.params.id as string;
     const dto = req.validatedBody as UpdateAdminUserDTO;
-    const updated = await this.usersService.updateAdminUser(userId, dto);
+    const updated = await this.usersService.updateAdminUser(userId, dto, req);
     return this.sendResponse(req, res, "User updated successfully", 200, updated);
   }
 
@@ -43,13 +43,13 @@ export class UsersController extends BaseController {
   public async createOverride(req: Request, res: Response) {
     const dto = req.validatedBody as CreateOverrideDTO;
     const granterId = (req as any).user?.sub || (req as any).user?.id;
-    const override = await this.usersService.createOverride(dto, granterId);
+    const override = await this.usersService.createOverride(dto, granterId, req);
     return this.sendCreatedResponse(req, res, override, "User permission override created successfully");
   }
 
   public async revokeOverride(req: Request, res: Response) {
     const overrideId = req.params.id as string;
-    const result = await this.usersService.revokeOverride(overrideId);
+    const result = await this.usersService.revokeOverride(overrideId, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 
@@ -61,13 +61,13 @@ export class UsersController extends BaseController {
   public async createDelegation(req: Request, res: Response) {
     const dto = req.validatedBody as CreateDelegationDTO;
     const creatorId = (req as any).user?.sub || (req as any).user?.id;
-    const delegation = await this.usersService.createDelegation(dto, creatorId);
+    const delegation = await this.usersService.createDelegation(dto, creatorId, req);
     return this.sendCreatedResponse(req, res, delegation, "Delegation created successfully");
   }
 
   public async revokeDelegation(req: Request, res: Response) {
     const delegationId = req.params.id as string;
-    const result = await this.usersService.revokeDelegation(delegationId);
+    const result = await this.usersService.revokeDelegation(delegationId, req);
     return this.sendResponse(req, res, result.message, 200);
   }
 }

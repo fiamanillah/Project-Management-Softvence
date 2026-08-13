@@ -4,6 +4,7 @@ import { AppLogger } from "@/core/logging/logger";
 import { env } from "@/env";
 import type { Request } from "express";
 import { randomUUID } from "node:crypto";
+import { calculateDiff, sanitizePayload } from "./diffCalculator";
 
 const logger = new AppLogger("AuditLogService");
 
@@ -52,14 +53,33 @@ export class AuditLogService {
       const userAgent =
         options.actor?.userAgent || (req ? req.headers["user-agent"] : undefined);
 
+      const cleanQuery = req?.query && Object.keys(req.query).length > 0 ? sanitizePayload(req.query) : undefined;
+      const cleanParams = req?.params && Object.keys(req.params).length > 0 ? sanitizePayload(req.params) : undefined;
+      const rawBody = (req as any)?.validatedBody || req?.body;
+      const cleanBody = rawBody && typeof rawBody === "object" && Object.keys(rawBody).length > 0 ? sanitizePayload(rawBody) : undefined;
+
       const httpContext = req
         ? {
             method: req.method,
             path: req.originalUrl || req.url,
             statusCode: (req as any).res?.statusCode,
             requestId: (req.headers["x-request-id"] as string) || undefined,
+            query: cleanQuery,
+            params: cleanParams,
+            requestBody: cleanBody,
           }
         : undefined;
+
+      const cleanOldPayload = options.oldPayload ? sanitizePayload(options.oldPayload) : undefined;
+      const cleanNewPayload = options.newPayload ? sanitizePayload(options.newPayload) : undefined;
+      const computedDiff = options.diff || calculateDiff(cleanOldPayload, cleanNewPayload) || undefined;
+      const cleanMetadata = options.metadata ? sanitizePayload(options.metadata) : undefined;
+
+      const status: "SUCCESS" | "FAILED" =
+        options.status ||
+        (options.errorMessage || ((req as any)?.res?.statusCode && (req as any).res.statusCode >= 400)
+          ? "FAILED"
+          : "SUCCESS");
 
       const payload: AuditLogPayload = {
         auditId: randomUUID(),
@@ -74,11 +94,11 @@ export class AuditLogService {
         ipAddress,
         userAgent,
         httpContext,
-        oldPayload: options.oldPayload,
-        newPayload: options.newPayload,
-        diff: options.diff,
-        metadata: options.metadata,
-        status: options.status || "SUCCESS",
+        oldPayload: cleanOldPayload,
+        newPayload: cleanNewPayload,
+        diff: computedDiff,
+        metadata: cleanMetadata,
+        status,
         errorMessage: options.errorMessage,
         createdAt: new Date().toISOString(),
       };
@@ -130,4 +150,5 @@ export class AuditLogService {
     }
   }
 }
+
 

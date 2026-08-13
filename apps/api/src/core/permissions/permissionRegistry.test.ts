@@ -4,12 +4,20 @@ import { prisma } from "@/lib/prisma";
 
 describe("PermissionRegistry", () => {
   beforeEach(async () => {
-    // Clean up permissions table before test runs
+    // Clean up permissions and dependent tables before test runs
+    await prisma.designationPermissionScopeTarget.deleteMany({});
+    await prisma.designationPermission.deleteMany({});
+    await prisma.userPermissionOverride.deleteMany({});
+    await prisma.permissionGroupItem.deleteMany({});
     await prisma.permission.deleteMany({});
   });
 
   afterAll(async () => {
-    // Clean up permissions table after test runs
+    // Clean up permissions and dependent tables after test runs
+    await prisma.designationPermissionScopeTarget.deleteMany({});
+    await prisma.designationPermission.deleteMany({});
+    await prisma.userPermissionOverride.deleteMany({});
+    await prisma.permissionGroupItem.deleteMany({});
     await prisma.permission.deleteMany({});
   });
 

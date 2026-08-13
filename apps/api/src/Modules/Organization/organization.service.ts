@@ -1,8 +1,8 @@
-// src/Modules/Organization/organization.service.ts
-
 import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
+import { AuditLogService } from "@/core/audit/audit.service";
+import type { Request } from "express";
 import type {
   CreateDepartmentDTO,
   UpdateDepartmentDTO,
@@ -79,7 +79,7 @@ export class OrganizationService {
     return department;
   }
 
-  public async createDepartment(data: CreateDepartmentDTO) {
+  public async createDepartment(data: CreateDepartmentDTO, req?: Request) {
     const existing = await this.prisma.department.findUnique({
       where: { code: data.code },
     });
@@ -95,10 +95,21 @@ export class OrganizationService {
       },
     });
     this.logger.info(`Department created: ${dept.code} (${dept.id})`);
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DEPARTMENT_CREATE",
+      entityTable: "Department",
+      entityId: dept.id,
+      oldPayload: undefined,
+      newPayload: dept,
+      req,
+    });
+
     return dept;
   }
 
-  public async updateDepartment(id: string, data: UpdateDepartmentDTO) {
+  public async updateDepartment(id: string, data: UpdateDepartmentDTO, req?: Request) {
     const dept = await this.prisma.department.findUnique({ where: { id } });
     if (!dept) throw new NotFoundError("Department");
 
@@ -109,10 +120,21 @@ export class OrganizationService {
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
     });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DEPARTMENT_UPDATE",
+      entityTable: "Department",
+      entityId: updated.id,
+      oldPayload: dept,
+      newPayload: updated,
+      req,
+    });
+
     return updated;
   }
 
-  public async deleteDepartment(id: string) {
+  public async deleteDepartment(id: string, req?: Request) {
     const dept = await this.prisma.department.findUnique({
       where: { id },
       include: {
@@ -133,15 +155,30 @@ export class OrganizationService {
     }
 
     await this.prisma.department.delete({ where: { id } });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DEPARTMENT_DELETE",
+      entityTable: "Department",
+      entityId: id,
+      oldPayload: dept,
+      newPayload: undefined,
+      req,
+    });
+
     return { message: "Department deleted successfully" };
   }
 
-  public async assignDepartmentManager(departmentId: string, dto: AssignDepartmentManagerDTO) {
+  public async assignDepartmentManager(departmentId: string, dto: AssignDepartmentManagerDTO, req?: Request) {
     const dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
     if (!dept) throw new NotFoundError("Department");
 
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundError("User");
+
+    const previousManagers = await this.prisma.departmentManager.findMany({
+      where: { departmentId, unassignedAt: null },
+    });
 
     // Unassign currently active manager(s) for this department
     await this.prisma.departmentManager.updateMany({
@@ -171,10 +208,20 @@ export class OrganizationService {
       },
     });
 
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DEPARTMENT_MANAGER_ASSIGN",
+      entityTable: "DepartmentManager",
+      entityId: managerRecord.id,
+      oldPayload: { previousManagers },
+      newPayload: managerRecord,
+      req,
+    });
+
     return managerRecord;
   }
 
-  public async removeDepartmentManager(departmentId: string, managerId: string) {
+  public async removeDepartmentManager(departmentId: string, managerId: string, req?: Request) {
     const record = await this.prisma.departmentManager.findFirst({
       where: {
         id: managerId,
@@ -183,9 +230,19 @@ export class OrganizationService {
     });
     if (!record) throw new NotFoundError("Department manager assignment");
 
-    await this.prisma.departmentManager.update({
+    const updated = await this.prisma.departmentManager.update({
       where: { id: managerId },
       data: { unassignedAt: new Date() },
+    });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DEPARTMENT_MANAGER_REMOVE",
+      entityTable: "DepartmentManager",
+      entityId: managerId,
+      oldPayload: record,
+      newPayload: updated,
+      req,
     });
 
     return { message: "Department manager unassigned successfully" };
@@ -211,7 +268,38 @@ export class OrganizationService {
     return designations;
   }
 
-  public async createDesignation(data: CreateDesignationDTO) {
+  private async getGranterUserId(providedUserId?: string, designationIdForFallback?: string): Promise<string> {
+    if (providedUserId) {
+      const userExists = await this.prisma.user.findUnique({
+        where: { id: providedUserId },
+        select: { id: true },
+      });
+      if (userExists) return providedUserId;
+    }
+    const fallbackUser = await this.prisma.user.findFirst({
+      select: { id: true },
+    });
+    if (fallbackUser) return fallbackUser.id;
+
+    if (designationIdForFallback) {
+      const sysUser = await this.prisma.user.create({
+        data: {
+          employeeId: `SYS-${Date.now()}`,
+          email: `system-${Date.now()}@internal.app`,
+          passwordHash: "system",
+          firstName: "System",
+          lastName: "Granter",
+          systemRole: "SuperAdmin",
+          designationId: designationIdForFallback,
+        },
+      });
+      return sysUser.id;
+    }
+
+    throw new BadRequestError("No valid granter user found to assign permissions.");
+  }
+
+  public async createDesignation(data: CreateDesignationDTO, grantedByUserId?: string, req?: Request) {
     const existing = await this.prisma.designation.findUnique({
       where: { code: data.code },
     });
@@ -224,16 +312,112 @@ export class OrganizationService {
     });
     if (!dept) throw new NotFoundError("Department");
 
-    const desig = await this.prisma.designation.create({
-      data: {
-        code: data.code,
-        name: data.name,
-        departmentId: data.departmentId,
-        hierarchyLevel: data.hierarchyLevel,
-        isLeadership: data.isLeadership,
-      },
-      include: { department: true },
+    const desig = await this.prisma.$transaction(async (tx) => {
+      const createdDesig = await tx.designation.create({
+        data: {
+          code: data.code,
+          name: data.name,
+          departmentId: data.departmentId,
+          hierarchyLevel: data.hierarchyLevel,
+          isLeadership: data.isLeadership,
+        },
+        include: {
+          department: true,
+          _count: {
+            select: {
+              permissions: true,
+              users: true,
+            },
+          },
+        },
+      });
+
+      if (data.assignments && data.assignments.length > 0) {
+        let granterId: string | undefined;
+        if (grantedByUserId) {
+          const userExists = await tx.user.findUnique({
+            where: { id: grantedByUserId },
+            select: { id: true },
+          });
+          if (userExists) granterId = grantedByUserId;
+        }
+        if (!granterId) {
+          const firstUser = await tx.user.findFirst({ select: { id: true } });
+          if (firstUser) granterId = firstUser.id;
+        }
+        if (!granterId) {
+          const sysUser = await tx.user.create({
+            data: {
+              employeeId: `SYS-${Date.now()}`,
+              email: `system-${Date.now()}@internal.app`,
+              passwordHash: "system",
+              firstName: "System",
+              lastName: "Granter",
+              systemRole: "SuperAdmin",
+              designationId: createdDesig.id,
+            },
+          });
+          granterId = sysUser.id;
+        }
+
+        for (const item of data.assignments) {
+          const grant = await tx.designationPermission.create({
+            data: {
+              designationId: createdDesig.id,
+              permissionId: item.permissionId,
+              scopeTypeId: item.scopeTypeId,
+              grantedBy: granterId,
+            },
+          });
+
+          if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
+            for (const deptId of item.targetDepartmentIds) {
+              await tx.designationPermissionScopeTarget.create({
+                data: {
+                  designationPermissionId: grant.id,
+                  departmentId: deptId,
+                },
+              });
+            }
+          }
+
+          if (item.targetTeamIds && item.targetTeamIds.length > 0) {
+            for (const teamId of item.targetTeamIds) {
+              await tx.designationPermissionScopeTarget.create({
+                data: {
+                  designationPermissionId: grant.id,
+                  teamId: teamId,
+                },
+              });
+            }
+          }
+
+          if (item.targetProjectIds && item.targetProjectIds.length > 0) {
+            for (const projId of item.targetProjectIds) {
+              await tx.designationPermissionScopeTarget.create({
+                data: {
+                  designationPermissionId: grant.id,
+                  projectId: projId,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      return createdDesig;
     });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DESIGNATION_CREATE",
+      entityTable: "Designation",
+      entityId: desig.id,
+      oldPayload: undefined,
+      newPayload: desig,
+      req,
+    });
+
     return desig;
   }
 
@@ -268,11 +452,20 @@ export class OrganizationService {
   public async saveDesignationPermissions(
     designationId: string,
     dto: SavePermissionAssignmentsDTO,
+    grantedByUserId?: string,
+    req?: Request,
   ) {
     const designation = await this.prisma.designation.findUnique({
       where: { id: designationId },
     });
     if (!designation) throw new NotFoundError("Designation");
+
+    const granterId = await this.getGranterUserId(grantedByUserId);
+
+    const existingGrantsBefore = await this.prisma.designationPermission.findMany({
+      where: { designationId },
+      include: { scopeTargets: true },
+    });
 
     await this.prisma.$transaction(async (tx) => {
       const existingGrants = await tx.designationPermission.findMany({
@@ -296,7 +489,7 @@ export class OrganizationService {
             designationId,
             permissionId: item.permissionId,
             scopeTypeId: item.scopeTypeId,
-            grantedBy: designationId,
+            grantedBy: granterId,
           },
         });
 
@@ -335,6 +528,17 @@ export class OrganizationService {
       }
     });
 
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DESIGNATION_PERMISSIONS_UPDATE",
+      entityTable: "DesignationPermission",
+      entityId: designationId,
+      oldPayload: { permissions: existingGrantsBefore },
+      newPayload: { assignments: dto.assignments },
+      req,
+    });
+
     return { message: "Designation permissions updated successfully" };
   }
 }
+

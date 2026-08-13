@@ -8,7 +8,7 @@ http:
   url: "{{baseUrl}}/auth/permissions"
   headers:
     - name: Authorization
-      value: "Bearer {{accessToken}}"
+      value: Bearer {{accessToken}}
 
 settings:
   encodeUrl: true

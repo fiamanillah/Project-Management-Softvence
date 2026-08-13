@@ -45,6 +45,9 @@ export interface AuditLogItem {
     statusCode?: number;
     durationMs?: number;
     requestId?: string;
+    query?: Record<string, any>;
+    params?: Record<string, any>;
+    requestBody?: Record<string, any>;
   };
   changes?: {
     before?: any;
@@ -199,10 +202,17 @@ export function AuditLogTable({ logs, onViewDetails, isLoading }: AuditLogTableP
                   {/* Target Entity */}
                   <TableCell>
                     {log.entityTable ? (
-                      <div className="flex flex-col text-xs font-mono">
-                        <span className="font-semibold text-foreground text-[11px]">
-                          {log.entityTable}
-                        </span>
+                      <div className="flex flex-col text-xs font-mono gap-0.5">
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold text-foreground text-[11px]">
+                            {log.entityTable}
+                          </span>
+                          {log.changes?.diff && Object.keys(log.changes.diff).length > 0 && (
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 bg-primary/10 text-primary">
+                              +{Object.keys(log.changes.diff).length} diff
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[10px] text-muted-foreground truncate max-w-[120px]" title={log.entityId}>
                           {log.entityId}
                         </span>

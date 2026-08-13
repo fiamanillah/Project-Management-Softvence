@@ -1,5 +1,6 @@
 import { PrismaClient } from "@workspace/db";
 import type { CacheManager } from "@workspace/cache";
+import type { Request } from "express";
 import { AppLogger } from "@/core/logging/logger";
 import { AuthenticationError, BadRequestError, ConflictError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
@@ -31,6 +32,7 @@ export class AuthServices {
     lastName: string,
     password: string,
     designationId?: string,
+    req?: Request,
   ) {
     this.logger.info("Attempting to register user", { email });
 
@@ -85,6 +87,7 @@ export class AuthServices {
           firstName: newUser.firstName,
           lastName: newUser.lastName,
         },
+        req,
       });
 
       await publishNotification({
@@ -105,7 +108,7 @@ export class AuthServices {
   /**
    * POST /auth/login: Verify Argon2id password, issue 15-min JWT & 30-day opaque refresh token
    */
-  public async login(email: string, password: string, deviceInfo?: string) {
+  public async login(email: string, password: string, deviceInfo?: string, req?: Request) {
     this.logger.info("Login attempt", { email });
 
     const user = await this.prisma.user.findUnique({
@@ -114,12 +117,33 @@ export class AuthServices {
 
     if (!user || !user.isActive || user.deletedAt) {
       this.logger.warn("Login failed: Invalid credentials or inactive user", { email });
+      await AuditLogService.log({
+        module: "AUTH",
+        action: "USER_LOGIN_FAILED",
+        entityTable: "users",
+        entityId: email,
+        status: "FAILED",
+        errorMessage: "Invalid credentials or inactive user",
+        metadata: { email, deviceInfo },
+        req,
+      });
       throw new AuthenticationError("Invalid email or password");
     }
 
     const isPasswordValid = await verifyPassword(user.passwordHash, password);
     if (!isPasswordValid) {
       this.logger.warn("Login failed: Password mismatch", { email });
+      await AuditLogService.log({
+        module: "AUTH",
+        action: "USER_LOGIN_FAILED",
+        entityTable: "users",
+        entityId: user.id,
+        actor: { id: user.id, email: user.email, role: user.systemRole },
+        status: "FAILED",
+        errorMessage: "Password mismatch",
+        metadata: { email, deviceInfo },
+        req,
+      });
       throw new AuthenticationError("Invalid email or password");
     }
 
@@ -167,6 +191,16 @@ export class AuthServices {
 
     this.logger.info("User logged in successfully", { userId: user.id });
 
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "USER_LOGIN_SUCCESS",
+      entityTable: "users",
+      entityId: user.id,
+      actor: { id: user.id, email: user.email, role: user.systemRole },
+      metadata: { deviceInfo },
+      req,
+    });
+
     return {
       accessToken,
       rawRefreshToken,
@@ -177,7 +211,7 @@ export class AuthServices {
   /**
    * POST /auth/refresh: Rotation & Theft Detection
    */
-  public async refresh(rawRefreshToken: string, deviceInfo?: string) {
+  public async refresh(rawRefreshToken: string, deviceInfo?: string, req?: Request) {
     if (!rawRefreshToken) {
       throw new AuthenticationError("Refresh token required");
     }
@@ -211,6 +245,17 @@ export class AuthServices {
         // Revoke ALL active sessions for this user immediately across DB & Redis
         await this.invalidateAllUserSessions(userId);
       }
+
+      await AuditLogService.log({
+        module: "AUTH",
+        action: "TOKEN_THEFT_DETECTED",
+        entityTable: "refresh_tokens",
+        entityId: userId || "UNKNOWN",
+        status: "FAILED",
+        errorMessage: "Security alert: Stolen or invalid refresh token presented. Revoked all sessions.",
+        metadata: { deviceInfo },
+        req,
+      });
 
       throw new AuthenticationError("Security alert: Stolen or invalid refresh token. All active sessions invalidated.");
     }
@@ -266,6 +311,16 @@ export class AuthServices {
       await this.cache.del(`auth:sessions:${user.id}`);
     }
 
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "TOKEN_REFRESH",
+      entityTable: "refresh_tokens",
+      entityId: user.id,
+      actor: { id: user.id, email: user.email, role: user.systemRole },
+      metadata: { deviceInfo },
+      req,
+    });
+
     return {
       accessToken: newAccessToken,
       rawRefreshToken: newRawRefreshToken,
@@ -309,7 +364,7 @@ export class AuthServices {
   /**
    * DELETE /auth/sessions/:id: Remotely revoke a specific session
    */
-  public async revokeSession(userId: string, sessionId: string) {
+  public async revokeSession(userId: string, sessionId: string, req?: Request) {
     const session = await this.prisma.refreshToken.findFirst({
       where: { id: sessionId, userId },
     });
@@ -328,13 +383,23 @@ export class AuthServices {
       await this.cache.del(`auth:sessions:${userId}`);
     }
 
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "SESSION_REVOKE",
+      entityTable: "refresh_tokens",
+      entityId: sessionId,
+      oldPayload: session,
+      newPayload: undefined,
+      req,
+    });
+
     return { message: "Session revoked successfully" };
   }
 
   /**
    * POST /auth/logout: Revoke current session
    */
-  public async logout(rawRefreshToken?: string, userId?: string) {
+  public async logout(rawRefreshToken?: string, userId?: string, req?: Request) {
     if (rawRefreshToken) {
       const tokenHash = hashToken(rawRefreshToken);
       const tokenRecord = await this.prisma.refreshToken.findUnique({
@@ -356,13 +421,21 @@ export class AuthServices {
       await this.invalidateAllUserSessions(userId);
     }
 
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "USER_LOGOUT",
+      entityTable: "users",
+      entityId: userId || "UNKNOWN",
+      req,
+    });
+
     return { message: "Logged out successfully" };
   }
 
   /**
    * POST /auth/forgot-password: Issue single-use password reset token
    */
-  public async forgotPassword(email: string) {
+  public async forgotPassword(email: string, req?: Request) {
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -400,6 +473,15 @@ export class AuthServices {
 
     this.logger.info("Password reset token generated", { userId: user.id });
 
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "PASSWORD_RESET_REQUEST",
+      entityTable: "users",
+      entityId: user.id,
+      actor: { id: user.id, email: user.email, role: user.systemRole },
+      req,
+    });
+
     // Send email / broker notification
     try {
       await publishNotification({
@@ -423,7 +505,7 @@ export class AuthServices {
   /**
    * POST /auth/reset-password: Accept single-use token and update password
    */
-  public async resetPassword(rawToken: string, newPassword: string) {
+  public async resetPassword(rawToken: string, newPassword: string, req?: Request) {
     const tokenHash = hashToken(rawToken);
 
     const resetTokenRecord = await this.prisma.passwordResetToken.findUnique({
@@ -456,6 +538,14 @@ export class AuthServices {
 
     this.logger.info("Password reset successfully. Cleared all user sessions.", {
       userId: resetTokenRecord.userId,
+    });
+
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "PASSWORD_RESET_SUCCESS",
+      entityTable: "users",
+      entityId: resetTokenRecord.userId,
+      req,
     });
 
     return { message: "Password reset successful. Please log in with your new password." };

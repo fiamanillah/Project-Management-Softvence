@@ -14,6 +14,9 @@ export interface IAuditLogHttpContext {
   statusCode?: number;
   durationMs?: number;
   requestId?: string;
+  query?: Record<string, any>;
+  params?: Record<string, any>;
+  requestBody?: Record<string, any>;
 }
 
 export interface IAuditLogChanges {
@@ -60,6 +63,9 @@ const AuditLogSchema = new Schema<IAuditLogDocument>(
       statusCode: { type: Number },
       durationMs: { type: Number },
       requestId: { type: String },
+      query: { type: Schema.Types.Mixed },
+      params: { type: Schema.Types.Mixed },
+      requestBody: { type: Schema.Types.Mixed },
     },
     changes: {
       before: { type: Schema.Types.Mixed },

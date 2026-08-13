@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Shield, FileSpreadsheet } from "lucide-react";
+import { Shield } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { AuditLogTable, type AuditLogItem } from "./components/AuditLogTable";
-import { AuditLogDetailSheet } from "./components/AuditLogDetailSheet";
+import { AuditLogDetailModal } from "./components/AuditLogDetailModal";
 import { AuditLogStatsCards, type AuditStatsData } from "./components/AuditLogStatsCards";
 import { AuditLogFilters } from "./components/AuditLogFilters";
 import { AuditLogPagination } from "./components/AuditLogPagination";
@@ -31,9 +31,9 @@ export default function AuditLogsPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isStatsLoading, setIsStatsLoading] = React.useState(true);
 
-  // Detail Sheet State
+  // Detail Modal State
   const [selectedLog, setSelectedLog] = React.useState<AuditLogItem | null>(null);
-  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [modalOpen, setModalOpen] = React.useState(false);
 
   // Debounce search input by 300ms
   React.useEffect(() => {
@@ -122,7 +122,7 @@ export default function AuditLogsPage() {
 
   const handleViewDetails = (log: AuditLogItem) => {
     setSelectedLog(log);
-    setSheetOpen(true);
+    setModalOpen(true);
   };
 
   return (
@@ -178,11 +178,11 @@ export default function AuditLogsPage() {
         isLoading={isLoading}
       />
 
-      {/* Detail Forensic Sheet */}
-      <AuditLogDetailSheet
+      {/* Forensic Detail Modal */}
+      <AuditLogDetailModal
         log={selectedLog}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
       />
     </div>
   );
