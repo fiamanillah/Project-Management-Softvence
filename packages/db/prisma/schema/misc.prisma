@@ -60,23 +60,3 @@ model Delegation {
   @@index([delegateeId, validFrom, validUntil])
   @@map("delegations")
 }
-
-model AuditLog {
-  id           String   @id @default(uuid()) @db.Uuid
-  entityTable  String   @map("entity_table")
-  entityId     String   @map("entity_id") @db.Uuid
-  action       String
-  actorId      String   @map("actor_id") @db.Uuid
-  onBehalfOfId String?  @map("on_behalf_of_id") @db.Uuid
-  oldPayload   Json?    @map("old_payload")
-  newPayload   Json?    @map("new_payload")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  actor      User  @relation("AuditActor", fields: [actorId], references: [id])
-  onBehalfOf User? @relation("AuditOnBehalfOf", fields: [onBehalfOfId], references: [id])
-
-  @@index([entityTable, entityId])
-  @@index([actorId])
-  @@index([createdAt])
-  @@map("audit_logs")
-}

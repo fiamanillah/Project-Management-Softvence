@@ -52,8 +52,6 @@ model User {
   madeDelegations               Delegation[]                     @relation("Delegator")
   receivedDelegations           Delegation[]                     @relation("Delegatee")
   createdDelegations            Delegation[]                     @relation("DelegationCreator")
-  auditLogsAsActor              AuditLog[]                       @relation("AuditActor")
-  auditLogsOnBehalfOf           AuditLog[]                       @relation("AuditOnBehalfOf")
 
   @@index([email])
   @@index([designationId])
@@ -171,6 +169,7 @@ model UserPermissionOverride {
   teamId       String?   @map("team_id") @db.Uuid
   projectId    String?   @map("project_id") @db.Uuid
   departmentId String?   @map("department_id") @db.Uuid
+  isDeny       Boolean   @default(false) @map("is_deny")
   grantedBy    String    @map("granted_by") @db.Uuid
   reason       String?
   expiresAt    DateTime? @map("expires_at")
