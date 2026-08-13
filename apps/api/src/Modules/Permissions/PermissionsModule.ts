@@ -9,6 +9,7 @@ import { requirePermission } from "@/middleware/requirePermission";
 export class PermissionsModule extends BaseModule {
   public name: string = "PermissionsModule";
   public version: string = "1.0.0";
+  public apiVersion: string = "v1";
   public basePath: string = "/permissions";
   public dependencies?: string[] = [];
 

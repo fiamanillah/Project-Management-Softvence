@@ -19,16 +19,65 @@ export class ApiError extends Error {
   }
 }
 
-function getStoredToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken");
+// In-Memory Access Token Storage (Security best practice: avoid localStorage for JWTs)
+let inMemoryAccessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  inMemoryAccessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return inMemoryAccessToken;
+}
+
+// Auth Failure Listeners (e.g. AuthProvider subscribes to clean state & redirect to /login)
+type AuthFailureCallback = () => void;
+const authFailureListeners: Set<AuthFailureCallback> = new Set();
+
+export function onAuthFailure(callback: AuthFailureCallback) {
+  authFailureListeners.add(callback);
+  return () => {
+    authFailureListeners.delete(callback);
+  };
+}
+
+function notifyAuthFailure() {
+  authFailureListeners.forEach((cb) => cb());
+}
+
+// Interceptor Queue for Concurrent 401 Requests
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value: any) => void;
+  reject: (reason?: any) => void;
+  endpoint: string;
+  options: RequestInit;
+}> = [];
+
+function processQueue(error: any, token: string | null = null) {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      const updatedHeaders: Record<string, string> = {
+        ...(prom.options.headers as Record<string, string>),
+      };
+      if (token) {
+        updatedHeaders["Authorization"] = `Bearer ${token}`;
+      }
+      apiRequest(prom.endpoint, { ...prom.options, headers: updatedHeaders })
+        .then(prom.resolve)
+        .catch(prom.reject);
+    }
+  });
+  failedQueue = [];
 }
 
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getStoredToken();
+  const token = getAccessToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
@@ -38,15 +87,81 @@ export async function apiRequest<T = any>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  const url = endpoint.startsWith("http")
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
   const response = await fetch(url, {
     ...options,
     headers,
-    credentials: "include", // send cookies for refresh token
+    credentials: "include", // send HttpOnly cookies for refresh token
   });
 
   const body = await response.json().catch(() => ({}));
+
+  // Handle 401 Unauthorized with Automatic Token Refresh (Skip for login/refresh/logout routes)
+  const isAuthEndpoint =
+    endpoint.includes("/auth/login") ||
+    endpoint.includes("/auth/refresh") ||
+    endpoint.includes("/auth/logout");
+
+  if (response.status === 401 && !isAuthEndpoint) {
+    if (isRefreshing) {
+      return new Promise<T>((resolve, reject) => {
+        failedQueue.push({ resolve, reject, endpoint, options });
+      });
+    }
+
+    isRefreshing = true;
+
+    try {
+      const refreshUrl = `${API_BASE_URL}/auth/refresh`;
+      const refreshRes = await fetch(refreshUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      const refreshBody = await refreshRes.json().catch(() => ({}));
+
+      if (!refreshRes.ok || !refreshBody.data?.accessToken) {
+        throw new Error(refreshBody.message || "Refresh token expired or invalid");
+      }
+
+      const newAccessToken = refreshBody.data.accessToken;
+      setAccessToken(newAccessToken);
+
+      // Process pending queue
+      processQueue(null, newAccessToken);
+
+      // Retry original request with new token
+      headers["Authorization"] = `Bearer ${newAccessToken}`;
+      const retryRes = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
+
+      const retryBody = await retryRes.json().catch(() => ({}));
+
+      if (!retryRes.ok) {
+        throw new ApiError(
+          retryRes.status,
+          retryBody.message || "An unexpected network or server error occurred",
+          retryBody,
+        );
+      }
+
+      return extractResponseData<T>(retryBody);
+    } catch (refreshErr) {
+      processQueue(refreshErr, null);
+      setAccessToken(null);
+      notifyAuthFailure();
+      throw new ApiError(401, "Session expired. Please log in again.", body);
+    } finally {
+      isRefreshing = false;
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(
@@ -56,6 +171,10 @@ export async function apiRequest<T = any>(
     );
   }
 
+  return extractResponseData<T>(body);
+}
+
+function extractResponseData<T>(body: any): T {
   if (body.data !== undefined) {
     if (typeof body.data === "object" && body.data !== null && body.meta !== undefined) {
       try {
@@ -71,7 +190,6 @@ export async function apiRequest<T = any>(
     }
     return body.data;
   }
-
   return body;
 }
 
@@ -99,3 +217,4 @@ export const api = {
   delete: <T = any>(endpoint: string, options?: RequestInit) =>
     apiRequest<T>(endpoint, { method: "DELETE", ...options }),
 };
+

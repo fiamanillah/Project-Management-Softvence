@@ -17,6 +17,7 @@ import {
 export class OrganizationModule extends BaseModule {
   public name: string = "OrganizationModule";
   public version: string = "1.0.0";
+  public apiVersion: string = "v1";
   public basePath: string = "/organization";
   public dependencies?: string[] = [];
 

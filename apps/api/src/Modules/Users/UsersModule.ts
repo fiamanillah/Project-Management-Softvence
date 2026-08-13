@@ -16,6 +16,7 @@ import {
 export class UsersModule extends BaseModule {
   public name: string = "UsersModule";
   public version: string = "1.0.0";
+  public apiVersion: string = "v1";
   public basePath: string = "/users";
   public dependencies?: string[] = [];
 

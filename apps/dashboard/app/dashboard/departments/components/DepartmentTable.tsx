@@ -106,16 +106,22 @@ export function DepartmentTable({
                 <TableCell>
                   {activeManagers.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5 items-center">
-                      {activeManagers.map((mgr) => (
-                        <Badge
-                          key={mgr.id}
-                          variant="secondary"
-                          className="text-xs font-normal flex items-center gap-1 py-0.5 px-2 bg-secondary/60"
-                        >
-                          <UserCheck className="size-3 text-primary" />
-                          {mgr.user.firstName} {mgr.user.lastName}
-                        </Badge>
-                      ))}
+                      {activeManagers.map((mgr) => {
+                        const fullName =
+                          `${mgr.user?.firstName || ""} ${mgr.user?.lastName || ""}`.trim() ||
+                          mgr.user?.email ||
+                          "Manager";
+                        return (
+                          <Badge
+                            key={mgr.id}
+                            variant="secondary"
+                            className="text-xs font-normal flex items-center gap-1 py-0.5 px-2 bg-secondary/60"
+                          >
+                            <UserCheck className="size-3 text-primary" />
+                            {fullName}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   ) : (
                     <span className="text-xs text-muted-foreground italic flex items-center gap-1">
@@ -140,7 +146,11 @@ export function DepartmentTable({
 
                 <TableCell className="text-right">
                   <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors cursor-pointer outline-none">
+                    <DropdownMenuTrigger
+                      type="button"
+                      className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors cursor-pointer outline-none"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <MoreHorizontal className="size-4" />
                       <span className="sr-only">Actions</span>
                     </DropdownMenuTrigger>

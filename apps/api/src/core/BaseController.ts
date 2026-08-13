@@ -29,6 +29,7 @@ export abstract class BaseController {
       message,
       meta: {
         requestId: req.id,
+        apiVersion: req.apiVersion || "v1",
         timestamp: new Date().toISOString(),
       },
       data,
@@ -59,6 +60,7 @@ export abstract class BaseController {
       message,
       meta: {
         requestId: req.id,
+        apiVersion: req.apiVersion || "v1",
         timestamp: new Date().toISOString(),
         pagination,
       },

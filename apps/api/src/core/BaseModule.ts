@@ -14,6 +14,7 @@ export abstract class BaseModule implements IgnitorModule {
   public abstract readonly name: string;
   public abstract readonly version: string;
   public abstract readonly basePath: string;
+  public apiVersion: string = "v1";
   public abstract readonly dependencies?: string[];
 
   protected router: Router;

@@ -55,9 +55,19 @@ export class IgnitorApp {
 
         // 3. Register module routes automatically if it's a BaseModule
         if (module instanceof BaseModule) {
-          this.app.use(module.basePath, module.getRouter());
-          this.app.use(`/api/v1${module.basePath}`, module.getRouter());
-          this.logger.info(`↩ Registered routes for module: ${module.name} (${module.basePath} & /api/v1${module.basePath})`);
+          const version = module.apiVersion || "v1";
+
+          // Primary versioned route: e.g. /api/v1/users or /api/v2/users
+          this.app.use(`/api/${version}${module.basePath}`, module.getRouter());
+
+          // Backward-compatible unversioned fallback for default version (v1): e.g. /users
+          if (version === "v1") {
+            this.app.use(module.basePath, module.getRouter());
+          }
+
+          this.logger.info(
+            `↩ Registered routes for module: ${module.name} (${version} @ /api/${version}${module.basePath}${version === "v1" ? ` & ${module.basePath}` : ""})`,
+          );
         }
       }
 

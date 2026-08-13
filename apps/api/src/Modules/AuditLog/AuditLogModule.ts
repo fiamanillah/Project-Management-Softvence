@@ -5,6 +5,7 @@ import { AuditLogController } from "./audit-log.controller";
 export class AuditLogModule extends BaseModule {
   public name: string = "AuditLogModule";
   public version: string = "1.0.0";
+  public apiVersion: string = "v1";
   public basePath: string = "/audit-logs";
   public dependencies?: string[] = [];
 

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { api, ApiError } from "./api";
+import { api, setAccessToken, onAuthFailure } from "./api";
 
 export interface User {
   id: string;
@@ -51,21 +51,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Initialize auth from localStorage / token
+  // Handle auth failure event triggered by 401 interceptor
   React.useEffect(() => {
-    const storedToken = localStorage.getItem("accessToken");
-    const storedUser = localStorage.getItem("user");
+    const unsubscribe = onAuthFailure(() => {
+      setAccessToken(null);
+      setToken(null);
+      setUser(null);
+      setPermissions({});
+      localStorage.removeItem("user");
+    });
+    return unsubscribe;
+  }, []);
 
-    if (storedToken && storedUser) {
-      setToken(storedToken);
+  // Initialize auth: perform silent refresh via HttpOnly cookie on app mount
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function initAuth() {
       try {
-        setUser(JSON.parse(storedUser));
-        fetchPermissions();
+        // Attempt silent refresh using HttpOnly refresh cookie
+        const res = await api.post<{ accessToken: string; user: User }>("/auth/refresh");
+        if (isMounted && res.accessToken && res.user) {
+          setAccessToken(res.accessToken);
+          setToken(res.accessToken);
+          setUser(res.user);
+          localStorage.setItem("user", JSON.stringify(res.user));
+          await fetchPermissions();
+        }
       } catch {
-        localStorage.removeItem("user");
+        // Refresh cookie missing or expired
+        if (isMounted) {
+          setAccessToken(null);
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem("user");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
-    setIsLoading(false);
+
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [fetchPermissions]);
 
   const login = async (email: string, password: string) => {
@@ -75,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (data.accessToken && data.user) {
-      localStorage.setItem("accessToken", data.accessToken);
+      setAccessToken(data.accessToken);
       localStorage.setItem("user", JSON.stringify(data.user));
       setToken(data.accessToken);
       setUser(data.user);
@@ -91,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore logout errors
     } finally {
-      localStorage.removeItem("accessToken");
+      setAccessToken(null);
       localStorage.removeItem("user");
       setToken(null);
       setUser(null);
@@ -134,3 +166,4 @@ export function useAuth() {
   }
   return context;
 }
+

@@ -119,6 +119,7 @@ export class AuthController extends BaseController {
       req.cookies?.refreshToken || req.body?.refreshToken;
     const userId = (req as any).user?.sub || (req as any).user?.id;
 
+    res.clearCookie("refreshToken", { path: "/" });
     res.clearCookie("refreshToken", { path: "/auth" });
 
     const result = await this.authService.logout(rawRefreshToken, userId);
@@ -142,6 +143,7 @@ export class AuthController extends BaseController {
   public async resetPassword(req: Request, res: Response) {
     const { token, password } = req.validatedBody as ResetPasswordDTO;
 
+    res.clearCookie("refreshToken", { path: "/" });
     res.clearCookie("refreshToken", { path: "/auth" });
 
     const result = await this.authService.resetPassword(token, password);
@@ -172,7 +174,7 @@ export class AuthController extends BaseController {
       httpOnly: true,
       secure: env.NODE_ENV === "production",
       sameSite: "lax",
-      path: "/auth",
+      path: "/",
       maxAge: days * 24 * 60 * 60 * 1000,
     });
   }

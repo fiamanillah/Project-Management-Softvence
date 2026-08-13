@@ -14,6 +14,7 @@ import {
 export class AuthModule extends BaseModule {
   public name: string = "AuthModule";
   public version: string = "1.0.0";
+  public apiVersion: string = "v1";
   public basePath: string = "/auth";
   public dependencies?: string[] | undefined;
 

@@ -3,6 +3,7 @@ export interface ApiResponse<T = any> {
     message?: string;
     meta?: {
         requestId: string;
+        apiVersion?: string;
         timestamp: string;
         [key: string]: any;
     };

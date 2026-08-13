@@ -4,6 +4,7 @@ declare global {
   namespace Express {
     interface Request {
       id: string;
+      apiVersion?: string;
       timedout?: boolean;
       abortSignal: AbortSignal;
       validatedBody?: any;

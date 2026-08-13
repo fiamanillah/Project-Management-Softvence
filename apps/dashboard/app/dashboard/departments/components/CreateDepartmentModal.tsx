@@ -106,7 +106,7 @@ export function CreateDepartmentModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+        <form onSubmit={handleSubmit} className="space-y-4 ">
           <FieldSet>
             <FieldGroup>
               {/* Department Code Field */}

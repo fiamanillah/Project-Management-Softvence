@@ -146,7 +146,7 @@ export function AssignManagerModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
+        <div className="space-y-5">
           {/* Active Managers Section */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -155,42 +155,55 @@ export function AssignManagerModal({
 
             {activeManagers.length > 0 ? (
               <div className="space-y-2">
-                {activeManagers.map((mgr) => (
-                  <div
-                    key={mgr.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg border bg-card/60"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge variant="secondary" className="size-7 rounded-full p-0 flex items-center justify-center font-bold">
-                        {mgr.user.firstName.charAt(0)}
-                      </Badge>
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-medium truncate">
-                          {mgr.user.firstName} {mgr.user.lastName}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate">
-                          {mgr.user.email}
-                        </span>
-                      </div>
-                    </div>
+                {activeManagers.map((mgr) => {
+                  const userFirstName = mgr.user?.firstName || "";
+                  const userLastName = mgr.user?.lastName || "";
+                  const userEmail = mgr.user?.email || "";
+                  const avatarChar = userFirstName
+                    ? userFirstName.charAt(0).toUpperCase()
+                    : userEmail
+                      ? userEmail.charAt(0).toUpperCase()
+                      : "?";
+                  const displayName =
+                    `${userFirstName} ${userLastName}`.trim() || userEmail || "Manager";
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleUnassign(mgr.id)}
-                      disabled={unassigningManagerId === mgr.id}
+                  return (
+                    <div
+                      key={mgr.id}
+                      className="flex items-center justify-between p-2.5 rounded-lg border bg-card/60"
                     >
-                      {unassigningManagerId === mgr.id ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-4" />
-                      )}
-                      <span className="sr-only">Unassign</span>
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="secondary" className="size-7 rounded-full p-0 flex items-center justify-center font-bold">
+                          {avatarChar}
+                        </Badge>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm font-medium truncate">
+                            {displayName}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {userEmail}
+                          </span>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleUnassign(mgr.id)}
+                        disabled={unassigningManagerId === mgr.id}
+                      >
+                        {unassigningManagerId === mgr.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                        <span className="sr-only">Unassign</span>
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground border border-dashed rounded-lg bg-muted/20">

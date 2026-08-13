@@ -7,12 +7,14 @@ import cookieParser from "cookie-parser";
 import { config } from "@/core/config";
 import { requestLogger } from "./requestLogger";
 import { requestId } from "./requestId";
+import { apiVersionResolver } from "./apiVersion";
 import { TimeoutError, RateLimitError } from "@/core/errors/AppError";
 import timeout from "connect-timeout";
 
 export function setupGlobalMiddlewares(app: Express) {
   app.set("trust proxy", 1);
   app.use(requestId());
+  app.use(apiVersionResolver());
   app.use(
     helmet({
       contentSecurityPolicy: config.server.isProduction,
