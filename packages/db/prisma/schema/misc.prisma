@@ -1,0 +1,82 @@
+// ==========================================
+// ATTACHMENTS & NOTIFICATIONS
+// ==========================================
+
+model Attachment {
+  id         String           @id @default(uuid()) @db.Uuid
+  entityType AttachmentEntity @map("entity_type")
+  entityId   String           @map("entity_id") @db.Uuid
+  fileUrl    String           @map("file_url")
+  fileName   String           @map("file_name")
+  mimeType   String?          @map("mime_type")
+  uploadedBy String           @map("uploaded_by") @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  uploader User @relation(fields: [uploadedBy], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("attachments")
+}
+
+model Notification {
+  id                 String   @id @default(uuid()) @db.Uuid
+  recipientId        String   @map("recipient_id") @db.Uuid
+  notificationTypeId String   @map("notification_type_id") @db.Uuid
+  title              String
+  body               String?
+  entityType         String?  @map("entity_type")
+  entityId           String?  @map("entity_id") @db.Uuid
+  isRead             Boolean  @default(false) @map("is_read")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  recipient        User             @relation(fields: [recipientId], references: [id])
+  notificationType NotificationType @relation(fields: [notificationTypeId], references: [id])
+
+  @@index([recipientId, isRead])
+  @@index([createdAt])
+  @@index([notificationTypeId])
+  @@map("notifications")
+}
+
+// ==========================================
+// DELEGATION & AUDIT
+// ==========================================
+
+model Delegation {
+  id          String   @id @default(uuid()) @db.Uuid
+  delegatorId String   @map("delegator_id") @db.Uuid
+  delegateeId String   @map("delegatee_id") @db.Uuid
+  scope       String
+  validFrom   DateTime @map("valid_from")
+  validUntil  DateTime @map("valid_until")
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  delegator User @relation("Delegator", fields: [delegatorId], references: [id])
+  delegatee User @relation("Delegatee", fields: [delegateeId], references: [id])
+  creator   User @relation("DelegationCreator", fields: [createdBy], references: [id])
+
+  @@index([delegatorId, validFrom, validUntil])
+  @@index([delegateeId, validFrom, validUntil])
+  @@map("delegations")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityTable  String   @map("entity_table")
+  entityId     String   @map("entity_id") @db.Uuid
+  action       String
+  actorId      String   @map("actor_id") @db.Uuid
+  onBehalfOfId String?  @map("on_behalf_of_id") @db.Uuid
+  oldPayload   Json?    @map("old_payload")
+  newPayload   Json?    @map("new_payload")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  actor      User  @relation("AuditActor", fields: [actorId], references: [id])
+  onBehalfOf User? @relation("AuditOnBehalfOf", fields: [onBehalfOfId], references: [id])
+
+  @@index([entityTable, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

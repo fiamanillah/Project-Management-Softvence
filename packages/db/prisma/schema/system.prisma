@@ -1,66 +1,167 @@
 // ==========================================
-// ATTACHMENTS
+// DYNAMIC LOOKUP TABLES
 // ==========================================
 
-model Attachment {
-  id          String           @id @default(uuid()) @db.Uuid
-  entity_type AttachmentEntity
-  entity_id   String           @db.Uuid
-  file_url    String
-  file_name   String
-  mime_type   String?
-  uploaded_by String           @db.Uuid
-  created_at  DateTime         @default(now())
+model Platform {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  uploader User @relation("AttachmentUploader", fields: [uploaded_by], references: [id])
+  clients  Client[]
+  profiles Profile[]
+  bdOrders BdOrder[]
 
-  @@index([entity_type, entity_id])
-  @@map("attachments")
+  @@map("platforms")
 }
 
-// ==========================================
-// NOTIFICATIONS
-// ==========================================
+model ProjectStatus {
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String   @unique
+  name           String
+  requiresAction Boolean  @default(false) @map("requires_action")
+  isTerminal     Boolean  @default(false) @map("is_terminal")
+  sortOrder      Int      @default(0) @map("sort_order")
+  color          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-model Notification {
-  id           String           @id @default(uuid()) @db.Uuid
-  recipient_id String           @db.Uuid
-  type         NotificationType
-  title        String
-  body         String?
-  entity_type  String?
-  entity_id    String?          @db.Uuid
-  is_read      Boolean          @default(false)
-  created_at   DateTime         @default(now())
+  projects   Project[]
+  components ProjectComponent[]
+  bdOrders   BdOrder[]
 
-  recipient User @relation("NotificationRecipient", fields: [recipient_id], references: [id])
-
-  @@index([recipient_id, is_read])
-  @@index([created_at])
-  @@map("notifications")
+  @@map("project_statuses")
 }
 
-// ==========================================
-// DELEGATION & AUDIT
-// ==========================================
+model Priority {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  level     Int
+  color     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
 
-model Delegation {
-  id           String   @id @default(uuid()) @db.Uuid
-  delegator_id String   @db.Uuid
-  delegatee_id String   @db.Uuid
-  scope        String
-  valid_from   DateTime
-  valid_until  DateTime
-  created_by   String   @db.Uuid
-  created_at   DateTime @default(now())
+  issues Issue[]
 
-  delegator User @relation("Delegator", fields: [delegator_id], references: [id])
-  delegatee User @relation("Delegatee", fields: [delegatee_id], references: [id])
-  creator   User @relation("DelegationCreator", fields: [created_by], references: [id])
-
-  @@index([delegator_id, valid_from, valid_until])
-  @@index([delegatee_id, valid_from, valid_until])
-  @@map("delegations")
+  @@map("priorities")
 }
 
+model AssignmentRole {
+  id                    String   @id @default(uuid()) @db.Uuid
+  code                  String   @unique
+  name                  String
+  qualifiesForTeamScope Boolean  @default(false) @map("qualifies_for_team_scope")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdAt             DateTime @default(now()) @map("created_at")
 
+  teamMembers          TeamMember[]
+  projectAssignments   ProjectAssignment[]
+  componentAssignments ComponentAssignment[]
+  bdOrderAssignments   BdOrderAssignment[]
+
+  @@map("assignment_roles")
+}
+
+model NotificationType {
+  id                   String   @id @default(uuid()) @db.Uuid
+  code                 String   @unique
+  name                 String
+  defaultTitleTemplate String?  @map("default_title_template")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  notifications Notification[]
+
+  @@map("notification_types")
+}
+
+model MessageType {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  messages Message[]
+
+  @@map("message_types")
+}
+
+model IssueType {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  issues Issue[]
+
+  @@map("issue_types")
+}
+
+model SupportTicketStatus {
+  id         String   @id @default(uuid()) @db.Uuid
+  code       String   @unique
+  name       String
+  isTerminal Boolean  @default(false) @map("is_terminal")
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  supportTickets SupportTicket[]
+
+  @@map("support_ticket_statuses")
+}
+
+model BdOrderType {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  bdOrders BdOrder[]
+
+  @@map("bd_order_types")
+}
+
+model PermissionScopeType {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  code               String                  @unique
+  name               String
+  description        String?
+  resolutionStrategy ScopeResolutionStrategy @map("resolution_strategy")
+  isActive           Boolean                 @default(true) @map("is_active")
+  createdAt          DateTime                @default(now()) @map("created_at")
+
+  designationPermissions DesignationPermission[]
+
+  @@map("permission_scope_types")
+}
+
+model PermissionGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  items PermissionGroupItem[]
+
+  @@map("permission_groups")
+}
+
+model PermissionGroupItem {
+  id                String @id @default(uuid()) @db.Uuid
+  permissionGroupId String @map("permission_group_id") @db.Uuid
+  permissionId      String @map("permission_id") @db.Uuid
+
+  permissionGroup PermissionGroup @relation(fields: [permissionGroupId], references: [id])
+  permission      Permission      @relation(fields: [permissionId], references: [id])
+
+  @@unique([permissionGroupId, permissionId])
+  @@map("permission_group_items")
+}

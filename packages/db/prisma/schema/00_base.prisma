@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../../src/generated/client"
 }
 
@@ -17,25 +17,15 @@ enum SystemRole {
   Staff
 }
 
-enum Department {
-  Operations
-  Sales
-  Management
-}
-
-enum PlatformType {
-  Fiverr
-  Upwork
-}
-
-enum ProjectStatus {
-  NRA
-  WIP
-  Hold
-  Revision
-  Late
-  Delivered
-  Cancel
+enum ScopeResolutionStrategy {
+  Global
+  OwnDepartment
+  OwnTeam
+  OwnProject
+  OwnProfile
+  ExplicitDepartments
+  ExplicitTeams
+  ExplicitProjects
 }
 
 enum MessageStatus {
@@ -54,26 +44,10 @@ enum IssueStatus {
   Wrong
 }
 
-enum AssignmentRole {
-  Lead
-  CoLead
-  Manager
-  Member
-  SQA
-  Sales
-}
-
-enum NotificationType {
-  MessageApprovalRequested
-  MessageApproved
-  MessageRejected
-  IssueOpened
-  IssueResolved
-  ProjectAssigned
-  DelegationStarted
-  DelegationEnded
-  ClientUpdateReceived
-  Mention
+enum GroupMemberSource {
+  AutoManagement
+  AutoAssignment
+  Manual
 }
 
 enum AttachmentEntity {
@@ -81,4 +55,12 @@ enum AttachmentEntity {
   message
   issue
   support_ticket
+  chat_message
+  platform_thread_message
+  bd_order
+}
+
+enum ThreadDirection {
+  Outbound
+  Inbound
 }

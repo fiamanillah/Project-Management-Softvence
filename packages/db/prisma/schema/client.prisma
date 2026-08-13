@@ -1,0 +1,52 @@
+// ==========================================
+// CLIENTS & PLATFORM ACCOUNTS
+// ==========================================
+
+model Client {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  platformId   String   @map("platform_id") @db.Uuid
+  contactNotes String?  @map("contact_notes") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  platform Platform  @relation(fields: [platformId], references: [id])
+  projects Project[]
+
+  @@index([name])
+  @@index([platformId])
+  @@map("clients")
+}
+
+model Profile {
+  id         String   @id @default(uuid()) @db.Uuid
+  platformId String   @map("platform_id") @db.Uuid
+  username   String
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  platform Platform @relation(fields: [platformId], references: [id])
+
+  sellers                ProfileSeller[]
+  projects               Project[]
+  platformThreadMessages PlatformThreadMessage[]
+
+  @@unique([platformId, username])
+  @@map("profiles")
+}
+
+model ProfileSeller {
+  id           String    @id @default(uuid()) @db.Uuid
+  profileId    String    @map("profile_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  shift        String?
+  isPrimary    Boolean   @default(false) @map("is_primary")
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
+  unassignedAt DateTime? @map("unassigned_at")
+
+  profile Profile @relation(fields: [profileId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([profileId, userId])
+  @@index([profileId, unassignedAt])
+  @@map("profile_sellers")
+}

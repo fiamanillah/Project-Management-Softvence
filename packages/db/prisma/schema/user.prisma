@@ -3,76 +3,93 @@
 // ==========================================
 
 model User {
-  id             String     @id @default(uuid()) @db.Uuid
-  employee_id    String     @unique
-  email          String     @unique
-  password_hash  String
-  first_name     String
-  last_name      String
-  system_role    SystemRole @default(Staff)
-  designation_id String     @db.Uuid
-  is_active      Boolean    @default(true)
-  last_login_at  DateTime?
-  created_at     DateTime   @default(now())
-  updated_at     DateTime?  @updatedAt
-  deleted_at     DateTime?
+  id            String     @id @default(uuid()) @db.Uuid
+  employeeId    String     @unique @map("employee_id")
+  email         String     @unique
+  passwordHash  String     @map("password_hash")
+  firstName     String     @map("first_name")
+  lastName      String     @map("last_name")
+  systemRole    SystemRole @default(Staff) @map("system_role")
+  designationId String     @map("designation_id") @db.Uuid
+  isActive      Boolean    @default(true) @map("is_active")
+  lastLoginAt   DateTime?  @map("last_login_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime?  @map("updated_at")
+  deletedAt     DateTime?  @map("deleted_at")
 
-  designation Designation @relation(fields: [designation_id], references: [id])
+  designation Designation @relation(fields: [designationId], references: [id])
 
-  // Reverse Relations
-  refresh_tokens           RefreshToken[]
-  permission_overrides     UserPermissionOverride[]
-  team_memberships         TeamMember[]
-  managed_profiles         ProfileSeller[]
-  project_assignments      ProjectAssignment[]
-  component_assignments    ComponentAssignment[]
-  authored_messages        Message[]                @relation("MessageAuthor")
-  edited_message_revisions MessageRevision[]        @relation("MessageEditor")
-  message_approvals        MessageApproval[]        @relation("MessageApprover")
-  received_client_updates  ClientUpdate[]           @relation("ClientUpdateReceiver")
-  authored_issues          Issue[]                  @relation("IssueAuthor")
-  authored_issue_comments  IssueComment[]           @relation("IssueCommentAuthor")
-  authored_support_tickets SupportTicket[]          @relation("SupportTicketAuthor")
-  uploaded_attachments     Attachment[]             @relation("AttachmentUploader")
-  notifications            Notification[]           @relation("NotificationRecipient")
-  delegations_as_delegator Delegation[]             @relation("Delegator")
-  delegations_as_delegatee Delegation[]             @relation("Delegatee")
-  delegations_created      Delegation[]             @relation("DelegationCreator")
-
+  // Relations
+  refreshTokens                 RefreshToken[]
+  managedDepartments            DepartmentManager[]
+  teamMemberships               TeamMember[]
+  grantedDesignationPermissions DesignationPermission[]          @relation("DesignationPermissionGranter")
+  receivedPermissionOverrides   UserPermissionOverride[]         @relation("OverrideUser")
+  grantedPermissionOverrides    UserPermissionOverride[]         @relation("OverrideGranter")
+  absences                      UserAbsence[]                    @relation("AbsenceUser")
+  absenceCovers                 UserAbsence[]                    @relation("AbsenceCover")
+  createdAbsences               UserAbsence[]                    @relation("AbsenceCreator")
+  profileAssignments            ProfileSeller[]
+  projectAssignments            ProjectAssignment[]
+  componentAssignments          ComponentAssignment[]
+  messages                      Message[]                        @relation("MessageAuthor")
+  messageRevisions              MessageRevision[]                @relation("MessageEditor")
+  messageApprovals              MessageApproval[]                @relation("MessageApprover")
+  loggedPlatformMessages        PlatformThreadMessage[]          @relation("PlatformThreadLogger")
+  createdIssues                 Issue[]                          @relation("IssueAuthor")
+  resolvedIssues                Issue[]                          @relation("IssueResolver")
+  issueComments                 IssueComment[]
+  supportTickets                SupportTicket[]
+  projectGroupMemberships       ProjectGroupMember[]             @relation("GroupMemberUser")
+  addedProjectGroupMembers      ProjectGroupMember[]             @relation("GroupMemberAdder")
+  chatMessages                  ChatMessage[]
+  chatMessageReads              ChatMessageRead[]
+  createdBdOrders               BdOrder[]
+  bdOrderAssignments            BdOrderAssignment[]
+  attachments                   Attachment[]
+  notifications                 Notification[]
+  madeDelegations               Delegation[]                     @relation("Delegator")
+  receivedDelegations           Delegation[]                     @relation("Delegatee")
+  createdDelegations            Delegation[]                     @relation("DelegationCreator")
+  auditLogsAsActor              AuditLog[]                       @relation("AuditActor")
+  auditLogsOnBehalfOf           AuditLog[]                       @relation("AuditOnBehalfOf")
 
   @@index([email])
-  @@index([designation_id])
-  @@index([is_active, deleted_at])
+  @@index([designationId])
+  @@index([isActive, deletedAt])
   @@map("users")
 }
 
 model RefreshToken {
-  id          String    @id @default(uuid()) @db.Uuid
-  user_id     String    @db.Uuid
-  token_hash  String    @unique
-  device_info String?
-  expires_at  DateTime
-  revoked_at  DateTime?
-  created_at  DateTime  @default(now())
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  deviceInfo String?   @map("device_info")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [user_id], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
-  @@index([user_id])
+  @@index([userId])
   @@map("refresh_tokens")
 }
 
 model Designation {
-  id              String     @id @default(uuid()) @db.Uuid
-  code            String     @unique
-  name            String
-  department      Department
-  hierarchy_level Int
-  is_leadership   Boolean    @default(false)
-  created_at      DateTime   @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String   @unique
+  name           String
+  departmentId   String   @map("department_id") @db.Uuid
+  hierarchyLevel Int      @map("hierarchy_level")
+  isLeadership   Boolean  @default(false) @map("is_leadership")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  department Department @relation(fields: [departmentId], references: [id])
 
   users       User[]
   permissions DesignationPermission[]
 
+  @@index([departmentId])
   @@map("designations")
 }
 
@@ -80,35 +97,94 @@ model Permission {
   id          String  @id @default(uuid()) @db.Uuid
   code        String  @unique
   description String?
+  module      String?
 
-  designations UserPermissionOverride[]
-  roles        DesignationPermission[]
+  designationPermissions DesignationPermission[]
+  permissionGroupItems   PermissionGroupItem[]
+  userOverrides          UserPermissionOverride[]
 
   @@map("permissions")
 }
 
 model DesignationPermission {
-  id             String @id @default(uuid()) @db.Uuid
-  designation_id String @db.Uuid
-  permission_id  String @db.Uuid
+  id            String   @id @default(uuid()) @db.Uuid
+  designationId String   @map("designation_id") @db.Uuid
+  permissionId  String   @map("permission_id") @db.Uuid
+  scopeTypeId   String   @map("scope_type_id") @db.Uuid
+  isActive      Boolean  @default(true) @map("is_active")
+  grantedBy     String   @map("granted_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  designation Designation @relation(fields: [designation_id], references: [id])
-  permission  Permission  @relation(fields: [permission_id], references: [id])
+  designation Designation         @relation(fields: [designationId], references: [id])
+  permission  Permission          @relation(fields: [permissionId], references: [id])
+  scopeType   PermissionScopeType @relation(fields: [scopeTypeId], references: [id])
+  granter     User                @relation("DesignationPermissionGranter", fields: [grantedBy], references: [id])
 
-  @@unique([designation_id, permission_id])
+  scopeTargets DesignationPermissionScopeTarget[]
+
+  @@unique([designationId, permissionId])
+  @@index([scopeTypeId])
   @@map("designation_permissions")
 }
 
+model DesignationPermissionScopeTarget {
+  id                      String  @id @default(uuid()) @db.Uuid
+  designationPermissionId String  @map("designation_permission_id") @db.Uuid
+  departmentId            String? @map("department_id") @db.Uuid
+  teamId                  String? @map("team_id") @db.Uuid
+  projectId               String? @map("project_id") @db.Uuid
+
+  designationPermission DesignationPermission @relation(fields: [designationPermissionId], references: [id])
+  department            Department?           @relation(fields: [departmentId], references: [id])
+  team                  Team?                 @relation(fields: [teamId], references: [id])
+  project               Project?              @relation(fields: [projectId], references: [id])
+
+  @@index([designationPermissionId])
+  @@index([departmentId])
+  @@index([teamId])
+  @@index([projectId])
+  @@map("designation_permission_scope_targets")
+}
+
 model UserPermissionOverride {
-  id            String   @id @default(uuid()) @db.Uuid
-  user_id       String   @db.Uuid
-  permission_id String   @db.Uuid
-  effect        String // 'GRANT' or 'REVOKE'
-  created_at    DateTime @default(now())
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  permissionId String    @map("permission_id") @db.Uuid
+  teamId       String?   @map("team_id") @db.Uuid
+  projectId    String?   @map("project_id") @db.Uuid
+  departmentId String?   @map("department_id") @db.Uuid
+  grantedBy    String    @map("granted_by") @db.Uuid
+  reason       String?
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-  user       User       @relation(fields: [user_id], references: [id])
-  permission Permission @relation(fields: [permission_id], references: [id])
+  user       User        @relation("OverrideUser", fields: [userId], references: [id])
+  permission Permission  @relation(fields: [permissionId], references: [id])
+  team       Team?       @relation(fields: [teamId], references: [id])
+  project    Project?    @relation(fields: [projectId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  granter    User        @relation("OverrideGranter", fields: [grantedBy], references: [id])
 
-  @@unique([user_id, permission_id])
+  @@unique([userId, permissionId, teamId, projectId, departmentId])
+  @@index([userId, expiresAt])
   @@map("user_permission_overrides")
+}
+
+model UserAbsence {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  startAt   DateTime @map("start_at")
+  endAt     DateTime @map("end_at")
+  reason    String?
+  coveredBy String?  @map("covered_by") @db.Uuid
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User  @relation("AbsenceUser", fields: [userId], references: [id])
+  cover   User? @relation("AbsenceCover", fields: [coveredBy], references: [id])
+  creator User  @relation("AbsenceCreator", fields: [createdBy], references: [id])
+
+  @@index([userId, startAt, endAt])
+  @@index([coveredBy])
+  @@map("user_absences")
 }
