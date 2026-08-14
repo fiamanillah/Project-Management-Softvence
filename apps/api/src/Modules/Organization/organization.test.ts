@@ -9,9 +9,19 @@ describe("OrganizationService (Department & Designation Management)", () => {
     orgService = new OrganizationService(prisma);
 
     // Clean tables
+    await prisma.notification.deleteMany({});
+    await prisma.refreshToken.deleteMany({});
+    await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
+    await prisma.userPermissionOverride.deleteMany({});
     await prisma.designationPermissionScopeTarget.deleteMany({});
     await prisma.designationPermission.deleteMany({});
+    await prisma.delegation.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.projectAssignment.deleteMany({});
+    await prisma.componentAssignment.deleteMany({});
     await prisma.user.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});

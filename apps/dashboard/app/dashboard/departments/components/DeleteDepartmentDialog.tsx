@@ -40,7 +40,9 @@ export function DeleteDepartmentDialog({
 
   const activeDesignationsCount = department?._count?.designations ?? 0;
   const activeTeamsCount = department?._count?.teams ?? 0;
-  const hasDependencies = activeDesignationsCount > 0 || activeTeamsCount > 0;
+  const subDepartmentsCount = department?._count?.subDepartments ?? 0;
+  const hasDependencies =
+    activeDesignationsCount > 0 || activeTeamsCount > 0 || subDepartmentsCount > 0;
 
   const handleDelete = async () => {
     if (!department || hasDependencies) return;
@@ -94,14 +96,28 @@ export function DeleteDepartmentDialog({
                   </p>
                   <p className="text-amber-700/90 dark:text-amber-300/90">
                     This department contains{" "}
-                    <strong>
-                      {activeDesignationsCount} designation{activeDesignationsCount === 1 ? "" : "s"}
-                    </strong>{" "}
-                    and{" "}
-                    <strong>
-                      {activeTeamsCount} team{activeTeamsCount === 1 ? "" : "s"}
-                    </strong>
-                    . You can deactivate this department instead, or remove/reassign its designations and teams first.
+                    {subDepartmentsCount > 0 && (
+                      <>
+                        <strong>
+                          {subDepartmentsCount} sub-department{subDepartmentsCount === 1 ? "" : "s"}
+                        </strong>
+                        {activeDesignationsCount > 0 || activeTeamsCount > 0 ? ", " : ""}
+                      </>
+                    )}
+                    {activeDesignationsCount > 0 && (
+                      <>
+                        <strong>
+                          {activeDesignationsCount} designation{activeDesignationsCount === 1 ? "" : "s"}
+                        </strong>
+                        {activeTeamsCount > 0 ? ", and " : ""}
+                      </>
+                    )}
+                    {activeTeamsCount > 0 && (
+                      <strong>
+                        {activeTeamsCount} team{activeTeamsCount === 1 ? "" : "s"}
+                      </strong>
+                    )}
+                    . You can deactivate this department instead, or delete/reassign its sub-departments, designations, and teams first.
                   </p>
                 </div>
               </div>

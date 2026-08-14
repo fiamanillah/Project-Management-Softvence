@@ -20,31 +20,54 @@ import {
   FieldDescription,
   FieldError,
 } from "@workspace/ui/components/field";
-import { Loader2, Building2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { Loader2, Building2, GitFork } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api";
-import { createDepartmentSchema } from "@workspace/shared";
+import { createDepartmentSchema, type DepartmentItem } from "@workspace/shared";
 
 interface CreateDepartmentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  departments?: DepartmentItem[];
+  defaultParentId?: string | null;
   onSuccess: () => void;
 }
 
 export function CreateDepartmentModal({
   open,
   onOpenChange,
+  departments = [],
+  defaultParentId = null,
   onSuccess,
 }: CreateDepartmentModalProps) {
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
+  const [parentId, setParentId] = React.useState<string>("NONE");
   const [isActive, setIsActive] = React.useState(true);
   const [isLoading, setIsLoading] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
+  React.useEffect(() => {
+    if (open) {
+      if (defaultParentId) {
+        setParentId(defaultParentId);
+      } else {
+        setParentId("NONE");
+      }
+    }
+  }, [open, defaultParentId]);
+
   const handleReset = () => {
     setCode("");
     setName("");
+    setParentId(defaultParentId || "NONE");
     setIsActive(true);
     setErrors({});
   };
@@ -57,6 +80,7 @@ export function CreateDepartmentModal({
     const validationResult = createDepartmentSchema.safeParse({
       code: code.trim(),
       name: name.trim(),
+      parentId: parentId === "NONE" ? null : parentId,
       isActive,
     });
 
@@ -87,6 +111,10 @@ export function CreateDepartmentModal({
     }
   };
 
+  const activeDepartments = React.useMemo(() => {
+    return departments.filter((d) => d.isActive);
+  }, [departments]);
+
   return (
     <Dialog open={open} onOpenChange={(val) => {
       if (!val) handleReset();
@@ -98,11 +126,11 @@ export function CreateDepartmentModal({
             <Building2 className="size-5 text-primary" /> Create New Department
           </DialogTitle>
           <DialogDescription>
-            Add a new organizational unit. Code must be unique across the organization.
+            Add a new organizational unit or sub-department. Code must be unique across the organization.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 ">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <FieldSet>
             <FieldGroup>
               {/* Department Code Field */}
@@ -142,6 +170,36 @@ export function CreateDepartmentModal({
                   Full name of the department as shown on reports and invoices.
                 </FieldDescription>
                 <FieldError errors={errors.name} />
+              </Field>
+
+              {/* Parent Department Selection */}
+              <Field data-invalid={Boolean(errors.parentId)}>
+                <FieldLabel htmlFor="create-dept-parent">Parent Department (Optional)</FieldLabel>
+                <Select value={parentId} onValueChange={(val: string | null) => setParentId(val || "NONE")}>
+                  <SelectTrigger id="create-dept-parent" className="w-full text-xs">
+                    <SelectValue placeholder="None (Top-Level Department)" />
+                  </SelectTrigger>
+                  <SelectContent className="w-full">
+                    <SelectItem value="NONE" className="text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="size-3.5 text-muted-foreground" />
+                        <span>None (Top-Level Department)</span>
+                      </div>
+                    </SelectItem>
+                    {activeDepartments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        <div className="flex items-center gap-1.5">
+                          <GitFork className="size-3.5 text-primary" />
+                          <span>{dept.name} ({dept.code})</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Select a parent department to create this as a sub-department, or leave empty for top-level.
+                </FieldDescription>
+                <FieldError errors={errors.parentId} />
               </Field>
 
               {/* Active Status Switch Field */}

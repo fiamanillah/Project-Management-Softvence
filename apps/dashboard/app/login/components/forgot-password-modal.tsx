@@ -13,6 +13,7 @@ import {
 } from "@workspace/ui/components/form";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 import {
   Dialog,
   DialogContent,
@@ -21,9 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@workspace/ui/components/dialog";
-import { Mail, Check, KeyRound, Loader2 } from "lucide-react";
+import { Mail, Check, KeyRound, Loader2, AlertCircle } from "lucide-react";
 import { forgotPasswordBodySchema, type ForgotPasswordDTO } from "@workspace/shared";
-import { api } from "@/lib/api";
+import { api, handleFormApiError } from "@/lib/api";
 import { toast } from "sonner";
 
 interface ForgotPasswordModalProps {
@@ -38,6 +39,7 @@ export function ForgotPasswordModal({
   defaultEmail = "",
 }: ForgotPasswordModalProps) {
   const [resetEmailSent, setResetEmailSent] = React.useState(false);
+  const [apiError, setApiError] = React.useState<string | null>(null);
 
   const form = useForm<ForgotPasswordDTO>({
     resolver: zodResolver(forgotPasswordBodySchema),
@@ -54,17 +56,25 @@ export function ForgotPasswordModal({
   }, [defaultEmail, form]);
 
   const onSubmit = async (values: ForgotPasswordDTO) => {
+    setApiError(null);
     try {
       await api.post("/auth/forgot-password", { email: values.email });
       setResetEmailSent(true);
       toast.success("Password reset instructions sent.");
     } catch (err: any) {
-      toast.error(err.message || "Failed to request password reset.");
+      const message = handleFormApiError(
+        err,
+        form.setError,
+        "Failed to request password reset. Please try again."
+      );
+      setApiError(message);
+      toast.error(message);
     }
   };
 
   const handleClose = () => {
     setResetEmailSent(false);
+    setApiError(null);
     form.reset();
     onOpenChange(false);
   };
@@ -83,6 +93,15 @@ export function ForgotPasswordModal({
             Enter your work email to receive password recovery instructions.
           </DialogDescription>
         </DialogHeader>
+
+        {apiError && (
+          <Alert variant="destructive" className="border-destructive/30 bg-destructive/10 text-destructive text-xs py-2 px-3">
+            <AlertCircle className="size-4 shrink-0 text-destructive" />
+            <AlertDescription className="text-xs font-medium text-destructive leading-relaxed">
+              {apiError}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {resetEmailSent ? (
           <div className="py-4 text-center space-y-2">
@@ -119,6 +138,10 @@ export function ForgotPasswordModal({
                           placeholder="name@company.com"
                           className="pl-9 text-sm h-10"
                           {...field}
+                          onChange={(e) => {
+                            if (apiError) setApiError(null);
+                            field.onChange(e);
+                          }}
                           disabled={isLoading}
                         />
                       </div>
@@ -156,3 +179,4 @@ export function ForgotPasswordModal({
     </Dialog>
   );
 }
+

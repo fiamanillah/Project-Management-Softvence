@@ -93,6 +93,9 @@ export class PermissionRegistry {
                   code: item.code,
                   module: item.module,
                   description: item.description || undefined,
+                  supportedScopes: item.supportedScopes
+                    ? Array.from(item.supportedScopes)
+                    : undefined,
                 });
               }
             }
@@ -166,11 +169,20 @@ export class PermissionRegistry {
       if (!existing) {
         toInsert.push(declared);
       } else {
+        const declaredScopes = declared.supportedScopes
+          ? Array.from(declared.supportedScopes)
+          : [];
+        const existingScopes = existing.supportedScopes || [];
+        const scopesChanged =
+          JSON.stringify([...declaredScopes].sort()) !==
+          JSON.stringify([...existingScopes].sort());
+
         const needsUpdate =
           existing.description !== (declared.description || null) ||
           existing.module !== declared.module ||
           existing.isActive !== true ||
-          existing.deprecatedAt !== null;
+          existing.deprecatedAt !== null ||
+          scopesChanged;
 
         if (needsUpdate) {
           toUpdate.push(declared);
@@ -199,6 +211,7 @@ export class PermissionRegistry {
           code: item.code,
           module: item.module,
           description: item.description || null,
+          supportedScopes: item.supportedScopes ? Array.from(item.supportedScopes) : [],
           isActive: true,
           deprecatedAt: null,
         },
@@ -211,6 +224,7 @@ export class PermissionRegistry {
         data: {
           module: item.module,
           description: item.description || null,
+          supportedScopes: item.supportedScopes ? Array.from(item.supportedScopes) : [],
           isActive: true,
           deprecatedAt: null,
         },

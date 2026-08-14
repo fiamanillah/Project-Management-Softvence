@@ -9,6 +9,28 @@ import type {
 
 export class ScopeEvaluator {
   /**
+   * Recursively collect all descendant department IDs of a given department
+   */
+  public static async getDepartmentDescendants(
+    departmentId: string,
+    prisma: PrismaClient,
+  ): Promise<string[]> {
+    const children = await prisma.department.findMany({
+      where: { parentId: departmentId },
+      select: { id: true },
+    });
+
+    if (children.length === 0) return [];
+
+    const childIds = children.map((c) => c.id);
+    const subChildIds = await Promise.all(
+      childIds.map((id) => this.getDepartmentDescendants(id, prisma)),
+    );
+
+    return [...childIds, ...subChildIds.flat()];
+  }
+
+  /**
    * Evaluate a resolved designation grant strategy against a resource context for a given user
    */
   public static async evaluate(
@@ -26,24 +48,51 @@ export class ScopeEvaluator {
       case "OwnDepartment": {
         if (!resource?.departmentId) return false;
 
-        // Check if resource.departmentId matches user's designation department
+        // Check if resource.departmentId matches user's designation department or its descendants
         const designation = await prisma.designation.findUnique({
           where: { id: user.designationId },
           select: { departmentId: true },
         });
-        if (designation && designation.departmentId === resource.departmentId) {
-          return true;
+
+        if (designation?.departmentId) {
+          if (designation.departmentId === resource.departmentId) {
+            return true;
+          }
+
+          const descendantIds = await this.getDepartmentDescendants(
+            designation.departmentId,
+            prisma,
+          );
+          if (descendantIds.includes(resource.departmentId)) {
+            return true;
+          }
         }
 
-        // Or if user belongs to a team under this department
-        const teamMembership = await prisma.teamMember.findFirst({
+        // Or if user belongs to an active team under this department or its ancestors
+        const userTeams = await prisma.teamMember.findMany({
           where: {
             userId: user.id,
             leftAt: null,
-            team: { departmentId: resource.departmentId },
+          },
+          select: {
+            team: {
+              select: { departmentId: true },
+            },
           },
         });
-        return Boolean(teamMembership);
+
+        for (const tm of userTeams) {
+          const teamDeptId = tm.team.departmentId;
+          if (teamDeptId === resource.departmentId) {
+            return true;
+          }
+          const descendantIds = await this.getDepartmentDescendants(teamDeptId, prisma);
+          if (descendantIds.includes(resource.departmentId)) {
+            return true;
+          }
+        }
+
+        return false;
       }
 
       case "OwnTeam": {

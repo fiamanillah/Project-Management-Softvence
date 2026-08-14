@@ -33,16 +33,44 @@ import {
   Square,
   AlertCircle,
   RefreshCw,
+  Ban,
+  Globe,
+  Building2,
+  Users,
+  Briefcase,
+  UserCheck,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { DesignationItem } from "./DesignationTable";
+
+function getScopeIcon(strategy?: string) {
+  switch (strategy) {
+    case "Global":
+      return <Globe className="size-3.5 text-blue-500 shrink-0" />;
+    case "OwnDepartment":
+    case "ExplicitDepartments":
+      return <Building2 className="size-3.5 text-amber-500 shrink-0" />;
+    case "OwnTeam":
+    case "ExplicitTeams":
+      return <Users className="size-3.5 text-emerald-500 shrink-0" />;
+    case "OwnProject":
+    case "ExplicitProjects":
+      return <Briefcase className="size-3.5 text-indigo-500 shrink-0" />;
+    case "OwnProfile":
+      return <UserCheck className="size-3.5 text-purple-500 shrink-0" />;
+    default:
+      return <Zap className="size-3.5 text-primary shrink-0" />;
+  }
+}
 
 interface PermissionItem {
   id: string;
   code: string;
   module: string;
   description: string;
+  supportedScopes?: string[];
 }
 
 interface ScopeTypeItem {
@@ -111,27 +139,33 @@ export function PermissionMatrixModal({
     }
   }, [open, designation, loadMatrixData]);
 
-  const getDefaultScopeId = React.useCallback(() => {
-    if (scopeTypes && scopeTypes.length > 0 && scopeTypes[0]) {
-      return scopeTypes[0].id;
-    }
-    return null;
-  }, [scopeTypes]);
+  const getPermissionDefaultScopeId = React.useCallback(
+    (perm: PermissionItem) => {
+      const available =
+        perm.supportedScopes && perm.supportedScopes.length > 0
+          ? scopeTypes.filter((st) =>
+              perm.supportedScopes!.includes(st.resolutionStrategy || st.code),
+            )
+          : scopeTypes;
+      return available[0]?.id || (scopeTypes[0]?.id ?? null);
+    },
+    [scopeTypes],
+  );
 
-  const handleTogglePermission = (permissionId: string, isChecked: boolean) => {
+  const handleTogglePermission = (perm: PermissionItem, isChecked: boolean) => {
     setSelectedScopes((prev) => {
       const copy = { ...prev };
       if (isChecked) {
-        if (!copy[permissionId]) {
-          const defaultScopeId = getDefaultScopeId();
+        if (!copy[perm.id]) {
+          const defaultScopeId = getPermissionDefaultScopeId(perm);
           if (!defaultScopeId) {
             toast.error("No valid scope types available. Unable to enable permission.");
             return prev;
           }
-          copy[permissionId] = defaultScopeId;
+          copy[perm.id] = defaultScopeId;
         }
       } else {
-        delete copy[permissionId];
+        delete copy[perm.id];
       }
       return copy;
     });
@@ -150,18 +184,15 @@ export function PermissionMatrixModal({
   };
 
   const handleToggleModule = (perms: PermissionItem[], shouldInclude: boolean) => {
-    const defaultScopeId = getDefaultScopeId();
-    if (shouldInclude && !defaultScopeId) {
-      toast.error("No valid scope types available. Unable to enable permissions.");
-      return;
-    }
-
     setSelectedScopes((prev) => {
       const copy = { ...prev };
       for (const p of perms) {
         if (shouldInclude) {
-          if (!copy[p.id] && defaultScopeId) {
-            copy[p.id] = defaultScopeId;
+          if (!copy[p.id]) {
+            const defaultScopeId = getPermissionDefaultScopeId(p);
+            if (defaultScopeId) {
+              copy[p.id] = defaultScopeId;
+            }
           }
         } else {
           delete copy[p.id];
@@ -223,18 +254,15 @@ export function PermissionMatrixModal({
   const isAllFilteredChecked = totalFilteredCount > 0 && filteredPermissions.every((p) => Boolean(selectedScopes[p.id]));
 
   const handleToggleAllFiltered = (shouldInclude: boolean) => {
-    const defaultScopeId = getDefaultScopeId();
-    if (shouldInclude && !defaultScopeId) {
-      toast.error("No valid scope types available.");
-      return;
-    }
-
     setSelectedScopes((prev) => {
       const copy = { ...prev };
       for (const p of filteredPermissions) {
         if (shouldInclude) {
-          if (!copy[p.id] && defaultScopeId) {
-            copy[p.id] = defaultScopeId;
+          if (!copy[p.id]) {
+            const defaultScopeId = getPermissionDefaultScopeId(p);
+            if (defaultScopeId) {
+              copy[p.id] = defaultScopeId;
+            }
           }
         } else {
           delete copy[p.id];
@@ -400,7 +428,7 @@ export function PermissionMatrixModal({
                                 <Checkbox
                                   checked={isChecked}
                                   onCheckedChange={(checked) =>
-                                    handleTogglePermission(p.id, Boolean(checked))
+                                    handleTogglePermission(p, Boolean(checked))
                                   }
                                   id={`matrix-perm-${p.id}`}
                                   className="mt-0.5"
@@ -421,27 +449,46 @@ export function PermissionMatrixModal({
                               <div className="w-full sm:w-72 shrink-0 pl-7 sm:pl-0">
                                 {(() => {
                                   const selectedScope = scopeTypes.find((st) => st.id === currentScopeId);
+                                  const availableScopeTypes =
+                                    p.supportedScopes && p.supportedScopes.length > 0
+                                      ? scopeTypes.filter((st) =>
+                                          p.supportedScopes!.includes(st.resolutionStrategy || st.code),
+                                        )
+                                      : scopeTypes;
+
                                   return (
                                     <Select
                                       value={currentScopeId}
                                       onValueChange={(val: string | null) => handleScopeChange(p.id, val)}
                                     >
                                       <SelectTrigger className="w-full h-9 text-xs">
-                                        <SelectValue placeholder="🚫 No Access (Not Included)">
-                                          {currentScopeId === "NONE"
-                                            ? "🚫 No Access (Not Included)"
-                                            : selectedScope
-                                            ? `⚡ ${selectedScope.name} (${selectedScope.resolutionStrategy})`
-                                            : undefined}
+                                        <SelectValue placeholder="No Access (Not Included)">
+                                          {currentScopeId === "NONE" ? (
+                                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                                              <Ban className="size-3.5 text-rose-500 shrink-0" />
+                                              <span>No Access (Not Included)</span>
+                                            </span>
+                                          ) : selectedScope ? (
+                                            <span className="flex items-center gap-1.5 font-medium">
+                                              {getScopeIcon(selectedScope.resolutionStrategy)}
+                                              <span>{selectedScope.name} ({selectedScope.resolutionStrategy})</span>
+                                            </span>
+                                          ) : undefined}
                                         </SelectValue>
                                       </SelectTrigger>
                                       <SelectContent className="w-full">
-                                        <SelectItem value="NONE" className="text-rose-600 font-medium">
-                                          🚫 No Access (Not Included)
+                                        <SelectItem value="NONE" className="text-rose-600 dark:text-rose-400 font-medium">
+                                          <div className="flex items-center gap-1.5">
+                                            <Ban className="size-3.5 text-rose-500 shrink-0" />
+                                            <span>No Access (Not Included)</span>
+                                          </div>
                                         </SelectItem>
-                                        {scopeTypes.map((st) => (
+                                        {availableScopeTypes.map((st) => (
                                           <SelectItem key={st.id} value={st.id}>
-                                            ⚡ {st.name} ({st.resolutionStrategy})
+                                            <div className="flex items-center gap-1.5">
+                                              {getScopeIcon(st.resolutionStrategy)}
+                                              <span>{st.name} ({st.resolutionStrategy})</span>
+                                            </div>
                                           </SelectItem>
                                         ))}
                                       </SelectContent>

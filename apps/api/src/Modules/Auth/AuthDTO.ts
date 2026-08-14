@@ -9,13 +9,19 @@ export {
   forgotPasswordBodySchema,
   resetPasswordSchema,
   resetPasswordBodySchema,
+  resetPasswordFormSchema,
   changePasswordSchema,
   changePasswordBodySchema,
+  changePasswordFormSchema,
   type CreateUserDTO,
   type LoginUserDTO,
   type RefreshDTO,
   type ForgotPasswordDTO,
   type ResetPasswordDTO,
+  type ResetPasswordFormDTO,
   type ChangePasswordDTO,
+  type ChangePasswordFormDTO,
+  type AuthResponseData,
 } from "@workspace/shared";
+
 

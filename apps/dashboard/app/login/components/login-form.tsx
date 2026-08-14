@@ -16,10 +16,12 @@ import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Card } from "@workspace/ui/components/card";
 import { Checkbox } from "@workspace/ui/components/checkbox";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Check } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { loginUserBodySchema, type LoginUserDTO } from "@workspace/shared";
+import { handleFormApiError } from "@/lib/api";
+import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 
 interface LoginFormProps {
   onForgotPasswordClick: () => void;
@@ -41,6 +43,7 @@ export function LoginForm({
   const [authSuccess, setAuthSuccess] = React.useState(false);
   const [rememberMe, setRememberMe] = React.useState(true);
   const [isFirstLogin, setIsFirstLogin] = React.useState(false);
+  const [apiError, setApiError] = React.useState<string | null>(null);
 
   const form = useForm<LoginUserDTO>({
     resolver: zodResolver(loginUserBodySchema),
@@ -59,6 +62,7 @@ export function LoginForm({
   }, [email, form]);
 
   const onSubmit = async (values: LoginUserDTO) => {
+    setApiError(null);
     try {
       const loggedUser = await login(values.email, values.password);
       setAuthSuccess(true);
@@ -75,9 +79,32 @@ export function LoginForm({
         }, 500);
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to log in. Please check your credentials.");
+      const message = handleFormApiError(err, form.setError, "Failed to log in. Please check your credentials.");
+      
+      // Specifically format standard auth error messages
+      if (
+        message.toLowerCase().includes("invalid email or password") ||
+        message.toLowerCase().includes("invalid credentials") ||
+        err?.statusCode === 401
+      ) {
+        const authMsg = "Invalid email or password. Please verify your credentials and try again.";
+        setApiError(authMsg);
+        toast.error(authMsg);
+        form.setError("password", { type: "server", message: "Invalid credentials" });
+      } else if (
+        message.toLowerCase().includes("inactive") ||
+        message.toLowerCase().includes("disabled")
+      ) {
+        const disabledMsg = "This account is inactive or disabled. Please contact your organization administrator.";
+        setApiError(disabledMsg);
+        toast.error(disabledMsg);
+      } else {
+        setApiError(message);
+        toast.error(message);
+      }
     }
   };
+
 
   if (authSuccess) {
     return (
@@ -106,6 +133,15 @@ export function LoginForm({
         </p>
       </div>
 
+      {apiError && (
+        <Alert variant="destructive" className="border-destructive/30 bg-destructive/10 text-destructive text-xs py-2.5 px-3">
+          <AlertCircle className="size-4 shrink-0 text-destructive" />
+          <AlertDescription className="text-xs font-medium text-destructive leading-relaxed">
+            {apiError}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
@@ -123,6 +159,7 @@ export function LoginForm({
                       className="pl-9 text-sm h-10"
                       {...field}
                       onChange={(e) => {
+                        if (apiError) setApiError(null);
                         field.onChange(e);
                         setEmail(e.target.value);
                       }}
@@ -158,6 +195,10 @@ export function LoginForm({
                       placeholder="••••••••••••"
                       className="pl-9 pr-9 text-sm h-10"
                       {...field}
+                      onChange={(e) => {
+                        if (apiError) setApiError(null);
+                        field.onChange(e);
+                      }}
                       disabled={isLoading}
                     />
                     <button
@@ -175,6 +216,7 @@ export function LoginForm({
               </FormItem>
             )}
           />
+
 
           <div className="flex items-center space-x-2 pt-1">
             <Checkbox

@@ -8,7 +8,17 @@ export interface ApiResponse<T = any> {
   data?: T;
 }
 
+export interface ApiValidationIssue {
+  path: string;
+  message: string;
+  code?: string;
+}
+
 export class ApiError extends Error {
+  public code?: string;
+  public details?: any;
+  public issues?: ApiValidationIssue[];
+
   constructor(
     public statusCode: number,
     message: string,
@@ -16,40 +26,95 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = "ApiError";
+
+    if (data && typeof data === "object") {
+      if (data.error && typeof data.error === "object") {
+        this.code = data.error.code;
+        this.details = data.error.details;
+        if (data.error.details?.issues && Array.isArray(data.error.details.issues)) {
+          this.issues = data.error.details.issues;
+        }
+      } else {
+        this.code = data.code;
+        this.details = data.details;
+        if (data.details?.issues && Array.isArray(data.details.issues)) {
+          this.issues = data.details.issues;
+        } else if (Array.isArray(data.errors)) {
+          this.issues = data.errors.map((e: any) => ({
+            path: e.field || e.path || "",
+            message: e.message || String(e),
+            code: e.rule || e.code,
+          }));
+        }
+      }
+    }
   }
 }
 
-export function extractErrorMessage(body: any, fallback = "An unexpected network or server error occurred"): string {
+export function extractErrorMessage(
+  body: any,
+  fallback = "An unexpected network or server error occurred"
+): string {
   if (!body) return fallback;
   if (typeof body === "string") return body;
 
+  // 1. Nested body.error object
   if (body.error) {
     if (typeof body.error === "string") return body.error;
     if (typeof body.error === "object") {
-      if (typeof body.error.message === "string" && body.error.message.trim()) {
-        return body.error.message;
+      // If there are structured validation issues, extract and format them
+      if (
+        body.error.details?.issues &&
+        Array.isArray(body.error.details.issues) &&
+        body.error.details.issues.length > 0
+      ) {
+        return body.error.details.issues
+          .map((i: any) => i.message || `${i.path ? `${i.path}: ` : ""}${i.code || "Invalid value"}`)
+          .join(". ");
       }
+
+      // If details is an array of messages
       if (Array.isArray(body.error.details) && body.error.details.length > 0) {
         return body.error.details
           .map((d: any) => (typeof d === "string" ? d : d.message || JSON.stringify(d)))
-          .join(", ");
+          .join(". ");
       }
-      if (typeof body.error.details === "string") {
+
+      // If details is a string
+      if (typeof body.error.details === "string" && body.error.details.trim()) {
         return body.error.details;
+      }
+
+      // If error message is provided
+      if (typeof body.error.message === "string" && body.error.message.trim()) {
+        return body.error.message;
       }
     }
   }
 
-  if (typeof body.message === "string" && body.message.trim()) {
-    return body.message;
+  // 2. Top-level validation issues
+  if (
+    body.details?.issues &&
+    Array.isArray(body.details.issues) &&
+    body.details.issues.length > 0
+  ) {
+    return body.details.issues
+      .map((i: any) => i.message || `${i.path ? `${i.path}: ` : ""}${i.code || "Invalid value"}`)
+      .join(". ");
   }
 
   if (Array.isArray(body.errors) && body.errors.length > 0) {
     return body.errors
-      .map((e: any) => (typeof e === "string" ? e : e.message || JSON.stringify(e)))
-      .join(", ");
+      .map((e: any) => (typeof e === "string" ? e : e.message || `${e.field || "Error"}: ${e.rule || ""}`))
+      .join(". ");
   }
 
+  // 3. Top-level message
+  if (typeof body.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  // 4. Data payload message
   if (body.data && typeof body.data === "object") {
     if (typeof body.data.message === "string") return body.data.message;
     if (typeof body.data.error === "string") return body.data.error;
@@ -58,7 +123,10 @@ export function extractErrorMessage(body: any, fallback = "An unexpected network
   return fallback;
 }
 
-export function getErrorMessage(err: unknown, fallback = "An unexpected error occurred"): string {
+export function getErrorMessage(
+  err: unknown,
+  fallback = "An unexpected error occurred"
+): string {
   if (!err) return fallback;
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
@@ -68,6 +136,63 @@ export function getErrorMessage(err: unknown, fallback = "An unexpected error oc
   if (typeof err === "string") return err;
   return fallback;
 }
+
+/**
+ * Extracts field-specific errors from an ApiError or API response body.
+ * Returns a map of fieldName -> errorMessage.
+ */
+export function extractFieldErrors(err: unknown): Record<string, string> {
+  const fieldErrors: Record<string, string> = {};
+  if (!err) return fieldErrors;
+
+  if (err instanceof ApiError && err.issues) {
+    for (const issue of err.issues) {
+      if (issue.path) {
+        fieldErrors[issue.path] = issue.message;
+      }
+    }
+  } else if (typeof err === "object" && err !== null) {
+    const anyErr = err as any;
+    const issues =
+      anyErr.issues ||
+      anyErr.data?.error?.details?.issues ||
+      anyErr.data?.details?.issues ||
+      anyErr.errors;
+    if (Array.isArray(issues)) {
+      for (const issue of issues) {
+        const path = issue.path || issue.field;
+        const msg = issue.message;
+        if (path && msg) {
+          fieldErrors[path] = msg;
+        }
+      }
+    }
+  }
+
+  return fieldErrors;
+}
+
+/**
+ * Handles API errors in react-hook-form forms.
+ * Maps field-level errors to form.setError and returns the general error message.
+ */
+export function handleFormApiError(
+  err: unknown,
+  setError?: (name: any, error: { type?: string; message: string }) => void,
+  fallback = "An unexpected error occurred. Please try again."
+): string {
+  const message = getErrorMessage(err, fallback);
+  const fieldErrors = extractFieldErrors(err);
+
+  if (setError && Object.keys(fieldErrors).length > 0) {
+    for (const [field, fieldMessage] of Object.entries(fieldErrors)) {
+      setError(field as any, { type: "server", message: fieldMessage });
+    }
+  }
+
+  return message;
+}
+
 
 // In-Memory Access Token Storage (Security best practice: avoid localStorage for JWTs)
 let inMemoryAccessToken: string | null = null;

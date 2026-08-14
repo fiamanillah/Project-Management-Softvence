@@ -4,10 +4,14 @@
 
 model Department {
   id        String   @id @default(uuid()) @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
   code      String   @unique
   name      String
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
+
+  parent         Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  subDepartments Department[]  @relation("DepartmentHierarchy")
 
   managers        DepartmentManager[]
   teams           Team[]
@@ -15,6 +19,7 @@ model Department {
   scopeTargets    DesignationPermissionScopeTarget[]
   overrideTargets UserPermissionOverride[]
 
+  @@index([parentId])
   @@map("departments")
 }
 

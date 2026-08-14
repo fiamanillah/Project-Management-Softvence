@@ -31,7 +31,7 @@ import {
 import { Switch } from "@workspace/ui/components/switch";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, handleFormApiError } from "@/lib/api";
 import type { AdminUser } from "./UserTable";
 
 const editUserFormSchema = z.object({
@@ -91,9 +91,11 @@ export function EditUserSheet({
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message || "Failed to update user");
+      const message = handleFormApiError(err, form.setError, "Failed to update user");
+      toast.error(message);
     }
   };
+
 
   if (!user) return null;
 

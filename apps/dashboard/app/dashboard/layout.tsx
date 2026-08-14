@@ -44,12 +44,13 @@ export default function DashboardLayout({
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset className="relative z-0 flex flex-col min-h-screen">
+        <SidebarInset className="relative z-0 flex flex-col min-h-screen min-w-0 max-w-full overflow-x-hidden">
           <DashboardHeader />
-          <main className="flex-1 p-6 overflow-y-auto">
+          <main className="flex-1 p-4 sm:p-6 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
             {children}
           </main>
         </SidebarInset>
+
       </SidebarProvider>
     </TooltipProvider>
   )

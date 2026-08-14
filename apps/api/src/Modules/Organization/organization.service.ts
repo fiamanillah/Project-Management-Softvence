@@ -23,10 +23,44 @@ export class OrganizationService {
   // DEPARTMENTS MANAGEMENT
   // ==========================================
 
+  /**
+   * Recursively collect all descendant department IDs of a given department
+   */
+  public async getDepartmentDescendantIds(departmentId: string): Promise<string[]> {
+    const children = await this.prisma.department.findMany({
+      where: { parentId: departmentId },
+      select: { id: true },
+    });
+
+    if (children.length === 0) return [];
+
+    const childIds = children.map((c) => c.id);
+    const subChildIds = await Promise.all(
+      childIds.map((id) => this.getDepartmentDescendantIds(id)),
+    );
+
+    return [...childIds, ...subChildIds.flat()];
+  }
+
+  /**
+   * Check if a candidate department is a descendant of an ancestor department
+   */
+  public async isDescendant(ancestorId: string, candidateDescendantId: string): Promise<boolean> {
+    const descendantIds = await this.getDepartmentDescendantIds(ancestorId);
+    return descendantIds.includes(candidateDescendantId);
+  }
+
   public async getDepartments(actor?: AuthenticatedUser) {
     const departments = await this.prisma.department.findMany({
       orderBy: { name: "asc" },
       include: {
+        parent: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
         managers: {
           where: { unassignedAt: null },
           include: {
@@ -44,6 +78,7 @@ export class OrganizationService {
           select: {
             designations: true,
             teams: true,
+            subDepartments: true,
           },
         },
       },
@@ -70,6 +105,21 @@ export class OrganizationService {
     const department = await this.prisma.department.findUnique({
       where: { id },
       include: {
+        parent: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+        subDepartments: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            isActive: true,
+          },
+        },
         managers: {
           include: {
             user: {
@@ -89,6 +139,7 @@ export class OrganizationService {
           select: {
             designations: true,
             teams: true,
+            subDepartments: true,
           },
         },
       },
@@ -117,11 +168,33 @@ export class OrganizationService {
       throw new ConflictError(`Department code '${data.code}' already exists`);
     }
 
+    if (data.parentId) {
+      const parent = await this.prisma.department.findUnique({
+        where: { id: data.parentId },
+      });
+      if (!parent) {
+        throw new NotFoundError("Parent department");
+      }
+      if (!parent.isActive) {
+        throw new BadRequestError("Cannot assign an inactive department as parent");
+      }
+    }
+
     const dept = await this.prisma.department.create({
       data: {
         code: data.code,
         name: data.name,
+        parentId: data.parentId || null,
         isActive: data.isActive ?? true,
+      },
+      include: {
+        parent: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
       },
     });
     this.logger.info(`Department created: ${dept.code} (${dept.id})`);
@@ -143,11 +216,47 @@ export class OrganizationService {
     const dept = await this.prisma.department.findUnique({ where: { id } });
     if (!dept) throw new NotFoundError("Department");
 
+    if (data.parentId !== undefined) {
+      if (data.parentId === id) {
+        throw new BadRequestError("A department cannot be its own parent");
+      }
+
+      if (data.parentId !== null) {
+        const parent = await this.prisma.department.findUnique({
+          where: { id: data.parentId },
+        });
+        if (!parent) {
+          throw new NotFoundError("Parent department");
+        }
+        if (!parent.isActive) {
+          throw new BadRequestError("Cannot assign an inactive department as parent");
+        }
+
+        // Circular hierarchy check
+        const isCycle = await this.isDescendant(id, data.parentId);
+        if (isCycle) {
+          throw new BadRequestError(
+            "Circular department hierarchy detected. Cannot set a descendant as parent.",
+          );
+        }
+      }
+    }
+
     const updated = await this.prisma.department.update({
       where: { id },
       data: {
         ...(data.name && { name: data.name }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.parentId !== undefined && { parentId: data.parentId }),
+      },
+      include: {
+        parent: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -172,11 +281,18 @@ export class OrganizationService {
           select: {
             designations: true,
             teams: true,
+            subDepartments: true,
           },
         },
       },
     });
     if (!dept) throw new NotFoundError("Department");
+
+    if (dept._count.subDepartments > 0) {
+      throw new BadRequestError(
+        `Cannot delete department containing ${dept._count.subDepartments} sub-department(s). Delete or reassign sub-departments first.`,
+      );
+    }
 
     if (dept._count.designations > 0 || dept._count.teams > 0) {
       throw new BadRequestError(

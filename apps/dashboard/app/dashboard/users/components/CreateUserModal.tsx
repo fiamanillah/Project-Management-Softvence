@@ -43,7 +43,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, handleFormApiError } from "@/lib/api";
 
 const createUserFormSchema = z
   .object({
@@ -161,9 +161,14 @@ export function CreateUserModal({
 
       toast.success("User created and invitation generated!");
     } catch (err: any) {
-      toast.error(err.message || "Failed to create user");
+      const message = handleFormApiError(err, form.setError, "Failed to create user");
+      if (message.toLowerCase().includes("already exists")) {
+        form.setError("email", { type: "server", message: "A user with this email already exists" });
+      }
+      toast.error(message);
     }
   };
+
 
   const handleCopyCredentials = () => {
     if (!createdResult) return;

@@ -3,11 +3,13 @@ import { z } from "zod";
 export const createDepartmentSchema = z.object({
   code: z.string().min(2, "Code is required and must be at least 2 characters").transform((val) => val.toUpperCase()),
   name: z.string().min(2, "Name is required and must be at least 2 characters"),
+  parentId: z.string().uuid("Invalid parent department ID").optional().nullable(),
   isActive: z.boolean().optional().default(true),
 });
 
 export const updateDepartmentSchema = z.object({
   name: z.string().min(2, "Name is required and must be at least 2 characters").optional(),
+  parentId: z.string().uuid("Invalid parent department ID").optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -66,14 +68,22 @@ export interface DepartmentManagerItem {
 
 export interface DepartmentItem {
   id: string;
+  parentId?: string | null;
   code: string;
   name: string;
   isActive: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  parent?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+  subDepartments?: DepartmentItem[];
   managers?: DepartmentManagerItem[];
   _count?: {
     designations: number;
     teams: number;
+    subDepartments: number;
   };
 }

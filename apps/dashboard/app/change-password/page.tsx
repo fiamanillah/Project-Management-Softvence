@@ -6,7 +6,6 @@ import { useTheme } from "next-themes";
 import {
   useForm,
   zodResolver,
-  z,
   Form,
   FormControl,
   FormField,
@@ -19,6 +18,7 @@ import { Input } from "@workspace/ui/components/input";
 import { Card } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Progress } from "@workspace/ui/components/progress";
+import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 import {
   Layers,
   Sun,
@@ -34,31 +34,15 @@ import {
   ShieldCheck,
   LogOut,
   Mail,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-
-const changePasswordFormSchema = z
-  .object({
-    currentPassword: z.string().min(1, "Current/temporary password is required"),
-    newPassword: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-      .regex(/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "Password must contain at least one number or symbol"),
-    confirmPassword: z.string().min(1, "Please confirm your new password"),
-  })
-  .refine((data: { newPassword: string; currentPassword: string; confirmPassword: string }) => data.newPassword !== data.currentPassword, {
-    message: "New password must be different from current temporary password",
-    path: ["newPassword"],
-  })
-  .refine((data: { newPassword: string; currentPassword: string; confirmPassword: string }) => data.newPassword === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
-
-type ChangePasswordFormValues = z.infer<typeof changePasswordFormSchema>;
+import {
+  changePasswordFormSchema,
+  type ChangePasswordFormDTO,
+} from "@workspace/shared";
+import { handleFormApiError } from "@/lib/api";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -70,8 +54,9 @@ export default function ChangePasswordPage() {
   const [showNewPassword, setShowNewPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [isSuccess, setIsSuccess] = React.useState(false);
+  const [apiError, setApiError] = React.useState<string | null>(null);
 
-  const form = useForm<ChangePasswordFormValues>({
+  const form = useForm<ChangePasswordFormDTO>({
     resolver: zodResolver(changePasswordFormSchema),
     defaultValues: {
       currentPassword: "",
@@ -127,7 +112,8 @@ export default function ChangePasswordPage() {
     return { label: "Strong", color: "text-emerald-500" };
   };
 
-  const onSubmit = async (values: ChangePasswordFormValues) => {
+  const onSubmit = async (values: ChangePasswordFormDTO) => {
+    setApiError(null);
     try {
       await changePassword(values.currentPassword, values.newPassword);
       setIsSuccess(true);
@@ -136,9 +122,27 @@ export default function ChangePasswordPage() {
         router.push("/dashboard");
       }, 700);
     } catch (err: any) {
-      toast.error(err.message || "Failed to update password. Please verify your current password.");
+      const message = handleFormApiError(
+        err,
+        form.setError,
+        "Failed to update password. Please verify your current password."
+      );
+      if (message.toLowerCase().includes("current password is incorrect")) {
+        form.setError("currentPassword", {
+          type: "server",
+          message: "Current password is incorrect",
+        });
+      } else if (message.toLowerCase().includes("cannot be the same")) {
+        form.setError("newPassword", {
+          type: "server",
+          message: "New password cannot be the same as temporary password",
+        });
+      }
+      setApiError(message);
+      toast.error(message);
     }
   };
+
 
   const handleLogout = async () => {
     await logout();
@@ -218,6 +222,15 @@ export default function ChangePasswordPage() {
             <span className="ml-auto text-[11px] font-semibold text-primary">{user.systemRole}</span>
           </div>
 
+          {apiError && (
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive/10 text-destructive text-xs py-2.5 px-3">
+              <AlertCircle className="size-4 shrink-0 text-destructive" />
+              <AlertDescription className="text-xs font-medium text-destructive leading-relaxed">
+                {apiError}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {isSuccess ? (
             <div className="py-6 text-center space-y-3">
               <div className="mx-auto size-12 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -246,6 +259,10 @@ export default function ChangePasswordPage() {
                             placeholder="Enter temporary password"
                             className="pl-9 pr-9 text-sm h-10"
                             {...field}
+                            onChange={(e) => {
+                              if (apiError) setApiError(null);
+                              field.onChange(e);
+                            }}
                             disabled={isSubmitting}
                           />
                           <button
@@ -286,6 +303,10 @@ export default function ChangePasswordPage() {
                             placeholder="••••••••••••"
                             className="pl-9 pr-9 text-sm h-10"
                             {...field}
+                            onChange={(e) => {
+                              if (apiError) setApiError(null);
+                              field.onChange(e);
+                            }}
                             disabled={isSubmitting}
                           />
                           <button
@@ -322,8 +343,13 @@ export default function ChangePasswordPage() {
                             placeholder="••••••••••••"
                             className="pl-9 pr-9 text-sm h-10"
                             {...field}
+                            onChange={(e) => {
+                              if (apiError) setApiError(null);
+                              field.onChange(e);
+                            }}
                             disabled={isSubmitting}
                           />
+
                           <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
