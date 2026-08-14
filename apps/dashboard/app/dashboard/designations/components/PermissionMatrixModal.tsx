@@ -248,7 +248,7 @@ export function PermissionMatrixModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
+      <DialogContent className="sm:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
         <DialogHeader className="pb-2">
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="size-5 text-primary" /> Permission Matrix: {designation.name} ({designation.code})
@@ -332,7 +332,7 @@ export function PermissionMatrixModal({
             </AlertDescription>
           </Alert>
         ) : (
-          <ScrollArea className="h-[420px] w-full pr-3 border rounded-lg p-3 bg-card/50">
+          <ScrollArea className="flex-1 min-h-[360px] max-h-[calc(90vh-220px)] w-full pr-3 border rounded-lg p-3 bg-card/50">
             <div className="space-y-6 pr-2">
               {Object.keys(groupedModules).length === 0 ? (
                 <p className="text-xs text-center text-muted-foreground py-8">
@@ -396,7 +396,7 @@ export function PermissionMatrixModal({
                                   : "bg-card hover:bg-accent/30 border-border/60"
                               }`}
                             >
-                              <div className="flex items-start gap-3 max-w-md">
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
                                 <Checkbox
                                   checked={isChecked}
                                   onCheckedChange={(checked) =>
@@ -407,36 +407,47 @@ export function PermissionMatrixModal({
                                 />
                                 <Label
                                   htmlFor={`matrix-perm-${p.id}`}
-                                  className="space-y-0.5 cursor-pointer select-none"
+                                  className="space-y-0.5 cursor-pointer select-none flex-1 min-w-0"
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold text-xs font-mono text-foreground">
                                       {p.code}
                                     </span>
                                   </div>
-                                  <p className="text-xs text-muted-foreground">{p.description}</p>
+                                  <p className="text-xs text-muted-foreground break-words">{p.description}</p>
                                 </Label>
                               </div>
 
-                              <div className="w-full sm:w-60 shrink-0 pl-7 sm:pl-0">
-                                <Select
-                                  value={currentScopeId}
-                                  onValueChange={(val: string | null) => handleScopeChange(p.id, val)}
-                                >
-                                  <SelectTrigger className="h-9 text-xs">
-                                    <SelectValue placeholder="🚫 No Access (Not Included)" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="NONE" className="text-rose-600 font-medium">
-                                      🚫 No Access (Not Included)
-                                    </SelectItem>
-                                    {scopeTypes.map((st) => (
-                                      <SelectItem key={st.id} value={st.id}>
-                                        ⚡ {st.name} ({st.resolutionStrategy})
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                              <div className="w-full sm:w-72 shrink-0 pl-7 sm:pl-0">
+                                {(() => {
+                                  const selectedScope = scopeTypes.find((st) => st.id === currentScopeId);
+                                  return (
+                                    <Select
+                                      value={currentScopeId}
+                                      onValueChange={(val: string | null) => handleScopeChange(p.id, val)}
+                                    >
+                                      <SelectTrigger className="w-full h-9 text-xs">
+                                        <SelectValue placeholder="🚫 No Access (Not Included)">
+                                          {currentScopeId === "NONE"
+                                            ? "🚫 No Access (Not Included)"
+                                            : selectedScope
+                                            ? `⚡ ${selectedScope.name} (${selectedScope.resolutionStrategy})`
+                                            : undefined}
+                                        </SelectValue>
+                                      </SelectTrigger>
+                                      <SelectContent className="w-full">
+                                        <SelectItem value="NONE" className="text-rose-600 font-medium">
+                                          🚫 No Access (Not Included)
+                                        </SelectItem>
+                                        {scopeTypes.map((st) => (
+                                          <SelectItem key={st.id} value={st.id}>
+                                            ⚡ {st.name} ({st.resolutionStrategy})
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  );
+                                })()}
                               </div>
                             </div>
                           );

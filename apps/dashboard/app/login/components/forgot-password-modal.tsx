@@ -1,9 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Button } from "@workspace/ui/components/button"
-import { Input } from "@workspace/ui/components/input"
-import { Label } from "@workspace/ui/components/label"
+import * as React from "react";
+import {
+  useForm,
+  zodResolver,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@workspace/ui/components/form";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
 import {
   Dialog,
   DialogContent,
@@ -11,13 +20,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@workspace/ui/components/dialog"
-import { Mail, Check, KeyRound, Loader2 } from "lucide-react"
+} from "@workspace/ui/components/dialog";
+import { Mail, Check, KeyRound, Loader2 } from "lucide-react";
+import { forgotPasswordBodySchema, type ForgotPasswordDTO } from "@workspace/shared";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 interface ForgotPasswordModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  defaultEmail?: string
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultEmail?: string;
 }
 
 export function ForgotPasswordModal({
@@ -25,32 +37,42 @@ export function ForgotPasswordModal({
   onOpenChange,
   defaultEmail = "",
 }: ForgotPasswordModalProps) {
-  const [resetEmail, setResetEmail] = React.useState(defaultEmail)
-  const [isLoading, setIsLoading] = React.useState(false)
-  const [resetEmailSent, setResetEmailSent] = React.useState(false)
+  const [resetEmailSent, setResetEmailSent] = React.useState(false);
+
+  const form = useForm<ForgotPasswordDTO>({
+    resolver: zodResolver(forgotPasswordBodySchema),
+    defaultValues: {
+      email: defaultEmail || "",
+    },
+    mode: "onTouched",
+  });
 
   React.useEffect(() => {
     if (defaultEmail) {
-      setResetEmail(defaultEmail)
+      form.setValue("email", defaultEmail, { shouldValidate: true });
     }
-  }, [defaultEmail])
+  }, [defaultEmail, form]);
 
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
-      setResetEmailSent(true)
-    }, 1000)
-  }
+  const onSubmit = async (values: ForgotPasswordDTO) => {
+    try {
+      await api.post("/auth/forgot-password", { email: values.email });
+      setResetEmailSent(true);
+      toast.success("Password reset instructions sent.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to request password reset.");
+    }
+  };
 
   const handleClose = () => {
-    setResetEmailSent(false)
-    onOpenChange(false)
-  }
+    setResetEmailSent(false);
+    form.reset();
+    onOpenChange(false);
+  };
+
+  const isLoading = form.formState.isSubmitting;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base font-bold flex items-center gap-2">
@@ -69,7 +91,7 @@ export function ForgotPasswordModal({
             </div>
             <h4 className="font-semibold text-sm">Reset link sent</h4>
             <p className="text-xs text-muted-foreground">
-              Check your inbox for reset instructions.
+              Check your inbox for password reset instructions.
             </p>
             <Button
               variant="outline"
@@ -81,48 +103,56 @@ export function ForgotPasswordModal({
             </Button>
           </div>
         ) : (
-          <form onSubmit={handleResetPasswordSubmit} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="reset-email" className="text-xs font-medium">
-                Work Email
-              </Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  id="reset-email"
-                  type="email"
-                  placeholder="name@company.com"
-                  className="pl-9 text-sm h-10"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                className="text-xs"
-              >
-                Cancel
-              </Button>
-              <Button type="submit" className="text-xs" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin mr-1" />
-                    Sending...
-                  </>
-                ) : (
-                  "Send link"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Work Email</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                        <Input
+                          type="email"
+                          placeholder="name@company.com"
+                          className="pl-9 text-sm h-10"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </Button>
-            </DialogFooter>
-          </form>
+              />
+
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleClose()}
+                  className="text-xs"
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="text-xs gap-1.5" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Instructions"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }

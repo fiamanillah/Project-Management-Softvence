@@ -8,6 +8,7 @@ import type {
   UpdateDepartmentDTO,
   AssignDepartmentManagerDTO,
   CreateDesignationDTO,
+  UpdateDesignationDTO,
   SavePermissionAssignmentsDTO,
 } from "./OrganizationDTO";
 
@@ -419,6 +420,203 @@ export class OrganizationService {
     });
 
     return desig;
+  }
+
+  public async updateDesignation(
+    designationId: string,
+    data: UpdateDesignationDTO,
+    grantedByUserId?: string,
+    req?: Request,
+  ) {
+    const existing = await this.prisma.designation.findUnique({
+      where: { id: designationId },
+      include: {
+        department: true,
+        permissions: { include: { scopeTargets: true } },
+      },
+    });
+    if (!existing) throw new NotFoundError("Designation");
+
+    if (data.departmentId) {
+      const dept = await this.prisma.department.findUnique({
+        where: { id: data.departmentId },
+      });
+      if (!dept) throw new NotFoundError("Department");
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedDesig = await tx.designation.update({
+        where: { id: designationId },
+        data: {
+          name: data.name ?? undefined,
+          departmentId: data.departmentId ?? undefined,
+          hierarchyLevel: data.hierarchyLevel ?? undefined,
+          isLeadership: data.isLeadership !== undefined ? data.isLeadership : undefined,
+        },
+        include: {
+          department: true,
+          _count: {
+            select: {
+              permissions: true,
+              users: true,
+            },
+          },
+        },
+      });
+
+      if (data.assignments !== undefined) {
+        let granterId: string | undefined;
+        if (grantedByUserId) {
+          const userExists = await tx.user.findUnique({
+            where: { id: grantedByUserId },
+            select: { id: true },
+          });
+          if (userExists) granterId = grantedByUserId;
+        }
+        if (!granterId) {
+          const firstUser = await tx.user.findFirst({ select: { id: true } });
+          if (firstUser) granterId = firstUser.id;
+        }
+        if (!granterId) {
+          const sysUser = await tx.user.create({
+            data: {
+              employeeId: `SYS-${Date.now()}`,
+              email: `system-${Date.now()}@internal.app`,
+              passwordHash: "system",
+              firstName: "System",
+              lastName: "Granter",
+              systemRole: "SuperAdmin",
+              designationId: updatedDesig.id,
+            },
+          });
+          granterId = sysUser.id;
+        }
+
+        const existingGrants = await tx.designationPermission.findMany({
+          where: { designationId },
+          select: { id: true },
+        });
+        const grantIds = existingGrants.map((g) => g.id);
+
+        if (grantIds.length > 0) {
+          await tx.designationPermissionScopeTarget.deleteMany({
+            where: { designationPermissionId: { in: grantIds } },
+          });
+          await tx.designationPermission.deleteMany({
+            where: { designationId },
+          });
+        }
+
+        for (const item of data.assignments) {
+          const grant = await tx.designationPermission.create({
+            data: {
+              designationId,
+              permissionId: item.permissionId,
+              scopeTypeId: item.scopeTypeId,
+              grantedBy: granterId,
+            },
+          });
+
+          if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
+            for (const deptId of item.targetDepartmentIds) {
+              await tx.designationPermissionScopeTarget.create({
+                data: {
+                  designationPermissionId: grant.id,
+                  departmentId: deptId,
+                },
+              });
+            }
+          }
+
+          if (item.targetTeamIds && item.targetTeamIds.length > 0) {
+            for (const teamId of item.targetTeamIds) {
+              await tx.designationPermissionScopeTarget.create({
+                data: {
+                  designationPermissionId: grant.id,
+                  teamId: teamId,
+                },
+              });
+            }
+          }
+
+          if (item.targetProjectIds && item.targetProjectIds.length > 0) {
+            for (const projId of item.targetProjectIds) {
+              await tx.designationPermissionScopeTarget.create({
+                data: {
+                  designationPermissionId: grant.id,
+                  projectId: projId,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      return updatedDesig;
+    });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DESIGNATION_UPDATE",
+      entityTable: "Designation",
+      entityId: designationId,
+      oldPayload: existing,
+      newPayload: updated,
+      req,
+    });
+
+    return updated;
+  }
+
+  public async deleteDesignation(designationId: string, req?: Request) {
+    const existing = await this.prisma.designation.findUnique({
+      where: { id: designationId },
+      include: {
+        _count: {
+          select: { users: true },
+        },
+      },
+    });
+    if (!existing) throw new NotFoundError("Designation");
+
+    if (existing._count.users > 0) {
+      throw new BadRequestError(
+        `Cannot delete designation assigned to ${existing._count.users} active user(s). Reassign them first.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const existingGrants = await tx.designationPermission.findMany({
+        where: { designationId },
+        select: { id: true },
+      });
+      const grantIds = existingGrants.map((g) => g.id);
+
+      if (grantIds.length > 0) {
+        await tx.designationPermissionScopeTarget.deleteMany({
+          where: { designationPermissionId: { in: grantIds } },
+        });
+        await tx.designationPermission.deleteMany({
+          where: { designationId },
+        });
+      }
+
+      await tx.designation.delete({
+        where: { id: designationId },
+      });
+    });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DESIGNATION_DELETE",
+      entityTable: "Designation",
+      entityId: designationId,
+      oldPayload: existing,
+      newPayload: undefined,
+      req,
+    });
+
+    return { message: "Designation deleted successfully" };
   }
 
   public async getDesignationPermissions(designationId: string) {

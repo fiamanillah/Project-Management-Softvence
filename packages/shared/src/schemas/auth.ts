@@ -56,16 +56,29 @@ export const resetPasswordSchema = {
 
 export type ResetPasswordDTO = z.infer<typeof resetPasswordBodySchema>;
 
+export const changePasswordBodySchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+export const changePasswordSchema = {
+  body: changePasswordBodySchema,
+};
+
+export type ChangePasswordDTO = z.infer<typeof changePasswordBodySchema>;
+
 export const authResponseDataSchema = z.object({
   user: z.object({
     id: z.string(),
     email: z.string(),
-    firstName: z.string(),
-    lastName: z.string(),
+    firstName: z.string().optional().nullable(),
+    lastName: z.string().optional().nullable(),
     systemRole: z.string(),
-    designationId: z.string(),
+    designationId: z.string().optional().nullable(),
+    mustChangePassword: z.boolean().optional(),
   }),
   accessToken: z.string().optional(),
 });
 
 export type AuthResponseData = z.infer<typeof authResponseDataSchema>;
+

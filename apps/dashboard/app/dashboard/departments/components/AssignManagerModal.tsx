@@ -11,13 +11,6 @@ import {
 } from "@workspace/ui/components/dialog";
 import { Button } from "@workspace/ui/components/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@workspace/ui/components/select";
-import {
   FieldSet,
   FieldGroup,
   Field,
@@ -26,7 +19,8 @@ import {
   FieldError,
 } from "@workspace/ui/components/field";
 import { Badge } from "@workspace/ui/components/badge";
-import { Loader2, UserCheck, UserX, Trash2 } from "lucide-react";
+import { UserSearchSelect, type UserItem } from "@/components/user-search-select";
+import { Loader2, UserCheck, UserX, Trash2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { assignDepartmentManagerSchema, type DepartmentItem } from "@workspace/shared";
@@ -38,13 +32,6 @@ interface AssignManagerModalProps {
   onSuccess: () => void;
 }
 
-interface UserOption {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-}
-
 export function AssignManagerModal({
   department,
   open,
@@ -52,35 +39,26 @@ export function AssignManagerModal({
   onSuccess,
 }: AssignManagerModalProps) {
   const [selectedUserId, setSelectedUserId] = React.useState("");
-  const [users, setUsers] = React.useState<UserOption[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = React.useState(false);
+  const [selectedUser, setSelectedUser] = React.useState<UserItem | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [unassigningManagerId, setUnassigningManagerId] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   const activeManagers = department?.managers?.filter((m) => !m.unassignedAt) || [];
+  const assignedUserIds = activeManagers.map((m) => m.userId || m.user?.id).filter(Boolean) as string[];
 
-  const fetchUsers = React.useCallback(async () => {
-    setIsLoadingUsers(true);
-    try {
-      const res = await api.get("/users");
-      // Handle both array response or paginated response { items: [...] }
-      const userList = Array.isArray(res) ? res : res?.items || res?.data || [];
-      setUsers(userList);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load user list");
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  }, []);
+  const resetForm = () => {
+    setSelectedUserId("");
+    setSelectedUser(null);
+    setErrors({});
+  };
 
-  React.useEffect(() => {
-    if (open) {
-      fetchUsers();
-      setSelectedUserId("");
-      setErrors({});
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetForm();
     }
-  }, [open, fetchUsers]);
+    onOpenChange(nextOpen);
+  };
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,10 +87,11 @@ export function AssignManagerModal({
       await api.post(`/organization/departments/${department.id}/managers`, validationResult.data);
 
       toast.success("Department manager assigned successfully!");
-      setSelectedUserId("");
+      resetForm();
       onSuccess();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to assign manager");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to assign manager";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -125,36 +104,42 @@ export function AssignManagerModal({
       await api.delete(`/organization/departments/${department.id}/managers/${managerId}`);
       toast.success("Manager unassigned successfully!");
       onSuccess();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to unassign manager");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to unassign manager";
+      toast.error(msg);
     } finally {
       setUnassigningManagerId(null);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
             <UserCheck className="size-5 text-primary" /> Department Managers
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Manage active manager assignments for{" "}
             <span className="font-semibold text-foreground">{department?.name}</span> (
             <span className="font-mono text-primary">{department?.code}</span>).
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="space-y-5 py-1">
           {/* Active Managers Section */}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Currently Assigned Manager(s)
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Currently Assigned Manager(s)
+              </h4>
+              <Badge variant="outline" className="text-[11px] font-normal">
+                {activeManagers.length} Active
+              </Badge>
+            </div>
 
             {activeManagers.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                 {activeManagers.map((mgr) => {
                   const userFirstName = mgr.user?.firstName || "";
                   const userLastName = mgr.user?.lastName || "";
@@ -170,17 +155,17 @@ export function AssignManagerModal({
                   return (
                     <div
                       key={mgr.id}
-                      className="flex items-center justify-between p-2.5 rounded-lg border bg-card/60"
+                      className="flex items-center justify-between p-2.5 rounded-lg border bg-card/80 shadow-2xs"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Badge variant="secondary" className="size-7 rounded-full p-0 flex items-center justify-center font-bold">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
                           {avatarChar}
-                        </Badge>
+                        </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-sm font-medium truncate">
+                          <span className="text-xs font-medium truncate text-foreground">
                             {displayName}
                           </span>
-                          <span className="text-xs text-muted-foreground truncate">
+                          <span className="text-[11px] text-muted-foreground truncate font-mono">
                             {userEmail}
                           </span>
                         </div>
@@ -189,17 +174,17 @@ export function AssignManagerModal({
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        size="xs"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2"
                         onClick={() => handleUnassign(mgr.id)}
                         disabled={unassigningManagerId === mgr.id}
                       >
                         {unassigningManagerId === mgr.id ? (
-                          <Loader2 className="size-4 animate-spin" />
+                          <Loader2 className="size-3.5 animate-spin" />
                         ) : (
-                          <Trash2 className="size-4" />
+                          <Trash2 className="size-3.5 mr-1" />
                         )}
-                        <span className="sr-only">Unassign</span>
+                        <span>Unassign</span>
                       </Button>
                     </div>
                   );
@@ -208,55 +193,58 @@ export function AssignManagerModal({
             ) : (
               <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground border border-dashed rounded-lg bg-muted/20">
                 <UserX className="size-4 text-muted-foreground/60" />
-                No manager assigned to this department.
+                No manager assigned to this department yet.
               </div>
             )}
           </div>
 
           {/* Assign New Manager Form */}
-          <form onSubmit={handleAssign} className="space-y-4 pt-2 border-t">
+          <form onSubmit={handleAssign} className="space-y-4 pt-3 border-t">
             <FieldSet>
               <FieldGroup>
                 <Field data-invalid={Boolean(errors.userId)}>
-                  <FieldLabel htmlFor="select-manager">Assign New Manager</FieldLabel>
-                  <Select
+                  <FieldLabel htmlFor="user-select-field">Assign New Manager</FieldLabel>
+                  <UserSearchSelect
+                    id="user-select-field"
                     value={selectedUserId}
-                    onValueChange={(val: any) => {
-                      if (val) {
-                        setSelectedUserId(val);
-                        if (errors.userId) setErrors((prev) => ({ ...prev, userId: "" }));
-                      }
+                    onValueChange={(val, user) => {
+                      setSelectedUserId(val);
+                      setSelectedUser(user);
+                      if (errors.userId) setErrors((prev) => ({ ...prev, userId: "" }));
                     }}
-                    disabled={isLoadingUsers || isSubmitting}
-                  >
-                    <SelectTrigger id="select-manager">
-                      <SelectValue
-                        placeholder={
-                          isLoadingUsers ? "Loading users..." : "Select user to assign..."
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.firstName} {u.lastName} ({u.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription>
-                    Assigning a new manager will set them as the primary active manager for this department.
-                  </FieldDescription>
+                    placeholder="Search and select a user to assign..."
+                    searchPlaceholder="Search by name, email, employee ID, role, designation..."
+                    excludeUserIds={assignedUserIds}
+                    pageSize={6}
+                    disabled={isSubmitting}
+                    data-invalid={Boolean(errors.userId)}
+                  />
                   <FieldError errors={errors.userId} />
                 </Field>
               </FieldGroup>
             </FieldSet>
 
+            {/* Selection Confirmation Preview */}
+            {selectedUser && (
+              <div className="flex items-center justify-between mt-2.5 p-2.5 rounded-lg border border-primary/20 bg-primary/5 text-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="size-4 text-primary shrink-0" />
+                  <span>
+                    Ready to assign{" "}
+                    <strong className="text-foreground">
+                      {selectedUser.firstName} {selectedUser.lastName}
+                    </strong>{" "}
+                    as department manager.
+                  </span>
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="pt-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={isSubmitting}
               >
                 Close

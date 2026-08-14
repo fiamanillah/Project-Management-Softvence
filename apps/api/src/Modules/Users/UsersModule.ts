@@ -53,6 +53,11 @@ export class UsersModule extends BaseModule {
       validateRequest({ body: updateAdminUserSchema }),
       controller.updateUser.bind(controller),
     );
+    this.router.post(
+      "/:id/resend-invite",
+      requirePermission("auth.user.manage"),
+      controller.resendInvite.bind(controller),
+    );
 
     // Overrides
     this.router.get(

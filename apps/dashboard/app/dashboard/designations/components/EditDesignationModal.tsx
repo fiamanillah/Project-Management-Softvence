@@ -28,20 +28,25 @@ import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/al
 import {
   Loader2,
   ShieldCheck,
-  UserCheck,
+  Pencil,
   Search,
   CheckSquare,
   Square,
   AlertCircle,
   RefreshCw,
+  Save,
+  Building,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import type { DesignationItem } from "./DesignationTable";
 
-interface CreateDesignationModalProps {
+interface EditDesignationModalProps {
+  designation: DesignationItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   departments: { id: string; name: string; code: string }[];
+  initialTab?: "details" | "permissions";
   onSuccess: () => void;
 }
 
@@ -59,14 +64,15 @@ interface ScopeTypeItem {
   resolutionStrategy: string;
 }
 
-export function CreateDesignationModal({
+export function EditDesignationModal({
+  designation,
   open,
   onOpenChange,
   departments,
+  initialTab = "details",
   onSuccess,
-}: CreateDesignationModalProps) {
-  const [activeTab, setActiveTab] = React.useState("details");
-  const [code, setCode] = React.useState("");
+}: EditDesignationModalProps) {
+  const [activeTab, setActiveTab] = React.useState<string>(initialTab);
   const [name, setName] = React.useState("");
   const [departmentId, setDepartmentId] = React.useState("");
   const [hierarchyLevel, setHierarchyLevel] = React.useState(3);
@@ -78,34 +84,53 @@ export function CreateDesignationModal({
   const [permissions, setPermissions] = React.useState<PermissionItem[]>([]);
   const [scopeTypes, setScopeTypes] = React.useState<ScopeTypeItem[]>([]);
   const [selectedScopes, setSelectedScopes] = React.useState<Record<string, string>>({}); // permissionId -> scopeTypeId
-  const [isFetchingPermissions, setIsFetchingPermissions] = React.useState(false);
+  const [isFetchingData, setIsFetchingData] = React.useState(false);
   const [fetchError, setFetchError] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  const loadPermissionData = React.useCallback(async () => {
-    setIsFetchingPermissions(true);
+  const loadData = React.useCallback(async () => {
+    if (!designation) return;
+    setIsFetchingData(true);
     setFetchError(null);
     try {
-      const [perms, scopes] = await Promise.all([
+      const [perms, scopes, desigData] = await Promise.all([
         api.get("/permissions"),
         api.get("/permissions/scope-types"),
+        api.get(`/organization/designations/${designation.id}/permissions`),
       ]);
+
       setPermissions(Array.isArray(perms) ? perms : []);
       setScopeTypes(Array.isArray(scopes) ? scopes : []);
+
+      // Build mapping of existing permissions -> scopeTypeId
+      const mapping: Record<string, string> = {};
+      if (desigData && Array.isArray(desigData.permissions)) {
+        for (const item of desigData.permissions) {
+          mapping[item.permissionId] = item.scopeTypeId;
+        }
+      }
+      setSelectedScopes(mapping);
     } catch (err: any) {
-      const errMsg = err.message || "Failed to load permission definitions";
+      const errMsg = err.message || "Failed to load designation permission matrix";
       setFetchError(errMsg);
       toast.error(errMsg);
     } finally {
-      setIsFetchingPermissions(false);
+      setIsFetchingData(false);
     }
-  }, []);
+  }, [designation]);
 
   React.useEffect(() => {
-    if (open) {
-      loadPermissionData();
+    if (open && designation) {
+      setName(designation.name || "");
+      setDepartmentId(designation.department?.id || "");
+      setHierarchyLevel(designation.hierarchyLevel || 3);
+      setIsLeadership(Boolean(designation.isLeadership));
+      setActiveTab(initialTab);
+      setSearchQuery("");
+      setFormErrors({});
+      loadData();
     }
-  }, [open, loadPermissionData]);
+  }, [open, designation, initialTab, loadData]);
 
   const getDefaultScopeId = React.useCallback(() => {
     if (scopeTypes && scopeTypes.length > 0 && scopeTypes[0]) {
@@ -167,25 +192,12 @@ export function CreateDesignationModal({
     });
   };
 
-  const handleResetForm = () => {
-    setCode("");
-    setName("");
-    setDepartmentId("");
-    setHierarchyLevel(3);
-    setIsLeadership(false);
-    setSelectedScopes({});
-    setSearchQuery("");
-    setActiveTab("details");
-    setFormErrors({});
-    setFetchError(null);
-  };
-
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!code.trim()) errors.code = "Designation code is required";
     if (!name.trim()) errors.name = "Designation title is required";
     if (!departmentId) errors.departmentId = "Please select a department";
-    if (hierarchyLevel < 1 || hierarchyLevel > 10) errors.hierarchyLevel = "Hierarchy level must be between 1 and 10";
+    if (hierarchyLevel < 1 || hierarchyLevel > 10)
+      errors.hierarchyLevel = "Hierarchy level must be between 1 and 10";
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -193,6 +205,8 @@ export function CreateDesignationModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!designation) return;
+
     if (!validateForm()) {
       toast.error("Please fill in all required fields correctly.");
       setActiveTab("details");
@@ -208,8 +222,7 @@ export function CreateDesignationModal({
           scopeTypeId,
         }));
 
-      await api.post("/organization/designations", {
-        code: code.trim().toUpperCase(),
+      await api.put(`/organization/designations/${designation.id}`, {
         name: name.trim(),
         departmentId,
         hierarchyLevel,
@@ -217,12 +230,11 @@ export function CreateDesignationModal({
         assignments,
       });
 
-      toast.success("Designation created successfully with initial permissions!");
+      toast.success(`Designation '${name}' updated successfully!`);
       onOpenChange(false);
       onSuccess();
-      handleResetForm();
     } catch (err: any) {
-      toast.error(err.message || "Failed to create designation");
+      toast.error(err.message || "Failed to update designation");
     } finally {
       setIsLoading(false);
     }
@@ -252,7 +264,9 @@ export function CreateDesignationModal({
 
   const configuredCount = Object.keys(selectedScopes).length;
   const totalFilteredCount = filteredPermissions.length;
-  const isAllFilteredChecked = totalFilteredCount > 0 && filteredPermissions.every((p) => Boolean(selectedScopes[p.id]));
+  const isAllFilteredChecked =
+    totalFilteredCount > 0 &&
+    filteredPermissions.every((p) => Boolean(selectedScopes[p.id]));
 
   const handleToggleAllFiltered = (shouldInclude: boolean) => {
     const defaultScopeId = getDefaultScopeId();
@@ -276,18 +290,25 @@ export function CreateDesignationModal({
     });
   };
 
+  if (!designation) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(val) => {
-      if (!val) handleResetForm();
-      onOpenChange(val);
-    }}>
-      <DialogContent className="sm:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserCheck className="size-5 text-primary" /> Create New Designation
+            <Pencil className="size-5 text-primary" /> Edit Designation: {designation.name}
+            <Badge variant="outline" className="ml-1 font-mono text-xs">
+              {designation.code}
+            </Badge>
+            {configuredCount > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[11px] px-2 py-0 bg-primary/20 text-primary border-primary/30 font-bold">
+                {configuredCount} Grants
+              </Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
-            Configure organizational role metadata and grant initial task permission access.
+            Update designation details and fine-grained permission scope matrix assignments.
           </DialogDescription>
         </DialogHeader>
 
@@ -295,7 +316,7 @@ export function CreateDesignationModal({
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
             <TabsList className="grid grid-cols-2 w-full">
               <TabsTrigger value="details" className="gap-2">
-                <UserCheck className="size-4" /> Designation Details
+                <Building className="size-4" /> Designation Details
                 {Object.keys(formErrors).length > 0 && (
                   <Badge variant="destructive" className="ml-1 text-[10px] px-1.5 py-0 font-bold">
                     !
@@ -303,7 +324,7 @@ export function CreateDesignationModal({
                 )}
               </TabsTrigger>
               <TabsTrigger value="permissions" className="gap-2">
-                <ShieldCheck className="size-4" /> Permissions & Access
+                <ShieldCheck className="size-4" /> Permission Matrix
                 {configuredCount > 0 && (
                   <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 bg-primary/20 text-primary border-primary/30 font-bold">
                     {configuredCount}
@@ -313,38 +334,36 @@ export function CreateDesignationModal({
             </TabsList>
 
             {/* TAB 1: DETAILS */}
-            <TabsContent value="details" className="space-y-4 pt-4 flex-1 overflow-y-auto">
+            <TabsContent value="details" className="space-y-4 pt-4 flex-1 overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="designation-code" className="text-xs font-medium">Designation Code <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="edit-designation-code" className="text-xs font-medium">
+                    Designation Code
+                  </Label>
                   <Input
-                    id="designation-code"
-                    placeholder="SR_DEV"
-                    value={code}
-                    onChange={(e) => {
-                      setCode(e.target.value.toUpperCase());
-                      if (formErrors.code) setFormErrors((prev) => ({ ...prev, code: "" }));
-                    }}
-                    aria-invalid={Boolean(formErrors.code)}
-                    className={formErrors.code ? "border-destructive focus-visible:ring-destructive" : ""}
+                    id="edit-designation-code"
+                    value={designation.code}
+                    disabled
+                    className="bg-muted font-mono font-bold text-muted-foreground"
                   />
-                  {formErrors.code && (
-                    <p className="text-[11px] text-destructive flex items-center gap-1">
-                      <AlertCircle className="size-3" /> {formErrors.code}
-                    </p>
-                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Code is unique and permanently assigned.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="hierarchy-level" className="text-xs font-medium">Hierarchy Level (1-10) <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="edit-hierarchy-level" className="text-xs font-medium">
+                    Hierarchy Level (1-10) <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    id="hierarchy-level"
+                    id="edit-hierarchy-level"
                     type="number"
                     min={1}
                     max={10}
                     value={hierarchyLevel}
                     onChange={(e) => {
                       setHierarchyLevel(Number(e.target.value));
-                      if (formErrors.hierarchyLevel) setFormErrors((prev) => ({ ...prev, hierarchyLevel: "" }));
+                      if (formErrors.hierarchyLevel)
+                        setFormErrors((prev) => ({ ...prev, hierarchyLevel: "" }));
                     }}
                     aria-invalid={Boolean(formErrors.hierarchyLevel)}
                     className={formErrors.hierarchyLevel ? "border-destructive focus-visible:ring-destructive" : ""}
@@ -358,9 +377,11 @@ export function CreateDesignationModal({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="designation-title" className="text-xs font-medium">Designation Title <span className="text-destructive">*</span></Label>
+                <Label htmlFor="edit-designation-title" className="text-xs font-medium">
+                  Designation Title <span className="text-destructive">*</span>
+                </Label>
                 <Input
-                  id="designation-title"
+                  id="edit-designation-title"
                   placeholder="Senior Software Engineer"
                   value={name}
                   onChange={(e) => {
@@ -378,7 +399,9 @@ export function CreateDesignationModal({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="department-select" className="text-xs font-medium">Department <span className="text-destructive">*</span></Label>
+                <Label htmlFor="edit-department-select" className="text-xs font-medium">
+                  Department <span className="text-destructive">*</span>
+                </Label>
                 {(() => {
                   const selectedDept = departments.find((d) => d.id === departmentId);
                   return (
@@ -387,12 +410,13 @@ export function CreateDesignationModal({
                       onValueChange={(val: string | null) => {
                         if (val) {
                           setDepartmentId(val);
-                          if (formErrors.departmentId) setFormErrors((prev) => ({ ...prev, departmentId: "" }));
+                          if (formErrors.departmentId)
+                            setFormErrors((prev) => ({ ...prev, departmentId: "" }));
                         }
                       }}
                     >
                       <SelectTrigger
-                        id="department-select"
+                        id="edit-department-select"
                         aria-invalid={Boolean(formErrors.departmentId)}
                         className={`w-full ${formErrors.departmentId ? "border-destructive focus-visible:ring-destructive" : ""}`}
                       >
@@ -419,12 +443,18 @@ export function CreateDesignationModal({
 
               <div className="flex items-center justify-between rounded-lg border p-3 shadow-xs">
                 <div className="space-y-0.5">
-                  <Label htmlFor="leadership-switch" className="text-sm font-medium cursor-pointer">Leadership Position</Label>
+                  <Label htmlFor="edit-leadership-switch" className="text-sm font-medium cursor-pointer">
+                    Leadership Position
+                  </Label>
                   <p className="text-xs text-muted-foreground">
-                    Flags leadership responsibilities for team management.
+                    Flags leadership responsibilities for team and scope management.
                   </p>
                 </div>
-                <Switch id="leadership-switch" checked={isLeadership} onCheckedChange={setIsLeadership} />
+                <Switch
+                  id="edit-leadership-switch"
+                  checked={isLeadership}
+                  onCheckedChange={setIsLeadership}
+                />
               </div>
             </TabsContent>
 
@@ -480,15 +510,15 @@ export function CreateDesignationModal({
                   <AlertTitle>Error Loading Permissions</AlertTitle>
                   <AlertDescription className="flex items-center justify-between mt-2">
                     <span>{fetchError}</span>
-                    <Button type="button" variant="outline" size="sm" onClick={loadPermissionData} className="gap-1.5 text-xs">
+                    <Button type="button" variant="outline" size="sm" onClick={loadData} className="gap-1.5 text-xs">
                       <RefreshCw className="size-3.5" /> Retry
                     </Button>
                   </AlertDescription>
                 </Alert>
-              ) : isFetchingPermissions ? (
-                <div className="h-48 flex flex-col items-center justify-center gap-2">
+              ) : isFetchingData ? (
+                <div className="h-56 flex flex-col items-center justify-center gap-2">
                   <Loader2 className="size-6 animate-spin text-primary" />
-                  <span className="text-xs text-muted-foreground">Loading permission definitions...</span>
+                  <span className="text-xs text-muted-foreground">Loading permission matrix...</span>
                 </div>
               ) : scopeTypes.length === 0 ? (
                 <Alert variant="destructive" className="my-4 shrink-0">
@@ -502,17 +532,18 @@ export function CreateDesignationModal({
                 <ScrollArea className="h-[460px] max-h-[calc(90vh-300px)] min-h-[300px] w-full border rounded-lg p-3 bg-card/50 overflow-y-auto">
                   <div className="space-y-5 pr-2">
                     {Object.keys(groupedModules).length === 0 ? (
-                      <p className="text-xs text-center text-muted-foreground py-6">
+                      <p className="text-xs text-center text-muted-foreground py-8">
                         No permissions found matching search filter.
                       </p>
                     ) : (
                       Object.entries(groupedModules).map(([moduleName, perms]) => {
-                        const allModuleChecked = perms.length > 0 && perms.every((p) => Boolean(selectedScopes[p.id]));
+                        const allModuleChecked =
+                          perms.length > 0 && perms.every((p) => Boolean(selectedScopes[p.id]));
                         const someModuleChecked = perms.some((p) => Boolean(selectedScopes[p.id]));
                         const isModuleIndeterminate = someModuleChecked && !allModuleChecked;
 
                         return (
-                          <div key={moduleName} className="space-y-2">
+                          <div key={moduleName} className="space-y-2.5">
                             <div className="flex items-center justify-between border-b pb-1.5 pt-1">
                               <div className="flex items-center gap-2">
                                 <Checkbox
@@ -521,10 +552,10 @@ export function CreateDesignationModal({
                                   onCheckedChange={() =>
                                     handleToggleModule(perms, !allModuleChecked)
                                   }
-                                  id={`module-${moduleName}`}
+                                  id={`edit-module-${moduleName}`}
                                 />
                                 <Label
-                                  htmlFor={`module-${moduleName}`}
+                                  htmlFor={`edit-module-${moduleName}`}
                                   className="font-bold text-xs tracking-wide text-primary flex items-center gap-1.5 cursor-pointer select-none"
                                 >
                                   <Badge variant="outline" className="text-[11px]">{moduleName}</Badge>
@@ -557,37 +588,37 @@ export function CreateDesignationModal({
                                 return (
                                   <div
                                     key={p.id}
-                                    className={`flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-md border transition-colors gap-2 ${
+                                    className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors gap-3 ${
                                       isChecked
                                         ? "bg-primary/5 border-primary/40 shadow-2xs"
                                         : "bg-card hover:bg-accent/30 border-border/60"
                                     }`}
                                   >
-                                    <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
                                       <Checkbox
                                         checked={isChecked}
                                         onCheckedChange={(checked) =>
                                           handleTogglePermission(p.id, Boolean(checked))
                                         }
-                                        id={`perm-${p.id}`}
+                                        id={`edit-perm-${p.id}`}
                                         className="mt-0.5"
                                       />
                                       <Label
-                                        htmlFor={`perm-${p.id}`}
+                                        htmlFor={`edit-perm-${p.id}`}
                                         className="space-y-0.5 cursor-pointer select-none flex-1 min-w-0"
                                       >
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex items-center gap-2">
                                           <span className="font-mono font-semibold text-xs text-foreground">
                                             {p.code}
                                           </span>
                                         </div>
-                                        <p className="text-[11px] text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground break-words">
                                           {p.description}
                                         </p>
                                       </Label>
                                     </div>
 
-                                    <div className="w-full sm:w-64 shrink-0 pl-6 sm:pl-0">
+                                    <div className="w-full sm:w-72 shrink-0 pl-7 sm:pl-0">
                                       {(() => {
                                         const selectedScope = scopeTypes.find((st) => st.id === currentScopeId);
                                         return (
@@ -595,12 +626,12 @@ export function CreateDesignationModal({
                                             value={currentScopeId}
                                             onValueChange={(val: string | null) => handleScopeChange(p.id, val)}
                                           >
-                                            <SelectTrigger className="w-full h-8 text-xs">
+                                            <SelectTrigger className="w-full h-9 text-xs">
                                               <SelectValue placeholder="🚫 No Access (Not Included)">
                                                 {currentScopeId === "NONE"
                                                   ? "🚫 No Access (Not Included)"
                                                   : selectedScope
-                                                  ? `⚡ ${selectedScope.name}`
+                                                  ? `⚡ ${selectedScope.name} (${selectedScope.resolutionStrategy})`
                                                   : undefined}
                                               </SelectValue>
                                             </SelectTrigger>
@@ -610,7 +641,7 @@ export function CreateDesignationModal({
                                               </SelectItem>
                                               {scopeTypes.map((st) => (
                                                 <SelectItem key={st.id} value={st.id}>
-                                                  ⚡ {st.name}
+                                                  ⚡ {st.name} ({st.resolutionStrategy})
                                                 </SelectItem>
                                               ))}
                                             </SelectContent>
@@ -632,14 +663,21 @@ export function CreateDesignationModal({
             </TabsContent>
           </Tabs>
 
-          <DialogFooter className="pt-2 border-t">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading || isFetchingPermissions}>
-              {isLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              Create Designation {configuredCount > 0 ? `(${configuredCount} Permissions)` : ""}
-            </Button>
+          <DialogFooter className="pt-3 border-t flex items-center justify-between">
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <ShieldCheck className="size-4 text-primary" />
+              <span>Updates apply immediately and refresh access matrix cache.</span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading || isFetchingData} className="gap-2">
+                {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                Save Changes {configuredCount > 0 ? `(${configuredCount})` : ""}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

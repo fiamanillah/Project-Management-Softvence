@@ -24,6 +24,7 @@ export const userSchema = z.object({
   bio: z.string().nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
   isDeleted: z.boolean(),
+  mustChangePassword: z.boolean().default(true),
   lastLoginAt: z.date().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -37,11 +38,16 @@ export type UserWithoutPassword = z.infer<typeof userWithoutPasswordSchema>;
 
 export const createAdminUserSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).default("Staff"),
   designationId: z.string().uuid("Invalid designation ID"),
+  sendInviteEmail: z.boolean().default(true).optional(),
+});
+
+export const resendInviteSchema = z.object({
+  temporaryPassword: z.string().min(8, "Password must be at least 8 characters").optional(),
 });
 
 export const updateAdminUserSchema = z.object({
@@ -70,7 +76,9 @@ export const createDelegationSchema = z.object({
 });
 
 export type CreateAdminUserDTO = z.infer<typeof createAdminUserSchema>;
+export type ResendInviteDTO = z.infer<typeof resendInviteSchema>;
 export type UpdateAdminUserDTO = z.infer<typeof updateAdminUserSchema>;
 export type CreateOverrideDTO = z.infer<typeof createOverrideSchema>;
 export type CreateDelegationDTO = z.infer<typeof createDelegationSchema>;
+
 

@@ -32,6 +32,14 @@ export const createDesignationSchema = z.object({
   assignments: z.array(permissionAssignmentItemSchema).optional(),
 });
 
+export const updateDesignationSchema = z.object({
+  name: z.string().min(2, "Name is required").optional(),
+  departmentId: z.string().uuid("Invalid department ID").optional(),
+  hierarchyLevel: z.number().int().min(1).max(10).optional(),
+  isLeadership: z.boolean().optional(),
+  assignments: z.array(permissionAssignmentItemSchema).optional(),
+});
+
 export const savePermissionAssignmentsSchema = z.object({
   assignments: z.array(permissionAssignmentItemSchema),
 });
@@ -40,6 +48,7 @@ export type CreateDepartmentDTO = z.input<typeof createDepartmentSchema>;
 export type UpdateDepartmentDTO = z.infer<typeof updateDepartmentSchema>;
 export type AssignDepartmentManagerDTO = z.infer<typeof assignDepartmentManagerSchema>;
 export type CreateDesignationDTO = z.infer<typeof createDesignationSchema>;
+export type UpdateDesignationDTO = z.infer<typeof updateDesignationSchema>;
 export type SavePermissionAssignmentsDTO = z.infer<typeof savePermissionAssignmentsSchema>;
 
 export interface DepartmentManagerItem {

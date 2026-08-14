@@ -2,6 +2,17 @@
 
 import * as React from "react";
 import {
+  useForm,
+  zodResolver,
+  z,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@workspace/ui/components/form";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -24,6 +35,16 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
+const createOverrideFormSchema = z.object({
+  userId: z.string().min(1, "Please select a user"),
+  permissionId: z.string().min(1, "Please select a permission to override"),
+  isDeny: z.boolean(),
+  reason: z.string().optional(),
+  expiresAt: z.string().optional(),
+});
+
+type CreateOverrideFormValues = z.infer<typeof createOverrideFormSchema>;
+
 interface CreateOverrideModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,44 +60,40 @@ export function CreateOverrideModal({
   permissions,
   onSuccess,
 }: CreateOverrideModalProps) {
-  const [userId, setUserId] = React.useState("");
-  const [permissionId, setPermissionId] = React.useState("");
-  const [isDeny, setIsDeny] = React.useState(false);
-  const [reason, setReason] = React.useState("");
-  const [expiresAt, setExpiresAt] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(false);
+  const form = useForm<CreateOverrideFormValues>({
+    resolver: zodResolver(createOverrideFormSchema),
+    defaultValues: {
+      userId: "",
+      permissionId: "",
+      isDeny: false,
+      reason: "",
+      expiresAt: "",
+    },
+    mode: "onTouched",
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId || !permissionId) {
-      toast.error("Please select both a user and a permission");
-      return;
-    }
-
-    setIsLoading(true);
+  const onSubmit = async (values: CreateOverrideFormValues) => {
     try {
       await api.post("/users/overrides", {
-        userId,
-        permissionId,
-        isDeny,
-        reason: reason || undefined,
-        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+        userId: values.userId,
+        permissionId: values.permissionId,
+        isDeny: values.isDeny,
+        reason: values.reason || undefined,
+        expiresAt: values.expiresAt ? new Date(values.expiresAt).toISOString() : undefined,
       });
 
-      toast.success(`User permission ${isDeny ? "DENIED" : "GRANTED"} override created successfully`);
+      toast.success(
+        `User permission ${values.isDeny ? "DENIED" : "GRANTED"} override created successfully`,
+      );
+      form.reset();
       onOpenChange(false);
       onSuccess();
-      setUserId("");
-      setPermissionId("");
-      setIsDeny(false);
-      setReason("");
-      setExpiresAt("");
     } catch (err: any) {
       toast.error(err.message || "Failed to create override");
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const isLoading = form.formState.isSubmitting;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,77 +105,139 @@ export function CreateOverrideModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Select User</Label>
-            <Select value={userId} onValueChange={(val: any) => val && setUserId(val)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select target user" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.firstName || u.lastName ? `${u.firstName || ""} ${u.lastName || ""}` : u.email} ({u.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Permission Code</Label>
-            <Select value={permissionId} onValueChange={(val: any) => val && setPermissionId(val)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select permission to override" />
-              </SelectTrigger>
-              <SelectContent>
-                {permissions.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.code} ({p.module})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border p-3 shadow-xs bg-accent/20">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-semibold">Explicit Deny Flag (`is_deny`)</Label>
-              <p className="text-xs text-muted-foreground">
-                Deny overrides short-circuit and win over any existing designation grants.
-              </p>
-            </div>
-            <Switch checked={isDeny} onCheckedChange={setIsDeny} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Reason / Note</Label>
-            <Input
-              placeholder="e.g. Temporary security revocation"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+            <FormField
+              control={form.control}
+              name="userId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select User</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select target user" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.firstName || u.lastName
+                            ? `${u.firstName || ""} ${u.lastName || ""}`
+                            : u.email}{" "}
+                          ({u.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Expiry Date (Optional)</Label>
-            <Input
-              type="date"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
+            <FormField
+              control={form.control}
+              name="permissionId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Permission Code</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select permission to override" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {permissions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.code} ({p.module})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              Create Override
-            </Button>
-          </DialogFooter>
-        </form>
+            <FormField
+              control={form.control}
+              name="isDeny"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-xs bg-accent/20 space-y-0">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold">Explicit Deny Flag (`is_deny`)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Deny overrides short-circuit and win over any existing designation grants.
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="reason"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reason / Note</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g. Temporary security revocation"
+                      {...field}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="expiresAt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Expiry Date (Optional)</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} disabled={isLoading} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Create Override
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

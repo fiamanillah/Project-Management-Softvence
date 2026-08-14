@@ -23,14 +23,28 @@ export async function startNotificationConsumer(
           `Processing notification for user: ${payload.recipientId}`,
         );
 
+        const typeCode = payload.type || "Mention";
+        let notifType = await prisma.notificationType.findUnique({
+          where: { code: typeCode },
+        });
+
+        if (!notifType) {
+          notifType = await prisma.notificationType.create({
+            data: {
+              code: typeCode,
+              name: typeCode,
+            },
+          });
+        }
+
         await prisma.notification.create({
           data: {
-            recipient_id: payload.recipientId,
-            type: (payload.type as NotificationType) || "Mention",
+            recipientId: payload.recipientId,
+            notificationTypeId: notifType.id,
             title: payload.title,
             body: payload.body || null,
-            entity_type: payload.entityType || null,
-            entity_id: payload.entityId || null,
+            entityType: payload.entityType || null,
+            entityId: payload.entityId || null,
           },
         });
 

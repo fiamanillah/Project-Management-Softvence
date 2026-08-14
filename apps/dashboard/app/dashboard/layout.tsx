@@ -18,17 +18,23 @@ export default function DashboardLayout({
   const router = useRouter()
 
   React.useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/login')
+    if (!isLoading) {
+      if (!user) {
+        router.push('/login')
+      } else if (user.mustChangePassword) {
+        router.push('/change-password')
+      }
     }
   }, [isLoading, user, router])
 
-  if (isLoading || !user) {
+  if (isLoading || !user || user.mustChangePassword) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="size-8 animate-spin text-primary" />
-          <p className="text-xs text-muted-foreground font-medium">Verifying authentication...</p>
+          <p className="text-xs text-muted-foreground font-medium">
+            {user?.mustChangePassword ? "Setting up account security..." : "Verifying authentication..."}
+          </p>
         </div>
       </div>
     )

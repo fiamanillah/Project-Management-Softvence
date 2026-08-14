@@ -11,10 +11,11 @@ model User {
   lastName      String     @map("last_name")
   systemRole    SystemRole @default(Staff) @map("system_role")
   designationId String     @map("designation_id") @db.Uuid
-  isActive      Boolean    @default(true) @map("is_active")
-  lastLoginAt   DateTime?  @map("last_login_at")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime?  @map("updated_at")
+  isActive           Boolean    @default(true) @map("is_active")
+  mustChangePassword Boolean    @default(true) @map("must_change_password")
+  lastLoginAt        DateTime?  @map("last_login_at")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime?  @map("updated_at")
   deletedAt     DateTime?  @map("deleted_at")
 
   designation Designation @relation(fields: [designationId], references: [id])

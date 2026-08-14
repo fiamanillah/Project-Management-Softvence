@@ -22,7 +22,7 @@ import {
 } from "@workspace/ui/components/field";
 import { Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, getErrorMessage } from "@/lib/api";
 import { createDepartmentSchema } from "@workspace/shared";
 
 interface CreateDepartmentModalProps {
@@ -80,12 +80,8 @@ export function CreateDepartmentModal({
       handleReset();
       onOpenChange(false);
       onSuccess();
-    } catch (err: any) {
-      if (err.data?.message) {
-        toast.error(err.data.message);
-      } else {
-        toast.error(err.message || "Failed to create department");
-      }
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to create department"));
     } finally {
       setIsLoading(false);
     }

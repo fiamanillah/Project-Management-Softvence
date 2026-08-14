@@ -11,6 +11,7 @@ import {
   updateDepartmentSchema,
   assignDepartmentManagerSchema,
   createDesignationSchema,
+  updateDesignationSchema,
   savePermissionAssignmentsSchema,
 } from "./OrganizationDTO";
 
@@ -87,6 +88,17 @@ export class OrganizationModule extends BaseModule {
       requirePermission("auth.user.manage"),
       validateRequest({ body: createDesignationSchema }),
       controller.createDesignation.bind(controller),
+    );
+    this.router.put(
+      "/designations/:id",
+      requirePermission("auth.user.manage"),
+      validateRequest({ body: updateDesignationSchema }),
+      controller.updateDesignation.bind(controller),
+    );
+    this.router.delete(
+      "/designations/:id",
+      requirePermission("auth.user.manage"),
+      controller.deleteDesignation.bind(controller),
     );
     this.router.get(
       "/designations/:id/permissions",

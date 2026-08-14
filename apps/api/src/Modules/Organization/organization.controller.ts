@@ -8,6 +8,7 @@ import type {
   UpdateDepartmentDTO,
   AssignDepartmentManagerDTO,
   CreateDesignationDTO,
+  UpdateDesignationDTO,
   SavePermissionAssignmentsDTO,
 } from "./OrganizationDTO";
 
@@ -71,6 +72,24 @@ export class OrganizationController extends BaseController {
     const dto = req.validatedBody as CreateDesignationDTO;
     const designation = await this.organizationService.createDesignation(dto, req.user?.sub, req);
     return this.sendCreatedResponse(req, res, designation, "Designation created successfully");
+  }
+
+  public async updateDesignation(req: Request, res: Response) {
+    const designationId = req.params.id as string;
+    const dto = req.validatedBody as UpdateDesignationDTO;
+    const designation = await this.organizationService.updateDesignation(
+      designationId,
+      dto,
+      req.user?.sub,
+      req,
+    );
+    return this.sendResponse(req, res, "Designation updated successfully", 200, designation);
+  }
+
+  public async deleteDesignation(req: Request, res: Response) {
+    const designationId = req.params.id as string;
+    const result = await this.organizationService.deleteDesignation(designationId, req);
+    return this.sendResponse(req, res, result.message, 200);
   }
 
   public async getDesignationPermissions(req: Request, res: Response) {

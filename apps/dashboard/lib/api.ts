@@ -19,6 +19,56 @@ export class ApiError extends Error {
   }
 }
 
+export function extractErrorMessage(body: any, fallback = "An unexpected network or server error occurred"): string {
+  if (!body) return fallback;
+  if (typeof body === "string") return body;
+
+  if (body.error) {
+    if (typeof body.error === "string") return body.error;
+    if (typeof body.error === "object") {
+      if (typeof body.error.message === "string" && body.error.message.trim()) {
+        return body.error.message;
+      }
+      if (Array.isArray(body.error.details) && body.error.details.length > 0) {
+        return body.error.details
+          .map((d: any) => (typeof d === "string" ? d : d.message || JSON.stringify(d)))
+          .join(", ");
+      }
+      if (typeof body.error.details === "string") {
+        return body.error.details;
+      }
+    }
+  }
+
+  if (typeof body.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  if (Array.isArray(body.errors) && body.errors.length > 0) {
+    return body.errors
+      .map((e: any) => (typeof e === "string" ? e : e.message || JSON.stringify(e)))
+      .join(", ");
+  }
+
+  if (body.data && typeof body.data === "object") {
+    if (typeof body.data.message === "string") return body.data.message;
+    if (typeof body.data.error === "string") return body.data.error;
+  }
+
+  return fallback;
+}
+
+export function getErrorMessage(err: unknown, fallback = "An unexpected error occurred"): string {
+  if (!err) return fallback;
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object") {
+    return extractErrorMessage(err, fallback);
+  }
+  if (typeof err === "string") return err;
+  return fallback;
+}
+
 // In-Memory Access Token Storage (Security best practice: avoid localStorage for JWTs)
 let inMemoryAccessToken: string | null = null;
 
@@ -130,7 +180,7 @@ export async function apiRequest<T = any>(
       const refreshBody = await refreshRes.json().catch(() => ({}));
 
       if (!refreshRes.ok || !refreshBody.data?.accessToken) {
-        throw new Error(refreshBody.message || "Refresh token expired or invalid");
+        throw new Error(extractErrorMessage(refreshBody, "Refresh token expired or invalid"));
       }
 
       const newAccessToken = refreshBody.data.accessToken;
@@ -152,7 +202,7 @@ export async function apiRequest<T = any>(
       if (!retryRes.ok) {
         throw new ApiError(
           retryRes.status,
-          retryBody.message || "An unexpected network or server error occurred",
+          extractErrorMessage(retryBody, "An unexpected network or server error occurred"),
           retryBody,
         );
       }
@@ -171,7 +221,7 @@ export async function apiRequest<T = any>(
   if (!response.ok) {
     throw new ApiError(
       response.status,
-      body.message || "An unexpected network or server error occurred",
+      extractErrorMessage(body, "An unexpected network or server error occurred"),
       body,
     );
   }

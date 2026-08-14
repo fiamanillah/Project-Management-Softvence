@@ -7,6 +7,7 @@ import {
   LogOut,
   Settings,
   Shield,
+  KeyRound,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -131,6 +132,12 @@ export function NavUser({
                 <DropdownMenuItem className="cursor-pointer">
                   <Shield className="mr-2 size-4" />
                   User & Role Admin
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/change-password">
+                <DropdownMenuItem className="cursor-pointer">
+                  <KeyRound className="mr-2 size-4" />
+                  Change Password
                 </DropdownMenuItem>
               </Link>
             </DropdownMenuGroup>

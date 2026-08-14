@@ -10,6 +10,7 @@ export interface User {
   lastName?: string;
   systemRole: "SuperAdmin" | "Admin" | "Staff";
   designationId?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface PermissionMap {
@@ -27,7 +28,8 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   can: (permissionCode: string) => boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshPermissions: () => Promise<void>;
 }
@@ -100,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchPermissions]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     const data = await api.post<{ accessToken: string; user: User }>("/auth/login", {
       email,
       password,
@@ -113,6 +115,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
 
       // Hydrate permission map
+      await fetchPermissions();
+      return data.user;
+    }
+
+    throw new Error("Invalid response from server");
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    const data = await api.post<{ accessToken: string; user: User }>("/auth/change-password", {
+      currentPassword,
+      newPassword,
+    });
+
+    if (data.accessToken && data.user) {
+      setAccessToken(data.accessToken);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setToken(data.accessToken);
+      setUser(data.user);
+
       await fetchPermissions();
     }
   };
@@ -150,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         can,
         login,
+        changePassword,
         logout,
         refreshPermissions,
       }}

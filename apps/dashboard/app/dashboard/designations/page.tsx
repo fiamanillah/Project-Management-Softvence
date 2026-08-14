@@ -7,7 +7,8 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { DesignationTable, type DesignationItem } from "./components/DesignationTable";
 import { CreateDesignationModal } from "./components/CreateDesignationModal";
-import { PermissionMatrixModal } from "./components/PermissionMatrixModal";
+import { EditDesignationModal } from "./components/EditDesignationModal";
+import { DeleteDesignationDialog } from "./components/DeleteDesignationDialog";
 
 export default function DesignationsPage() {
   const [designations, setDesignations] = React.useState<DesignationItem[]>([]);
@@ -16,7 +17,9 @@ export default function DesignationsPage() {
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
-  const [matrixModalOpen, setMatrixModalOpen] = React.useState(false);
+  const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [editInitialTab, setEditInitialTab] = React.useState<"details" | "permissions">("details");
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [selectedDesignation, setSelectedDesignation] = React.useState<DesignationItem | null>(null);
 
   const fetchData = React.useCallback(async () => {
@@ -39,9 +42,15 @@ export default function DesignationsPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleOpenMatrix = (desig: DesignationItem) => {
+  const handleEdit = (desig: DesignationItem, initialTab: "details" | "permissions" = "details") => {
     setSelectedDesignation(desig);
-    setMatrixModalOpen(true);
+    setEditInitialTab(initialTab);
+    setEditModalOpen(true);
+  };
+
+  const handleDelete = (desig: DesignationItem) => {
+    setSelectedDesignation(desig);
+    setDeleteDialogOpen(true);
   };
 
   return (
@@ -75,7 +84,8 @@ export default function DesignationsPage() {
       ) : (
         <DesignationTable
           designations={designations}
-          onOpenMatrix={handleOpenMatrix}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
         />
       )}
 
@@ -87,11 +97,21 @@ export default function DesignationsPage() {
         onSuccess={fetchData}
       />
 
-      {/* Permission Matrix Modal */}
-      <PermissionMatrixModal
+      {/* Edit Designation Modal */}
+      <EditDesignationModal
         designation={selectedDesignation}
-        open={matrixModalOpen}
-        onOpenChange={setMatrixModalOpen}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        departments={departments}
+        initialTab={editInitialTab}
+        onSuccess={fetchData}
+      />
+
+      {/* Delete Designation Dialog */}
+      <DeleteDesignationDialog
+        designation={selectedDesignation}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
         onSuccess={fetchData}
       />
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,48 +12,48 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@workspace/ui/components/alert-dialog";
-import { Loader2, AlertTriangle, AlertCircle, ShieldAlert } from "lucide-react";
+import { Loader2, AlertTriangle, AlertCircle, Users, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api";
-import type { DepartmentItem } from "@workspace/shared";
+import type { DesignationItem } from "./DesignationTable";
 
-interface DeleteDepartmentDialogProps {
-  department: DepartmentItem | null;
+interface DeleteDesignationDialogProps {
+  designation: DesignationItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
-export function DeleteDepartmentDialog({
-  department,
+export function DeleteDesignationDialog({
+  designation,
   open,
   onOpenChange,
   onSuccess,
-}: DeleteDepartmentDialogProps) {
+}: DeleteDesignationDialogProps) {
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
+  // Reset error whenever dialog is opened or designation changes
   React.useEffect(() => {
     if (open) {
       setErrorMessage(null);
     }
-  }, [open, department]);
+  }, [open, designation]);
 
-  const activeDesignationsCount = department?._count?.designations ?? 0;
-  const activeTeamsCount = department?._count?.teams ?? 0;
-  const hasDependencies = activeDesignationsCount > 0 || activeTeamsCount > 0;
+  const activeUsersCount = designation?._count?.users ?? 0;
+  const hasActiveUsers = activeUsersCount > 0;
 
   const handleDelete = async () => {
-    if (!department || hasDependencies) return;
+    if (!designation || hasActiveUsers) return;
     setIsDeleting(true);
     setErrorMessage(null);
     try {
-      const res = await api.delete(`/organization/departments/${department.id}`);
-      toast.success(res?.message || `Department '${department.name}' deleted successfully.`);
+      const res = await api.delete(`/organization/designations/${designation.id}`);
+      toast.success(res?.message || `Designation '${designation.name}' deleted successfully.`);
       onOpenChange(false);
       onSuccess();
     } catch (err: unknown) {
-      const msg = getErrorMessage(err, "Failed to delete department");
+      const msg = getErrorMessage(err, "Failed to delete designation");
       setErrorMessage(msg);
       toast.error(msg);
     } finally {
@@ -65,13 +66,13 @@ export function DeleteDepartmentDialog({
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="size-5" /> Delete Department
+            <AlertTriangle className="size-5" /> Delete Designation
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-3 pt-1 text-left">
             <span>
-              Are you sure you want to delete department{" "}
-              <strong className="text-foreground">{department?.name}</strong> (
-              <span className="font-mono text-primary font-semibold">{department?.code}</span>)?
+              Are you sure you want to delete designation{" "}
+              <strong className="text-foreground">{designation?.name}</strong> (
+              <span className="font-mono text-primary font-semibold">{designation?.code}</span>)?
             </span>
 
             {/* In-Dialog Error Feedback from API */}
@@ -84,30 +85,36 @@ export function DeleteDepartmentDialog({
               </div>
             )}
 
-            {/* Proactive Dependencies Warning Banner */}
-            {hasDependencies ? (
+            {/* Proactive Active Users Warning Banner */}
+            {hasActiveUsers ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300 flex items-start gap-2.5">
-                <ShieldAlert className="size-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-                <div className="flex-1 text-xs space-y-1">
+                <Users className="size-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <div className="flex-1 text-xs space-y-1.5">
                   <p className="font-semibold text-amber-800 dark:text-amber-200">
-                    Cannot delete department with dependencies
+                    Cannot delete assigned designation
                   </p>
                   <p className="text-amber-700/90 dark:text-amber-300/90">
-                    This department contains{" "}
+                    This designation is currently assigned to{" "}
                     <strong>
-                      {activeDesignationsCount} designation{activeDesignationsCount === 1 ? "" : "s"}
-                    </strong>{" "}
-                    and{" "}
-                    <strong>
-                      {activeTeamsCount} team{activeTeamsCount === 1 ? "" : "s"}
+                      {activeUsersCount} active user{activeUsersCount === 1 ? "" : "s"}
                     </strong>
-                    . You can deactivate this department instead, or remove/reassign its designations and teams first.
+                    . Please reassign those users in User Management before deleting.
                   </p>
+                  <div className="pt-0.5">
+                    <Link
+                      href="/dashboard/users"
+                      onClick={() => onOpenChange(false)}
+                      className="inline-flex items-center gap-1 font-semibold text-amber-800 dark:text-amber-200 hover:underline"
+                    >
+                      <span>Go to User Management</span>
+                      <ExternalLink className="size-3" />
+                    </Link>
+                  </div>
                 </div>
               </div>
             ) : (
               <span className="text-xs text-muted-foreground block">
-                This action is permanent and cannot be undone.
+                This action will permanently delete the designation and its associated permission matrix configurations.
               </span>
             )}
           </AlertDialogDescription>
@@ -120,11 +127,11 @@ export function DeleteDepartmentDialog({
               e.preventDefault();
               handleDelete();
             }}
-            disabled={isDeleting || hasDependencies}
+            disabled={isDeleting || hasActiveUsers}
             className="bg-destructive hover:bg-destructive/90 text-destructive-foreground disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
-            {hasDependencies ? "Cannot Delete (Has Dependencies)" : "Delete Department"}
+            {hasActiveUsers ? "Cannot Delete (Users Assigned)" : "Delete Designation"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

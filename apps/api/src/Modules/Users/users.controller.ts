@@ -5,6 +5,7 @@ import { BaseController } from "@/core/BaseController";
 import { UsersService } from "./users.service";
 import type {
   CreateAdminUserDTO,
+  ResendInviteDTO,
   UpdateAdminUserDTO,
   CreateOverrideDTO,
   CreateDelegationDTO,
@@ -32,6 +33,13 @@ export class UsersController extends BaseController {
     const dto = req.validatedBody as UpdateAdminUserDTO;
     const updated = await this.usersService.updateAdminUser(userId, dto, req);
     return this.sendResponse(req, res, "User updated successfully", 200, updated);
+  }
+
+  public async resendInvite(req: Request, res: Response) {
+    const userId = req.params.id as string;
+    const { temporaryPassword } = (req.validatedBody || {}) as ResendInviteDTO;
+    const result = await this.usersService.resendInvite(userId, temporaryPassword, req);
+    return this.sendResponse(req, res, result.message, 200, result);
   }
 
   // Overrides & Delegations

@@ -2,6 +2,7 @@
 
 export {
   createAdminUserSchema,
+  resendInviteSchema,
   updateAdminUserSchema,
   createOverrideSchema,
   createDelegationSchema,
@@ -10,6 +11,7 @@ export {
   userSchema,
   userWithoutPasswordSchema,
   type CreateAdminUserDTO,
+  type ResendInviteDTO,
   type UpdateAdminUserDTO,
   type CreateOverrideDTO,
   type CreateDelegationDTO,
@@ -18,3 +20,4 @@ export {
   type UserProfile,
   type UserWithoutPassword,
 } from "@workspace/shared";
+

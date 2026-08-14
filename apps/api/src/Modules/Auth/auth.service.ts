@@ -67,6 +67,7 @@ export class AuthServices {
         systemRole: "Staff",
         designationId: finalDesignationId,
         isActive: true,
+        mustChangePassword: false,
       },
     });
 
@@ -549,6 +550,112 @@ export class AuthServices {
     });
 
     return { message: "Password reset successful. Please log in with your new password." };
+  }
+
+  /**
+   * POST /auth/change-password: Change password (used during first login or user settings)
+   */
+  public async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    deviceInfo?: string,
+    req?: Request,
+  ) {
+    this.logger.info("Password change requested", { userId });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive || user.deletedAt) {
+      throw new AuthenticationError("User not found or account disabled");
+    }
+
+    const isCurrentValid = await verifyPassword(user.passwordHash, currentPassword);
+    if (!isCurrentValid) {
+      throw new BadRequestError("Current password is incorrect");
+    }
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestError("New password cannot be the same as the current/temporary password");
+    }
+
+    const hashedNewPassword = await hashPassword(newPassword);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: hashedNewPassword,
+        mustChangePassword: false,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Invalidate previous sessions
+    await this.invalidateAllUserSessions(userId);
+
+    // Issue fresh access and refresh token
+    const accessToken = signAccessToken({
+      sub: updatedUser.id,
+      systemRole: updatedUser.systemRole,
+      designationId: updatedUser.designationId,
+    });
+
+    const rawRefreshToken = generateOpaqueToken();
+    const tokenHash = hashToken(rawRefreshToken);
+    const refreshDays = env.REFRESH_TOKEN_EXPIRES_DAYS || 30;
+    const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: updatedUser.id,
+        tokenHash,
+        deviceInfo: deviceInfo || "Unknown Device",
+        expiresAt,
+      },
+    });
+
+    if (this.cache) {
+      const cacheKey = `auth:refresh:${tokenHash}`;
+      const userRefreshPatternKey = `auth:refresh:user:${updatedUser.id}:${tokenHash}`;
+      const cacheData = { userId: updatedUser.id, expiresAt: expiresAt.toISOString() };
+      const ttlSeconds = refreshDays * 86400;
+
+      await this.cache.set(cacheKey, cacheData, { ttlSeconds });
+      await this.cache.set(userRefreshPatternKey, cacheData, { ttlSeconds });
+      await this.cache.del(`auth:sessions:${updatedUser.id}`);
+    }
+
+    await AuditLogService.log({
+      module: "AUTH",
+      action: "USER_PASSWORD_CHANGED",
+      entityTable: "users",
+      entityId: userId,
+      actor: { id: user.id, email: user.email, role: user.systemRole },
+      metadata: { wasFirstLogin: user.mustChangePassword, deviceInfo },
+      req,
+    });
+
+    try {
+      await publishNotification({
+        recipientId: user.id,
+        type: "Mention",
+        title: "Password Updated",
+        body: "Your password has been changed successfully.",
+        entityType: "User",
+        entityId: user.id,
+      });
+    } catch (e) {
+      this.logger.error("Failed to publish password change notification", { error: e });
+    }
+
+    return {
+      message: "Password updated successfully",
+      accessToken,
+      rawRefreshToken,
+      user: this.sanitizeUser(updatedUser),
+    };
   }
 
   /**

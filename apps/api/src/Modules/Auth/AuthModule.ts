@@ -9,6 +9,7 @@ import {
   refreshSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } from "./AuthDTO";
 
 export class AuthModule extends BaseModule {
@@ -117,6 +118,20 @@ export class AuthModule extends BaseModule {
       "/reset-password",
       validateRequest(resetPasswordSchema),
       controller.resetPassword.bind(controller),
+    );
+
+    // POST /auth/change-password & /auth/v1/change-password
+    this.router.post(
+      "/change-password",
+      authenticate,
+      validateRequest(changePasswordSchema),
+      controller.changePassword.bind(controller),
+    );
+    this.router.post(
+      "/v1/change-password",
+      authenticate,
+      validateRequest(changePasswordSchema),
+      controller.changePassword.bind(controller),
     );
   }
 }

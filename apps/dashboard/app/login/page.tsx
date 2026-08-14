@@ -62,7 +62,7 @@ export default function LoginPage() {
           setEmail={setEmail}
           onForgotPasswordClick={() => setForgotPasswordOpen(true)}
           onRequestAccessClick={() => setRequestAccessOpen(true)}
-          onSuccess={() => router.push("/dashboard")}
+          onSuccess={(targetUrl) => router.push(targetUrl || "/dashboard")}
         />
       </div>
 

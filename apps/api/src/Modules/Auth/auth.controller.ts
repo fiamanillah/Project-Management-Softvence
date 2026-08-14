@@ -7,6 +7,7 @@ import {
   LoginUserDTO,
   ForgotPasswordDTO,
   ResetPasswordDTO,
+  ChangePasswordDTO,
 } from "./AuthDTO";
 import { env } from "@/env";
 import { AuthenticationError } from "@/core/errors/AppError";
@@ -149,6 +150,35 @@ export class AuthController extends BaseController {
 
     const result = await this.authService.resetPassword(token, password, req);
     return this.sendResponse(req, res, result.message, 200);
+  }
+
+  /**
+   * Endpoint: POST /auth/change-password
+   */
+  public async changePassword(req: Request, res: Response) {
+    const userId = (req as any).user?.sub || (req as any).user?.id;
+    if (!userId) {
+      throw new AuthenticationError("User not authenticated");
+    }
+
+    const { currentPassword, newPassword } = req.validatedBody as ChangePasswordDTO;
+    const deviceInfo = req.headers["user-agent"] || "Unknown Device";
+
+    const { accessToken, rawRefreshToken, user, message } =
+      await this.authService.changePassword(
+        userId,
+        currentPassword,
+        newPassword,
+        deviceInfo,
+        req,
+      );
+
+    this.setRefreshCookie(res, rawRefreshToken);
+
+    return this.sendResponse(req, res, message, 200, {
+      accessToken,
+      user,
+    });
   }
 
   /**

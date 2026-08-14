@@ -127,6 +127,7 @@ export default function UsersPage() {
           users={users}
           onEdit={handleEditClick}
           onToggleActive={handleToggleActive}
+          onRefresh={fetchUsers}
         />
       )}
 

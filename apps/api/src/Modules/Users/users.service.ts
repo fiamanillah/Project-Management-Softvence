@@ -5,12 +5,22 @@ import { hashPassword } from "@/utils/crypto";
 import { AuthorizationEngine } from "@/core/authorization/AuthorizationEngine";
 import { AuditLogService } from "@/core/audit/audit.service";
 import type { Request } from "express";
+import { publishEmail, publishNotification } from "@workspace/message-broker";
 import type {
   CreateAdminUserDTO,
   UpdateAdminUserDTO,
   CreateOverrideDTO,
   CreateDelegationDTO,
 } from "./UserDTO";
+
+function generateTemporaryPassword(): string {
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789!@#$";
+  let pass = "Temp#" + Math.floor(100 + Math.random() * 900);
+  for (let i = 0; i < 4; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
+}
 
 export class UsersService {
   private logger = new AppLogger("UsersService");
@@ -89,7 +99,12 @@ export class UsersService {
       throw new NotFoundError("Designation");
     }
 
-    const hashedPassword = await hashPassword(data.password);
+    const rawTemporaryPassword =
+      data.password && data.password.trim().length >= 8
+        ? data.password
+        : generateTemporaryPassword();
+
+    const hashedPassword = await hashPassword(rawTemporaryPassword);
     const employeeId = `EMP-${Date.now().toString().slice(-6)}`;
 
     const user = await this.prisma.user.create({
@@ -102,6 +117,7 @@ export class UsersService {
         systemRole: data.systemRole as any,
         designationId: data.designationId,
         isActive: true,
+        mustChangePassword: true,
       },
       include: {
         designation: {
@@ -122,7 +138,108 @@ export class UsersService {
       req,
     });
 
-    return result;
+    // Send invitation email and notification if requested
+    try {
+      await publishEmail({
+        to: user.email,
+        subject: "Welcome to Softvence - Account Invitation & Login Details",
+        body: `Hello ${user.firstName},\n\nYou have been invited to join Softvence Project Management.\n\nYour temporary login credentials are:\nEmail: ${user.email}\nTemporary Password: ${rawTemporaryPassword}\n\nPlease sign in at your organization portal and change your temporary password upon your first login.\n\nBest regards,\nSoftvence Team`,
+        metadata: {
+          userId: user.id,
+          email: user.email,
+          role: user.systemRole,
+        },
+      });
+
+      await publishNotification({
+        recipientId: user.id,
+        type: "USER_REGISTERED",
+        title: "Account Invitation Created",
+        body: `Welcome ${user.firstName}! Please login with your temporary credentials and update your password.`,
+        entityType: "User",
+        entityId: user.id,
+      });
+    } catch (msgErr) {
+      this.logger.error("Failed to publish invitation email/notification", { error: msgErr });
+    }
+
+    return {
+      ...result,
+      temporaryPassword: rawTemporaryPassword,
+    };
+  }
+
+  public async resendInvite(userId: string, customTemporaryPassword?: string, req?: Request) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { designation: { include: { department: true } } },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new NotFoundError("User");
+    }
+
+    const rawTemporaryPassword =
+      customTemporaryPassword && customTemporaryPassword.trim().length >= 8
+        ? customTemporaryPassword
+        : generateTemporaryPassword();
+
+    const hashedPassword = await hashPassword(rawTemporaryPassword);
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: hashedPassword,
+        mustChangePassword: true,
+        updatedAt: new Date(),
+      },
+      include: {
+        designation: {
+          include: { department: true },
+        },
+      },
+    });
+
+    const { passwordHash, ...result } = updated;
+
+    await AuditLogService.log({
+      module: "USERS",
+      action: "USER_INVITE_RESENT",
+      entityTable: "users",
+      entityId: userId,
+      oldPayload: { mustChangePassword: user.mustChangePassword },
+      newPayload: { mustChangePassword: true },
+      req,
+    });
+
+    try {
+      await publishEmail({
+        to: user.email,
+        subject: "Softvence - New Temporary Credentials & Login Instructions",
+        body: `Hello ${user.firstName},\n\nA new temporary password has been generated for your Softvence account.\n\nYour login details are:\nEmail: ${user.email}\nTemporary Password: ${rawTemporaryPassword}\n\nPlease sign in and set your new permanent password.\n\nBest regards,\nSoftvence Team`,
+        metadata: {
+          userId: user.id,
+          email: user.email,
+        },
+      });
+
+      await publishNotification({
+        recipientId: user.id,
+        type: "USER_REGISTERED",
+        title: "Account Invitation Resent",
+        body: "A new temporary password has been issued for your account.",
+        entityType: "User",
+        entityId: user.id,
+      });
+    } catch (msgErr) {
+      this.logger.error("Failed to publish resend invitation email/notification", { error: msgErr });
+    }
+
+    return {
+      message: "Invitation resent successfully",
+      temporaryPassword: rawTemporaryPassword,
+      user: result,
+    };
   }
 
   public async updateAdminUser(userId: string, data: UpdateAdminUserDTO, req?: Request) {

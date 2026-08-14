@@ -52,4 +52,23 @@ describe("Authentication Security & Crypto Utilities", () => {
     expect((decoded as any).permissions).toBeUndefined();
     expect((decoded as any).scope_type).toBeUndefined();
   });
+
+  it("should validate change password schema requirements", async () => {
+    const { changePasswordBodySchema } = await import("@workspace/shared");
+
+    const validPayload = {
+      currentPassword: "OldTempPassword123!",
+      newPassword: "NewPermanentPassword456!",
+    };
+    const parsed = changePasswordBodySchema.safeParse(validPayload);
+    expect(parsed.success).toBe(true);
+
+    const invalidShortPassword = {
+      currentPassword: "OldTempPassword123!",
+      newPassword: "short",
+    };
+    const parsedShort = changePasswordBodySchema.safeParse(invalidShortPassword);
+    expect(parsedShort.success).toBe(false);
+  });
 });
+
