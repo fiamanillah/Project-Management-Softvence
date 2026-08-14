@@ -10,13 +10,14 @@ import {
   RefreshCw,
   Search,
   CheckCircle2,
-  XCircle,
   Shield,
   UserCheck,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import type { DepartmentItem } from "@workspace/shared";
+import { RouteGuard } from "@/components/permission-gate/RouteGuard";
+import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { DepartmentTable } from "./components/DepartmentTable";
 import { CreateDepartmentModal } from "./components/CreateDepartmentModal";
 import { EditDepartmentModal } from "./components/EditDepartmentModal";
@@ -24,6 +25,14 @@ import { AssignManagerModal } from "./components/AssignManagerModal";
 import { DeleteDepartmentDialog } from "./components/DeleteDepartmentDialog";
 
 export default function DepartmentsPage() {
+  return (
+    <RouteGuard code="organization.department.view">
+      <DepartmentsContent />
+    </RouteGuard>
+  );
+}
+
+function DepartmentsContent() {
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -109,9 +118,11 @@ export default function DepartmentsPage() {
           <Button variant="outline" size="sm" onClick={() => fetchDepartments()}>
             <RefreshCw className="mr-2 size-4" /> Refresh
           </Button>
-          <Button size="sm" onClick={() => setCreateModalOpen(true)}>
-            <Plus className="mr-2 size-4" /> Add Department
-          </Button>
+          <PermissionGate code="organization.department.manage">
+            <Button size="sm" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="mr-2 size-4" /> Add Department
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 

@@ -15,6 +15,10 @@ describe("Section 8 Resolver Verification Checklist", () => {
 
   beforeEach(async () => {
     // Clean tables
+    await prisma.notification.deleteMany({});
+    await prisma.refreshToken.deleteMany({});
+    await prisma.passwordResetToken.deleteMany({});
+    await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.designationPermissionScopeTarget.deleteMany({});
     await prisma.designationPermission.deleteMany({});
@@ -117,6 +121,10 @@ describe("Section 8 Resolver Verification Checklist", () => {
   });
 
   afterAll(async () => {
+    await prisma.notification.deleteMany({});
+    await prisma.refreshToken.deleteMany({});
+    await prisma.passwordResetToken.deleteMany({});
+    await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.designationPermissionScopeTarget.deleteMany({});
     await prisma.designationPermission.deleteMany({});

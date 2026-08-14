@@ -4,6 +4,7 @@ import * as React from "react";
 import { Shield } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { AuditLogTable, type AuditLogItem } from "./components/AuditLogTable";
 import { AuditLogDetailModal } from "./components/AuditLogDetailModal";
 import { AuditLogStatsCards, type AuditStatsData } from "./components/AuditLogStatsCards";
@@ -11,6 +12,14 @@ import { AuditLogFilters } from "./components/AuditLogFilters";
 import { AuditLogPagination } from "./components/AuditLogPagination";
 
 export default function AuditLogsPage() {
+  return (
+    <RouteGuard code="auth.user.manage">
+      <AuditLogsContent />
+    </RouteGuard>
+  );
+}
+
+function AuditLogsContent() {
   const [logs, setLogs] = React.useState<AuditLogItem[]>([]);
   const [stats, setStats] = React.useState<AuditStatsData | null>(null);
 

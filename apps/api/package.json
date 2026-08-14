@@ -8,7 +8,7 @@
         "dev": "NODE_ENV=development bun run --watch src/index.ts",
         "build": "NODE_ENV=production bun build src/index.ts --target node --outdir dist",
         "start": "NODE_ENV=production bun run dist/index.js",
-        "test": "NODE_ENV=test bun test",
+        "test": "NODE_ENV=test bun test --parallel=1",
         "db:generate": "bun --filter @workspace/db db:generate",
         "db:migrate": "bun --filter @workspace/db db:migrate",
         "db:migrate:prod": "bun --filter @workspace/db db:migrate:prod",

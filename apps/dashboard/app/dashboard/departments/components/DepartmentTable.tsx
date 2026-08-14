@@ -10,7 +10,6 @@ import {
   TableRow,
 } from "@workspace/ui/components/table";
 import { Badge } from "@workspace/ui/components/badge";
-import { Button } from "@workspace/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,11 +32,21 @@ import {
 } from "lucide-react";
 import type { DepartmentItem } from "@workspace/shared";
 
+interface DepartmentCapabilities {
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canAssignManager?: boolean;
+}
+
+export type DepartmentWithCapabilities = DepartmentItem & {
+  _capabilities?: DepartmentCapabilities;
+};
+
 interface DepartmentTableProps {
-  departments: DepartmentItem[];
-  onEdit: (department: DepartmentItem) => void;
-  onAssignManager: (department: DepartmentItem) => void;
-  onDelete: (department: DepartmentItem) => void;
+  departments: DepartmentWithCapabilities[];
+  onEdit: (department: DepartmentWithCapabilities) => void;
+  onAssignManager: (department: DepartmentWithCapabilities) => void;
+  onDelete: (department: DepartmentWithCapabilities) => void;
 }
 
 export function DepartmentTable({
@@ -75,6 +84,8 @@ export function DepartmentTable({
         <TableBody>
           {departments.map((dept) => {
             const activeManagers = dept.managers?.filter((m) => !m.unassignedAt) || [];
+            const caps = dept._capabilities || { canEdit: true, canDelete: true, canAssignManager: true };
+            const hasAnyAction = caps.canEdit || caps.canAssignManager || caps.canDelete;
 
             return (
               <TableRow key={dept.id} className="hover:bg-muted/20 transition-colors">
@@ -145,36 +156,48 @@ export function DepartmentTable({
                 </TableCell>
 
                 <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      type="button"
-                      className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors cursor-pointer outline-none"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreHorizontal className="size-4" />
-                      <span className="sr-only">Actions</span>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuLabel>Manage Department</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => onEdit(dept)}>
-                        <Pencil className="mr-2 size-4 text-muted-foreground" />
-                        Edit Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onAssignManager(dept)}>
-                        <UserCheck className="mr-2 size-4 text-muted-foreground" />
-                        Assign / Edit Manager
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => onDelete(dept)}
+                  {hasAnyAction ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        type="button"
+                        className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors cursor-pointer outline-none"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Trash2 className="mr-2 size-4" />
-                        Delete Department
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <MoreHorizontal className="size-4" />
+                        <span className="sr-only">Actions</span>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel>Manage Department</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {caps.canEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(dept)}>
+                            <Pencil className="mr-2 size-4 text-muted-foreground" />
+                            Edit Details
+                          </DropdownMenuItem>
+                        )}
+                        {caps.canAssignManager && (
+                          <DropdownMenuItem onClick={() => onAssignManager(dept)}>
+                            <UserCheck className="mr-2 size-4 text-muted-foreground" />
+                            Assign / Edit Manager
+                          </DropdownMenuItem>
+                        )}
+                        {caps.canDelete && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => onDelete(dept)}
+                            >
+                              <Trash2 className="mr-2 size-4" />
+                              Delete Department
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
                 </TableCell>
               </TableRow>
             );

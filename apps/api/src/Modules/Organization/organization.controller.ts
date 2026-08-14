@@ -19,13 +19,29 @@ export class OrganizationController extends BaseController {
 
   // Departments
   public async getDepartments(req: Request, res: Response) {
-    const departments = await this.organizationService.getDepartments();
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const departments = await this.organizationService.getDepartments(actor);
     return this.sendResponse(req, res, "Departments retrieved successfully", 200, departments);
   }
 
   public async getDepartmentById(req: Request, res: Response) {
     const id = req.params.id as string;
-    const department = await this.organizationService.getDepartmentById(id);
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const department = await this.organizationService.getDepartmentById(id, actor);
     return this.sendResponse(req, res, "Department retrieved successfully", 200, department);
   }
 
@@ -64,7 +80,15 @@ export class OrganizationController extends BaseController {
 
   // Designations
   public async getDesignations(req: Request, res: Response) {
-    const designations = await this.organizationService.getDesignations();
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const designations = await this.organizationService.getDesignations(actor);
     return this.sendResponse(req, res, "Designations retrieved successfully", 200, designations);
   }
 

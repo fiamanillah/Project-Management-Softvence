@@ -2,7 +2,8 @@ import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError } from "@/core/errors/AppError";
 import { hashPassword } from "@/utils/crypto";
-import { AuthorizationEngine } from "@/core/authorization/AuthorizationEngine";
+import { AuthorizationEngine, can } from "@/core/authorization/AuthorizationEngine";
+import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import { AuditLogService } from "@/core/audit/audit.service";
 import type { Request } from "express";
 import { publishEmail, publishNotification } from "@workspace/message-broker";
@@ -31,7 +32,10 @@ export class UsersService {
   // USERS MANAGEMENT
   // ==========================================
 
-  public async getUsers(query: { search?: string; role?: string; designationId?: string; page?: number; limit?: number }) {
+  public async getUsers(
+    query: { search?: string; role?: string; designationId?: string; page?: number; limit?: number },
+    actor?: AuthenticatedUser,
+  ) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -66,10 +70,20 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    const sanitized = users.map((u) => {
-      const { passwordHash, ...userWithoutPassword } = u;
-      return userWithoutPassword;
-    });
+    const sanitized = await Promise.all(
+      users.map(async (u) => {
+        const { passwordHash, ...userWithoutPassword } = u;
+        const canManage = actor ? await can(actor, "auth.user.manage") : false;
+        return {
+          ...userWithoutPassword,
+          _capabilities: {
+            canEdit: canManage,
+            canToggleActive: canManage && u.id !== actor?.id,
+            canManageOverrides: canManage,
+          },
+        };
+      }),
+    );
 
     return {
       data: sanitized,

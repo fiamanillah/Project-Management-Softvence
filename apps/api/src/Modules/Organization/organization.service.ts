@@ -2,6 +2,8 @@ import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
+import { can } from "@/core/authorization/AuthorizationEngine";
+import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import type { Request } from "express";
 import type {
   CreateDepartmentDTO,
@@ -21,7 +23,7 @@ export class OrganizationService {
   // DEPARTMENTS MANAGEMENT
   // ==========================================
 
-  public async getDepartments() {
+  public async getDepartments(actor?: AuthenticatedUser) {
     const departments = await this.prisma.department.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -46,10 +48,25 @@ export class OrganizationService {
         },
       },
     });
-    return departments;
+
+    return Promise.all(
+      departments.map(async (dept) => {
+        const canManage = actor
+          ? await can(actor, "organization.department.manage", { departmentId: dept.id })
+          : false;
+        return {
+          ...dept,
+          _capabilities: {
+            canEdit: canManage,
+            canDelete: canManage,
+            canAssignManager: canManage,
+          },
+        };
+      }),
+    );
   }
 
-  public async getDepartmentById(id: string) {
+  public async getDepartmentById(id: string, actor?: AuthenticatedUser) {
     const department = await this.prisma.department.findUnique({
       where: { id },
       include: {
@@ -77,7 +94,19 @@ export class OrganizationService {
       },
     });
     if (!department) throw new NotFoundError("Department");
-    return department;
+
+    const canManage = actor
+      ? await can(actor, "organization.department.manage", { departmentId: department.id })
+      : false;
+
+    return {
+      ...department,
+      _capabilities: {
+        canEdit: canManage,
+        canDelete: canManage,
+        canAssignManager: canManage,
+      },
+    };
   }
 
   public async createDepartment(data: CreateDepartmentDTO, req?: Request) {
@@ -253,7 +282,7 @@ export class OrganizationService {
   // DESIGNATIONS & PERMISSION MATRIX
   // ==========================================
 
-  public async getDesignations() {
+  public async getDesignations(actor?: AuthenticatedUser) {
     const designations = await this.prisma.designation.findMany({
       orderBy: { hierarchyLevel: "asc" },
       include: {
@@ -266,7 +295,22 @@ export class OrganizationService {
         },
       },
     });
-    return designations;
+
+    return Promise.all(
+      designations.map(async (desig) => {
+        const canManage = actor
+          ? await can(actor, "organization.designation.manage", { departmentId: desig.departmentId })
+          : false;
+        return {
+          ...desig,
+          _capabilities: {
+            canEdit: canManage,
+            canDelete: canManage,
+            canManageMatrix: canManage,
+          },
+        };
+      }),
+    );
   }
 
   private async getGranterUserId(providedUserId?: string, designationIdForFallback?: string): Promise<string> {

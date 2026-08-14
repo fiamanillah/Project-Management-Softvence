@@ -15,6 +15,10 @@ describe("AuthorizationEngine", () => {
 
   beforeEach(async () => {
     // Clean up test records
+    await prisma.notification.deleteMany({});
+    await prisma.refreshToken.deleteMany({});
+    await prisma.passwordResetToken.deleteMany({});
+    await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.designationPermissionScopeTarget.deleteMany({});
     await prisma.designationPermission.deleteMany({});
@@ -107,6 +111,10 @@ describe("AuthorizationEngine", () => {
 
   afterAll(async () => {
     // Cleanup after test suite completes
+    await prisma.notification.deleteMany({});
+    await prisma.refreshToken.deleteMany({});
+    await prisma.passwordResetToken.deleteMany({});
+    await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.designationPermissionScopeTarget.deleteMany({});
     await prisma.designationPermission.deleteMany({});

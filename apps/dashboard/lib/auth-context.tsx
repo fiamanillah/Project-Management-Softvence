@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { api, setAccessToken, onAuthFailure } from "./api";
+import { api, setAccessToken, onAuthFailure, onForbidden } from "./api";
+import { PermissionProvider, type PermissionMap } from "./permissions/PermissionContext";
 
 export interface User {
   id: string;
@@ -11,15 +12,6 @@ export interface User {
   systemRole: "SuperAdmin" | "Admin" | "Staff";
   designationId?: string;
   mustChangePassword?: boolean;
-}
-
-export interface PermissionMap {
-  [code: string]: {
-    allowed: boolean;
-    scope: string;
-    module?: string;
-    description?: string;
-  };
 }
 
 interface AuthContextType {
@@ -36,6 +28,21 @@ interface AuthContextType {
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
 
+function normalizePermissionMap(raw: any): PermissionMap {
+  if (!raw || typeof raw !== "object") return {};
+  const normalized: PermissionMap = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "boolean") {
+      normalized[key] = value;
+    } else if (value && typeof value === "object" && "allowed" in value) {
+      normalized[key] = Boolean((value as any).allowed);
+    } else {
+      normalized[key] = Boolean(value);
+    }
+  }
+  return normalized;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<User | null>(null);
   const [permissions, setPermissions] = React.useState<PermissionMap>({});
@@ -44,25 +51,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchPermissions = React.useCallback(async () => {
     try {
-      const res = await api.get<{ permissions: PermissionMap }>("/auth/permissions");
+      const res = await api.get<{ permissions: any }>("/auth/permissions");
       if (res && res.permissions) {
-        setPermissions(res.permissions);
+        const normalized = normalizePermissionMap(res.permissions);
+        setPermissions(normalized);
       }
     } catch (err) {
       console.warn("Failed to fetch permissions map:", err);
     }
   }, []);
 
+  // Passive 403 Cache Freshness: silently refetch permissions on 403 Forbidden
+  React.useEffect(() => {
+    const unsubscribeForbidden = onForbidden(() => {
+      fetchPermissions();
+    });
+    return unsubscribeForbidden;
+  }, [fetchPermissions]);
+
   // Handle auth failure event triggered by 401 interceptor
   React.useEffect(() => {
-    const unsubscribe = onAuthFailure(() => {
+    const unsubscribeAuth = onAuthFailure(() => {
       setAccessToken(null);
       setToken(null);
       setUser(null);
       setPermissions({});
       localStorage.removeItem("user");
     });
-    return unsubscribe;
+    return unsubscribeAuth;
   }, []);
 
   // Initialize auth: perform silent refresh via HttpOnly cookie on app mount
@@ -158,8 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const can = (permissionCode: string): boolean => {
     if (user?.systemRole === "SuperAdmin") return true;
-    const perm = permissions[permissionCode];
-    return !!perm?.allowed;
+    return permissions[permissionCode] === true;
   };
 
   return (
@@ -176,7 +191,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshPermissions,
       }}
     >
-      {children}
+      <PermissionProvider permissions={permissions}>
+        {children}
+      </PermissionProvider>
     </AuthContext.Provider>
   );
 }
@@ -188,4 +205,3 @@ export function useAuth() {
   }
   return context;
 }
-

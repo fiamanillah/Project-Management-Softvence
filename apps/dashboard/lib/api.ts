@@ -95,6 +95,21 @@ function notifyAuthFailure() {
   authFailureListeners.forEach((cb) => cb());
 }
 
+// Forbidden (403) Listeners (e.g. AuthProvider/PermissionContext silently refetches fresh permission map)
+type ForbiddenCallback = () => void;
+const forbiddenListeners: Set<ForbiddenCallback> = new Set();
+
+export function onForbidden(callback: ForbiddenCallback) {
+  forbiddenListeners.add(callback);
+  return () => {
+    forbiddenListeners.delete(callback);
+  };
+}
+
+function notifyForbidden() {
+  forbiddenListeners.forEach((cb) => cb());
+}
+
 // Interceptor Queue for Concurrent 401 Requests
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -200,6 +215,9 @@ export async function apiRequest<T = any>(
       const retryBody = await retryRes.json().catch(() => ({}));
 
       if (!retryRes.ok) {
+        if (retryRes.status === 403) {
+          notifyForbidden();
+        }
         throw new ApiError(
           retryRes.status,
           extractErrorMessage(retryBody, "An unexpected network or server error occurred"),
@@ -219,6 +237,9 @@ export async function apiRequest<T = any>(
   }
 
   if (!response.ok) {
+    if (response.status === 403) {
+      notifyForbidden();
+    }
     throw new ApiError(
       response.status,
       extractErrorMessage(body, "An unexpected network or server error occurred"),

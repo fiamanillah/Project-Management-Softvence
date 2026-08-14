@@ -44,6 +44,12 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
+export interface UserCapabilities {
+  canEdit?: boolean;
+  canToggleActive?: boolean;
+  canManageOverrides?: boolean;
+}
+
 export interface AdminUser {
   id: string;
   email: string;
@@ -63,6 +69,7 @@ export interface AdminUser {
       name: string;
     };
   };
+  _capabilities?: UserCapabilities;
 }
 
 interface UserTableProps {
@@ -146,77 +153,93 @@ export function UserTable({ users, onEdit, onToggleActive, onRefresh }: UserTabl
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm">
-                        {user.firstName || user.lastName ? `${user.firstName || ""} ${user.lastName || ""}` : "System User"}
-                      </span>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Mail className="size-3" /> {user.email} {user.employeeId ? `• ${user.employeeId}` : ""}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getRoleBadge(user.systemRole)}</TableCell>
-                  <TableCell>
-                    {user.designation ? (
+              users.map((user) => {
+                const caps = user._capabilities || { canEdit: true, canToggleActive: true, canManageOverrides: true };
+                const hasAnyAction = caps.canEdit || caps.canManageOverrides;
+
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
                       <div className="flex flex-col">
-                        <span className="text-xs font-semibold">{user.designation.name}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {user.designation.department?.name || "System"}
+                        <span className="font-semibold text-sm">
+                          {user.firstName || user.lastName ? `${user.firstName || ""} ${user.lastName || ""}` : "System User"}
+                        </span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Mail className="size-3" /> {user.email} {user.employeeId ? `• ${user.employeeId}` : ""}
                         </span>
                       </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Unassigned</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={user.isActive}
-                          onCheckedChange={(checked) => onToggleActive(user, checked)}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {user.isActive ? (
-                            <span className="text-emerald-600 font-medium flex items-center gap-1"><UserCheck className="size-3" /> Active</span>
-                          ) : (
-                            <span className="text-rose-600 font-medium flex items-center gap-1"><UserX className="size-3" /> Disabled</span>
-                          )}
-                        </span>
-                      </div>
-                      {user.mustChangePassword && (
-                        <div>
-                          <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1 py-0">
-                            <KeyRound className="size-2.5" /> Pending First Login
-                          </Badge>
+                    </TableCell>
+                    <TableCell>{getRoleBadge(user.systemRole)}</TableCell>
+                    <TableCell>
+                      {user.designation ? (
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold">{user.designation.name}</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {user.designation.department?.name || "System"}
+                          </span>
                         </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unassigned</span>
                       )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="size-8 p-0 rounded-md hover:bg-accent flex items-center justify-center border border-input">
-                        <MoreHorizontal className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => onEdit(user)}>
-                          <Edit className="mr-2 size-4" /> Edit User Role
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setResendModalUser(user)}
-                          className="text-primary focus:text-primary"
-                        >
-                          <Send className="mr-2 size-4" /> Resend Invite
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={user.isActive}
+                            disabled={!caps.canToggleActive}
+                            onCheckedChange={(checked) => onToggleActive(user, checked)}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {user.isActive ? (
+                              <span className="text-emerald-600 font-medium flex items-center gap-1"><UserCheck className="size-3" /> Active</span>
+                            ) : (
+                              <span className="text-rose-600 font-medium flex items-center gap-1"><UserX className="size-3" /> Disabled</span>
+                            )}
+                          </span>
+                        </div>
+                        {user.mustChangePassword && (
+                          <div>
+                            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1 py-0">
+                              <KeyRound className="size-2.5" /> Pending First Login
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {hasAnyAction ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="size-8 p-0 rounded-md hover:bg-accent flex items-center justify-center border border-input">
+                            <MoreHorizontal className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            {caps.canEdit && (
+                              <DropdownMenuItem onClick={() => onEdit(user)}>
+                                <Edit className="mr-2 size-4" /> Edit User Role
+                              </DropdownMenuItem>
+                            )}
+                            {caps.canManageOverrides && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => setResendModalUser(user)}
+                                  className="text-primary focus:text-primary"
+                                >
+                                  <Send className="mr-2 size-4" /> Resend Invite
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

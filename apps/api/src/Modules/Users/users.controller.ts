@@ -18,7 +18,15 @@ export class UsersController extends BaseController {
 
   // Users
   public async getUsers(req: Request, res: Response) {
-    const result = await this.usersService.getUsers(req.query as any);
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const result = await this.usersService.getUsers(req.query as any, actor);
     return this.sendResponse(req, res, "Users retrieved successfully", 200, result);
   }
 

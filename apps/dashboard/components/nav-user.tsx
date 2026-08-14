@@ -35,6 +35,7 @@ import {
   useSidebar,
 } from '@workspace/ui/components/sidebar'
 import { useAuth } from '@/lib/auth-context'
+import { PermissionGate } from '@/components/permission-gate/PermissionGate'
 import { toast } from 'sonner'
 
 export function NavUser({
@@ -128,12 +129,14 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <Link href="/dashboard/users">
-                <DropdownMenuItem className="cursor-pointer">
-                  <Shield className="mr-2 size-4" />
-                  User & Role Admin
-                </DropdownMenuItem>
-              </Link>
+              <PermissionGate code="auth.user.view">
+                <Link href="/dashboard/users">
+                  <DropdownMenuItem className="cursor-pointer">
+                    <Shield className="mr-2 size-4" />
+                    User & Role Admin
+                  </DropdownMenuItem>
+                </Link>
+              </PermissionGate>
               <Link href="/change-password">
                 <DropdownMenuItem className="cursor-pointer">
                   <KeyRound className="mr-2 size-4" />

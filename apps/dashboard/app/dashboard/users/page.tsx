@@ -13,11 +13,21 @@ import {
 import { UserPlus, Search, Shield, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { RouteGuard } from "@/components/permission-gate/RouteGuard";
+import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { UserTable, type AdminUser } from "./components/UserTable";
 import { CreateUserModal } from "./components/CreateUserModal";
 import { EditUserSheet } from "./components/EditUserSheet";
 
 export default function UsersPage() {
+  return (
+    <RouteGuard code="auth.user.view">
+      <UsersContent />
+    </RouteGuard>
+  );
+}
+
+function UsersContent() {
   const [users, setUsers] = React.useState<AdminUser[]>([]);
   const [designations, setDesignations] = React.useState<{ id: string; name: string; code: string }[]>([]);
   const [search, setSearch] = React.useState("");
@@ -86,9 +96,11 @@ export default function UsersPage() {
           <Button variant="outline" size="sm" onClick={() => fetchUsers()}>
             <RefreshCw className="mr-2 size-4" /> Refresh
           </Button>
-          <Button size="sm" onClick={() => setCreateModalOpen(true)}>
-            <UserPlus className="mr-2 size-4" /> Add User
-          </Button>
+          <PermissionGate code="auth.user.create">
+            <Button size="sm" onClick={() => setCreateModalOpen(true)}>
+              <UserPlus className="mr-2 size-4" /> Add User
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 

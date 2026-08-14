@@ -5,12 +5,22 @@ import { Button } from "@workspace/ui/components/button";
 import { Plus, RefreshCw, Lock } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { RouteGuard } from "@/components/permission-gate/RouteGuard";
+import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { DesignationTable, type DesignationItem } from "./components/DesignationTable";
 import { CreateDesignationModal } from "./components/CreateDesignationModal";
 import { EditDesignationModal } from "./components/EditDesignationModal";
 import { DeleteDesignationDialog } from "./components/DeleteDesignationDialog";
 
 export default function DesignationsPage() {
+  return (
+    <RouteGuard code="organization.designation.view">
+      <DesignationsContent />
+    </RouteGuard>
+  );
+}
+
+function DesignationsContent() {
   const [designations, setDesignations] = React.useState<DesignationItem[]>([]);
   const [departments, setDepartments] = React.useState<{ id: string; name: string; code: string }[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -70,9 +80,11 @@ export default function DesignationsPage() {
           <Button variant="outline" size="sm" onClick={() => fetchData()}>
             <RefreshCw className="mr-2 size-4" /> Refresh
           </Button>
-          <Button size="sm" onClick={() => setCreateModalOpen(true)}>
-            <Plus className="mr-2 size-4" /> Add Designation
-          </Button>
+          <PermissionGate code="organization.designation.manage">
+            <Button size="sm" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="mr-2 size-4" /> Add Designation
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 

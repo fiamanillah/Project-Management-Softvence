@@ -6,12 +6,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/componen
 import { KeyRound, Plus, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { RouteGuard } from "@/components/permission-gate/RouteGuard";
+import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { OverrideTable, type OverrideItem } from "./components/OverrideTable";
 import { CreateOverrideModal } from "./components/CreateOverrideModal";
 import { DelegationTable, type DelegationItem } from "./components/DelegationTable";
 import { CreateDelegationModal } from "./components/CreateDelegationModal";
 
 export default function OverridesPage() {
+  return (
+    <RouteGuard code="auth.user.manage">
+      <OverridesContent />
+    </RouteGuard>
+  );
+}
+
+function OverridesContent() {
   const [overrides, setOverrides] = React.useState<OverrideItem[]>([]);
   const [delegations, setDelegations] = React.useState<DelegationItem[]>([]);
   const [users, setUsers] = React.useState<{ id: string; email: string; firstName?: string; lastName?: string }[]>([]);
@@ -101,9 +111,11 @@ export default function OverridesPage() {
 
         <TabsContent value="overrides" className="space-y-4">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setOverrideModalOpen(true)}>
-              <Plus className="mr-2 size-4" /> New Override
-            </Button>
+            <PermissionGate code="auth.user.manage">
+              <Button size="sm" onClick={() => setOverrideModalOpen(true)}>
+                <Plus className="mr-2 size-4" /> New Override
+              </Button>
+            </PermissionGate>
           </div>
 
           {isLoading ? (
@@ -117,9 +129,11 @@ export default function OverridesPage() {
 
         <TabsContent value="delegations" className="space-y-4">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => setDelegationModalOpen(true)}>
-              <Plus className="mr-2 size-4" /> New Delegation
-            </Button>
+            <PermissionGate code="auth.user.manage">
+              <Button size="sm" onClick={() => setDelegationModalOpen(true)}>
+                <Plus className="mr-2 size-4" /> New Delegation
+              </Button>
+            </PermissionGate>
           </div>
 
           {isLoading ? (
