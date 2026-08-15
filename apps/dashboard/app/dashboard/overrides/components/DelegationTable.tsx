@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   useTable,
-  createColumnHelper,
   type ColumnFiltersState,
   type ColumnVisibilityState,
   type SortingState,
@@ -16,32 +15,19 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table";
-import { Badge } from "@workspace/ui/components/badge";
-import { Button } from "@workspace/ui/components/button";
-import { Trash2, Calendar } from "lucide-react";
 import {
   features,
-  type DataTableFeatures,
-  DataTableColumnHeader,
   DataTablePagination,
   DataTableToolbar,
 } from "@/components/data-table";
-
-export interface DelegationItem {
-  id: string;
-  scope: string;
-  validFrom: string;
-  validUntil: string;
-  delegator: { id: string; email: string; firstName?: string; lastName?: string };
-  delegatee: { id: string; email: string; firstName?: string; lastName?: string };
-}
+import type { DelegationItem } from "../types";
+import { getDelegationColumns } from "./DelegationColumns";
+import { RevokeConfirmDialog } from "./RevokeConfirmDialog";
 
 interface DelegationTableProps {
   delegations: DelegationItem[];
-  onRevoke: (id: string) => void;
+  onRevoke: (id: string) => Promise<void>;
 }
-
-const columnHelper = createColumnHelper<DataTableFeatures, DelegationItem>();
 
 export function DelegationTable({ delegations, onRevoke }: DelegationTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -53,118 +39,24 @@ export function DelegationTable({ delegations, onRevoke }: DelegationTableProps)
     pageSize: 10,
   });
 
+  // State for confirm modal
+  const [selectedDelegation, setSelectedDelegation] = React.useState<DelegationItem | null>(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+
+  const handlePromptRevoke = (delegation: DelegationItem) => {
+    setSelectedDelegation(delegation);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmRevoke = async () => {
+    if (!selectedDelegation) return;
+    await onRevoke(selectedDelegation.id);
+    setSelectedDelegation(null);
+  };
+
   const columns = React.useMemo(() => {
-    return columnHelper.columns([
-      columnHelper.accessor(
-        (row) =>
-          `${row.delegator.firstName || ""} ${row.delegator.lastName || ""} ${row.delegator.email}`.trim(),
-        {
-          id: "delegator",
-          header: ({ column }) => (
-            <DataTableColumnHeader
-              column={column}
-              title="Delegator (Inherited From)"
-            />
-          ),
-          cell: ({ row }) => {
-            const del = row.original;
-            return (
-              <div className="flex flex-col">
-                <span className="font-bold text-sm">
-                  {del.delegator.firstName || del.delegator.lastName
-                    ? `${del.delegator.firstName || ""} ${del.delegator.lastName || ""}`
-                    : del.delegator.email}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {del.delegator.email}
-                </span>
-              </div>
-            );
-          },
-        }
-      ),
-
-      columnHelper.accessor(
-        (row) =>
-          `${row.delegatee.firstName || ""} ${row.delegatee.lastName || ""} ${row.delegatee.email}`.trim(),
-        {
-          id: "delegatee",
-          header: ({ column }) => (
-            <DataTableColumnHeader
-              column={column}
-              title="Delegatee (Recipient)"
-            />
-          ),
-          cell: ({ row }) => {
-            const del = row.original;
-            return (
-              <div className="flex flex-col">
-                <span className="font-bold text-sm">
-                  {del.delegatee.firstName || del.delegatee.lastName
-                    ? `${del.delegatee.firstName || ""} ${del.delegatee.lastName || ""}`
-                    : del.delegatee.email}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {del.delegatee.email}
-                </span>
-              </div>
-            );
-          },
-        }
-      ),
-
-      columnHelper.accessor("scope", {
-        id: "scope",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Scope" />
-        ),
-        cell: ({ row }) => (
-          <Badge variant="outline" className="font-mono text-xs">
-            {row.original.scope}
-          </Badge>
-        ),
-      }),
-
-      columnHelper.accessor("validFrom", {
-        id: "validity",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Validity Window" />
-        ),
-        cell: ({ row }) => {
-          const del = row.original;
-          return (
-            <div className="flex flex-col text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Calendar className="size-3" />{" "}
-                {new Date(del.validFrom).toLocaleDateString()} &rarr;{" "}
-                {new Date(del.validUntil).toLocaleDateString()}
-              </span>
-            </div>
-          );
-        },
-      }),
-
-      columnHelper.display({
-        id: "actions",
-        header: () => <div className="text-right">Action</div>,
-        cell: ({ row }) => {
-          const del = row.original;
-          return (
-            <div className="text-right">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-rose-600 hover:text-rose-700"
-                onClick={() => onRevoke(del.id)}
-              >
-                <Trash2 className="size-4 mr-1" /> Revoke
-              </Button>
-            </div>
-          );
-        },
-      }),
-    ]);
-  }, [onRevoke]);
+    return getDelegationColumns(handlePromptRevoke);
+  }, []);
 
   const table = useTable({
     features,
@@ -191,7 +83,7 @@ export function DelegationTable({ delegations, onRevoke }: DelegationTableProps)
       <DataTableToolbar
         table={table}
         searchKey="delegator"
-        searchPlaceholder="Search delegations by delegator..."
+        searchPlaceholder="Search delegations by delegator or delegatee..."
       />
 
       {/* TanStack Table Container */}
@@ -229,9 +121,9 @@ export function DelegationTable({ delegations, onRevoke }: DelegationTableProps)
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground text-sm"
+                  className="h-32 text-center text-muted-foreground text-sm"
                 >
-                  No active delegations configured.
+                  No user delegations configured.
                 </TableCell>
               </TableRow>
             )}
@@ -241,6 +133,15 @@ export function DelegationTable({ delegations, onRevoke }: DelegationTableProps)
 
       {/* Table Pagination */}
       <DataTablePagination table={table} />
+
+      {/* Revocation Confirmation Dialog */}
+      <RevokeConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Revoke User Delegation"
+        description={`Are you sure you want to revoke this delegation from "${selectedDelegation?.delegator?.email}" to "${selectedDelegation?.delegatee?.email}"? The delegatee will immediately lose delegated authority.`}
+        onConfirm={handleConfirmRevoke}
+      />
     </div>
   );
 }

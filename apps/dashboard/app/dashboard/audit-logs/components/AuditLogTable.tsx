@@ -32,9 +32,11 @@ import {
   features,
   type DataTableFeatures,
   DataTableColumnHeader,
+  DataTablePagination,
   DataTableToolbar,
 } from "@/components/data-table";
 import { AuditLogFilters, type AuditLogFiltersProps } from "./AuditLogFilters";
+import type { AuditLogPaginationProps } from "./AuditLogPagination";
 
 export interface AuditLogItem {
   _id: string;
@@ -78,6 +80,7 @@ interface AuditLogTableProps {
   onViewDetails: (log: AuditLogItem) => void;
   isLoading?: boolean;
   filterProps?: Omit<AuditLogFiltersProps, "table">;
+  paginationProps?: Omit<AuditLogPaginationProps, "isLoading">;
 }
 
 const columnHelper = createColumnHelper<DataTableFeatures, AuditLogItem>();
@@ -87,6 +90,7 @@ export function AuditLogTable({
   onViewDetails,
   isLoading,
   filterProps,
+  paginationProps,
 }: AuditLogTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -329,11 +333,25 @@ export function AuditLogTable({
     ]);
   }, [onViewDetails]);
 
+  // Configure server-aware pagination state
+  const paginationState = React.useMemo(() => {
+    const page = paginationProps ? paginationProps.currentPage - 1 : 0;
+    const size = paginationProps ? paginationProps.limit : (logs.length || 20);
+    return {
+      pageIndex: Math.max(0, page),
+      pageSize: Math.max(1, size),
+    };
+  }, [paginationProps?.currentPage, paginationProps?.limit, logs.length]);
+
   const table = useTable({
     features,
     data: logs,
     columns,
     getRowId: (row) => row._id,
+    rowCount: paginationProps?.totalItems ?? logs.length,
+    manualPagination: true,
+    manualFiltering: true,
+    manualSorting: true,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
@@ -341,6 +359,7 @@ export function AuditLogTable({
       sorting,
       columnFilters,
       columnVisibility,
+      pagination: paginationState,
     },
   });
 
@@ -384,7 +403,7 @@ export function AuditLogTable({
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 10 }).map((_, i) => (
+              Array.from({ length: Math.min(10, paginationProps?.limit || 10) }).map((_, i) => (
                 <TableRow key={i} className="hover:bg-transparent">
                   <TableCell>
                     <Skeleton className="h-4 w-28" />
@@ -458,6 +477,20 @@ export function AuditLogTable({
           </TableBody>
         </Table>
       </div>
+
+      {/* Pagination Footer */}
+      {paginationProps && (
+        <DataTablePagination
+          table={table}
+          currentPage={paginationProps.currentPage}
+          totalPages={paginationProps.totalPages}
+          totalItems={paginationProps.totalItems}
+          limit={paginationProps.limit}
+          onPageChange={paginationProps.onPageChange}
+          onLimitChange={paginationProps.onLimitChange}
+          isLoading={isLoading}
+        />
+      )}
     </div>
   );
 }

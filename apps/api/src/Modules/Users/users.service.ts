@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
-import { NotFoundError, ConflictError } from "@/core/errors/AppError";
+import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
 import { hashPassword } from "@/utils/crypto";
 import { AuthorizationEngine, can } from "@/core/authorization/AuthorizationEngine";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
@@ -356,32 +356,59 @@ export class UsersService {
     const perm = await this.prisma.permission.findUnique({ where: { id: data.permissionId } });
     if (!perm) throw new NotFoundError("Permission");
 
-    const override = await this.prisma.userPermissionOverride.create({
-      data: {
+    const existing = await this.prisma.userPermissionOverride.findFirst({
+      where: {
         userId: data.userId,
         permissionId: data.permissionId,
-        isDeny: data.isDeny,
         departmentId: data.departmentId || null,
         teamId: data.teamId || null,
         projectId: data.projectId || null,
-        grantedBy: granterId,
-        reason: data.reason || null,
-        expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
-      },
-      include: {
-        user: true,
-        permission: true,
       },
     });
+
+    let override;
+    if (existing) {
+      override = await this.prisma.userPermissionOverride.update({
+        where: { id: existing.id },
+        data: {
+          isDeny: data.isDeny,
+          grantedBy: granterId,
+          reason: data.reason || null,
+          expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        },
+        include: {
+          user: true,
+          permission: true,
+        },
+      });
+    } else {
+      override = await this.prisma.userPermissionOverride.create({
+        data: {
+          userId: data.userId,
+          permissionId: data.permissionId,
+          isDeny: data.isDeny,
+          departmentId: data.departmentId || null,
+          teamId: data.teamId || null,
+          projectId: data.projectId || null,
+          grantedBy: granterId,
+          reason: data.reason || null,
+          expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        },
+        include: {
+          user: true,
+          permission: true,
+        },
+      });
+    }
 
     await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({
       module: "PERMISSIONS",
-      action: "PERMISSION_OVERRIDE_CREATE",
+      action: existing ? "PERMISSION_OVERRIDE_UPDATE" : "PERMISSION_OVERRIDE_CREATE",
       entityTable: "user_permission_overrides",
       entityId: override.id,
-      oldPayload: undefined,
+      oldPayload: existing || undefined,
       newPayload: override,
       req,
     });
@@ -427,6 +454,21 @@ export class UsersService {
   }
 
   public async createDelegation(data: CreateDelegationDTO, creatorId: string, req?: Request) {
+    if (data.delegatorId === data.delegateeId) {
+      throw new BadRequestError("Delegator and delegatee cannot be the same user");
+    }
+
+    const validFrom = new Date(data.validFrom);
+    const validUntil = new Date(data.validUntil);
+
+    if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime())) {
+      throw new BadRequestError("Invalid delegation date format");
+    }
+
+    if (validUntil < validFrom) {
+      throw new BadRequestError("Delegation end date must be on or after start date");
+    }
+
     const delegator = await this.prisma.user.findUnique({ where: { id: data.delegatorId } });
     if (!delegator) throw new NotFoundError("Delegator User");
 
@@ -438,8 +480,8 @@ export class UsersService {
         delegatorId: data.delegatorId,
         delegateeId: data.delegateeId,
         scope: data.scope || "*",
-        validFrom: new Date(data.validFrom),
-        validUntil: new Date(data.validUntil),
+        validFrom,
+        validUntil,
         createdBy: creatorId,
       },
       include: {
@@ -447,6 +489,8 @@ export class UsersService {
         delegatee: true,
       },
     });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({
       module: "PERMISSIONS",
@@ -470,6 +514,8 @@ export class UsersService {
     await this.prisma.delegation.delete({
       where: { id: delegationId },
     });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({
       module: "PERMISSIONS",

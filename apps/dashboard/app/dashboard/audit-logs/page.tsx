@@ -8,8 +8,6 @@ import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { AuditLogTable, type AuditLogItem } from "./components/AuditLogTable";
 import { AuditLogDetailModal } from "./components/AuditLogDetailModal";
 import { AuditLogStatsCards, type AuditStatsData } from "./components/AuditLogStatsCards";
-import { AuditLogFilters } from "./components/AuditLogFilters";
-import { AuditLogPagination } from "./components/AuditLogPagination";
 
 export default function AuditLogsPage() {
   return (
@@ -152,7 +150,7 @@ function AuditLogsContent() {
       {/* Summary Statistics Cards */}
       <AuditLogStatsCards stats={stats} isLoading={isStatsLoading} />
 
-      {/* Audit Log Table with Unified Search, Filters & Column Selection */}
+      {/* Audit Log Table with Unified Search, Filters, Column Selection & Server Pagination */}
       <AuditLogTable
         logs={logs}
         onViewDetails={handleViewDetails}
@@ -170,20 +168,17 @@ function AuditLogsContent() {
           onReset: handleResetFilters,
           isLoading,
         }}
-      />
-
-      {/* Server Pagination Bar */}
-      <AuditLogPagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        limit={limit}
-        onPageChange={setCurrentPage}
-        onLimitChange={(newLimit) => {
-          setLimit(newLimit);
-          setCurrentPage(1);
+        paginationProps={{
+          currentPage,
+          totalPages,
+          totalItems,
+          limit,
+          onPageChange: setCurrentPage,
+          onLimitChange: (newLimit: number) => {
+            setLimit(newLimit);
+            setCurrentPage(1);
+          },
         }}
-        isLoading={isLoading}
       />
 
       {/* Forensic Detail Modal */}

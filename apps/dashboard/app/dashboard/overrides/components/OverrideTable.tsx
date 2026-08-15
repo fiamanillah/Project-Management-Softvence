@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   useTable,
-  createColumnHelper,
   type ColumnFiltersState,
   type ColumnVisibilityState,
   type SortingState,
@@ -16,34 +15,19 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table";
-import { Badge } from "@workspace/ui/components/badge";
-import { Button } from "@workspace/ui/components/button";
-import { Trash2, ShieldAlert, ShieldCheck, Clock } from "lucide-react";
 import {
   features,
-  type DataTableFeatures,
-  DataTableColumnHeader,
   DataTablePagination,
   DataTableToolbar,
 } from "@/components/data-table";
-
-export interface OverrideItem {
-  id: string;
-  isDeny: boolean;
-  reason?: string;
-  expiresAt?: string;
-  createdAt: string;
-  user: { id: string; email: string; firstName?: string; lastName?: string };
-  permission: { id: string; code: string; module: string; description: string };
-  granter: { id: string; email: string; firstName?: string; lastName?: string };
-}
+import type { OverrideItem } from "../types";
+import { getOverrideColumns } from "./OverrideColumns";
+import { RevokeConfirmDialog } from "./RevokeConfirmDialog";
 
 interface OverrideTableProps {
   overrides: OverrideItem[];
-  onRevoke: (id: string) => void;
+  onRevoke: (id: string) => Promise<void>;
 }
-
-const columnHelper = createColumnHelper<DataTableFeatures, OverrideItem>();
 
 export function OverrideTable({ overrides, onRevoke }: OverrideTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -55,118 +39,24 @@ export function OverrideTable({ overrides, onRevoke }: OverrideTableProps) {
     pageSize: 10,
   });
 
+  // State for confirm modal
+  const [selectedOverride, setSelectedOverride] = React.useState<OverrideItem | null>(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+
+  const handlePromptRevoke = (override: OverrideItem) => {
+    setSelectedOverride(override);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmRevoke = async () => {
+    if (!selectedOverride) return;
+    await onRevoke(selectedOverride.id);
+    setSelectedOverride(null);
+  };
+
   const columns = React.useMemo(() => {
-    return columnHelper.columns([
-      columnHelper.accessor(
-        (row) =>
-          `${row.user.firstName || ""} ${row.user.lastName || ""} ${row.user.email}`.trim(),
-        {
-          id: "user",
-          header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="User" />
-          ),
-          cell: ({ row }) => {
-            const ov = row.original;
-            return (
-              <div className="flex flex-col">
-                <span className="font-bold text-sm">
-                  {ov.user.firstName || ov.user.lastName
-                    ? `${ov.user.firstName || ""} ${ov.user.lastName || ""}`
-                    : ov.user.email}
-                </span>
-                <span className="text-xs text-muted-foreground">{ov.user.email}</span>
-              </div>
-            );
-          },
-        }
-      ),
-
-      columnHelper.accessor(
-        (row) => `${row.permission.code} ${row.permission.module}`,
-        {
-          id: "permission",
-          header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Permission / Module" />
-          ),
-          cell: ({ row }) => {
-            const ov = row.original;
-            return (
-              <div className="flex flex-col">
-                <span className="font-mono text-xs font-semibold">
-                  {ov.permission.code}
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  {ov.permission.module}
-                </span>
-              </div>
-            );
-          },
-        }
-      ),
-
-      columnHelper.accessor("isDeny", {
-        id: "overrideType",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Override Type" />
-        ),
-        cell: ({ row }) => {
-          const ov = row.original;
-          return ov.isDeny ? (
-            <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 gap-1">
-              <ShieldAlert className="size-3" /> Explicit DENY
-            </Badge>
-          ) : (
-            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1">
-              <ShieldCheck className="size-3" /> Hand-GRANT
-            </Badge>
-          );
-        },
-      }),
-
-      columnHelper.accessor("expiresAt", {
-        id: "expiration",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Expiration / Reason" />
-        ),
-        cell: ({ row }) => {
-          const ov = row.original;
-          return (
-            <div className="flex flex-col text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Clock className="size-3" />{" "}
-                {ov.expiresAt
-                  ? new Date(ov.expiresAt).toLocaleDateString()
-                  : "Permanent"}
-              </span>
-              {ov.reason && (
-                <span className="italic truncate max-w-xs">{ov.reason}</span>
-              )}
-            </div>
-          );
-        },
-      }),
-
-      columnHelper.display({
-        id: "actions",
-        header: () => <div className="text-right">Action</div>,
-        cell: ({ row }) => {
-          const ov = row.original;
-          return (
-            <div className="text-right">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-rose-600 hover:text-rose-700"
-                onClick={() => onRevoke(ov.id)}
-              >
-                <Trash2 className="size-4 mr-1" /> Revoke
-              </Button>
-            </div>
-          );
-        },
-      }),
-    ]);
-  }, [onRevoke]);
+    return getOverrideColumns(handlePromptRevoke);
+  }, []);
 
   const table = useTable({
     features,
@@ -193,7 +83,7 @@ export function OverrideTable({ overrides, onRevoke }: OverrideTableProps) {
       <DataTableToolbar
         table={table}
         searchKey="user"
-        searchPlaceholder="Search overrides by user..."
+        searchPlaceholder="Search overrides by user name or email..."
       />
 
       {/* TanStack Table Container */}
@@ -231,9 +121,9 @@ export function OverrideTable({ overrides, onRevoke }: OverrideTableProps) {
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground text-sm"
+                  className="h-32 text-center text-muted-foreground text-sm"
                 >
-                  No user permission overrides configured.
+                  No user permission overrides found.
                 </TableCell>
               </TableRow>
             )}
@@ -243,6 +133,19 @@ export function OverrideTable({ overrides, onRevoke }: OverrideTableProps) {
 
       {/* Table Pagination */}
       <DataTablePagination table={table} />
+
+      {/* Revocation Confirmation Dialog */}
+      <RevokeConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Revoke Permission Override"
+        description={`Are you sure you want to revoke the ${
+          selectedOverride?.isDeny ? "explicit DENY" : "hand-GRANT"
+        } override for "${selectedOverride?.user?.email}" on permission "${
+          selectedOverride?.permission?.code
+        }"?`}
+        onConfirm={handleConfirmRevoke}
+      />
     </div>
   );
 }

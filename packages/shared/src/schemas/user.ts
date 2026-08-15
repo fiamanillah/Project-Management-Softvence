@@ -79,13 +79,29 @@ export const createOverrideSchema = z.object({
   expiresAt: z.string().optional().nullable(),
 });
 
-export const createDelegationSchema = z.object({
-  delegatorId: z.string().uuid(),
-  delegateeId: z.string().uuid(),
-  scope: z.string().default("*"),
-  validFrom: z.string(),
-  validUntil: z.string(),
-});
+export const createDelegationSchema = z
+  .object({
+    delegatorId: z.string().uuid("Invalid delegator ID"),
+    delegateeId: z.string().uuid("Invalid delegatee ID"),
+    scope: z.string().default("*"),
+    validFrom: z.string().min(1, "Valid start date is required"),
+    validUntil: z.string().min(1, "Valid end date is required"),
+  })
+  .refine((data) => data.delegatorId !== data.delegateeId, {
+    message: "Delegator and delegatee cannot be the same user",
+    path: ["delegateeId"],
+  })
+  .refine(
+    (data) => {
+      const from = new Date(data.validFrom).getTime();
+      const until = new Date(data.validUntil).getTime();
+      return !isNaN(from) && !isNaN(until) && until >= from;
+    },
+    {
+      message: "Expiry date must be on or after start date",
+      path: ["validUntil"],
+    },
+  );
 
 export type CreateAdminUserDTO = z.infer<typeof createAdminUserSchema>;
 export type ResendInviteDTO = z.infer<typeof resendInviteSchema>;
