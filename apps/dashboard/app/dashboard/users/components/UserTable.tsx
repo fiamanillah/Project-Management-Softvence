@@ -18,7 +18,6 @@ import {
 } from "@workspace/ui/components/table";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,7 +56,8 @@ import {
   ShieldAlert,
   Lock,
   Archive,
-  Search,
+  ChevronDown,
+  IdCard,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -67,7 +67,6 @@ import {
   DataTableColumnHeader,
   DataTablePagination,
   DataTableToolbar,
-  DataTableViewOptions,
 } from "@/components/data-table";
 
 export type UserStatus = "INVITED" | "ACTIVE" | "INACTIVE" | "SUSPENDED" | "LOCKED" | "ARCHIVED";
@@ -130,12 +129,6 @@ export function UserTable({
   statusFilter = "all",
   onStatusFilterChange,
 }: UserTableProps) {
-  const [resendModalUser, setResendModalUser] = React.useState<AdminUser | null>(null);
-  const [isResending, setIsResending] = React.useState(false);
-  const [resendResult, setResendResult] = React.useState<{
-    email: string;
-    temporaryPassword: string;
-  } | null>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const [updatingUserId, setUpdatingUserId] = React.useState<string | null>(null);
 
@@ -144,7 +137,6 @@ export function UserTable({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<ColumnVisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
-  const [globalFilter, setGlobalFilter] = React.useState("");
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize: 10,
@@ -153,11 +145,11 @@ export function UserTable({
   const getRoleBadge = (role: string) => {
     switch (role) {
       case "SuperAdmin":
-        return <Badge className="bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30">SuperAdmin</Badge>;
+        return <Badge className="bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30 font-semibold">SuperAdmin</Badge>;
       case "Admin":
-        return <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30">Admin</Badge>;
+        return <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 font-semibold">Admin</Badge>;
       default:
-        return <Badge variant="outline">Staff</Badge>;
+        return <Badge variant="outline" className="text-muted-foreground">Staff</Badge>;
     }
   };
 
@@ -165,46 +157,52 @@ export function UserTable({
     switch (status) {
       case "INVITED":
         return (
-          <div className="flex flex-col gap-1 items-start">
-            <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 gap-1.5 font-medium">
-              <Clock className="size-3" /> Invited
-            </Badge>
+          <div className="flex flex-col gap-1 items-start min-w-0">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shadow-xs">
+              <Clock className="size-3 shrink-0" />
+              Invited
+            </span>
             {mustChangePassword && (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400/90 font-medium flex items-center gap-0.5">
-                <KeyRound className="size-2.5" /> Pending First Login
+              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400/90 flex items-center gap-1 whitespace-nowrap pl-0.5">
+                <KeyRound className="size-2.5 shrink-0" /> Pending Acceptance
               </span>
             )}
           </div>
         );
       case "ACTIVE":
         return (
-          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1.5 font-medium">
-            <CheckCircle2 className="size-3" /> Active
-          </Badge>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 shadow-xs">
+            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            Active
+          </span>
         );
       case "INACTIVE":
         return (
-          <Badge className="bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30 gap-1.5 font-medium">
-            <UserX className="size-3" /> Inactive
-          </Badge>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-500/10 text-slate-700 dark:text-slate-400 border border-slate-500/25 shadow-xs">
+            <UserX className="size-3 shrink-0 text-slate-500" />
+            Inactive
+          </span>
         );
       case "SUSPENDED":
         return (
-          <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 gap-1.5 font-medium">
-            <ShieldAlert className="size-3" /> Suspended
-          </Badge>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/25 shadow-xs">
+            <ShieldAlert className="size-3 shrink-0 text-rose-500" />
+            Suspended
+          </span>
         );
       case "LOCKED":
         return (
-          <Badge className="bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30 gap-1.5 font-medium">
-            <Lock className="size-3" /> Locked
-          </Badge>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/25 shadow-xs">
+            <Lock className="size-3 shrink-0 text-orange-500" />
+            Locked
+          </span>
         );
       case "ARCHIVED":
         return (
-          <Badge className="bg-zinc-500/15 text-zinc-700 dark:text-zinc-400 border-zinc-500/30 gap-1.5 font-medium">
-            <Archive className="size-3" /> Archived
-          </Badge>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/25 shadow-xs">
+            <Archive className="size-3 shrink-0 text-zinc-500" />
+            Archived
+          </span>
         );
       default:
         return <Badge variant="outline">{status}</Badge>;
@@ -229,62 +227,43 @@ export function UserTable({
     }
   };
 
-  const handleCopyInviteDetails = (user: AdminUser) => {
-    const lines = [
-      "==================================",
-      " SOFTVENCE ACCOUNT INVITATION",
-      "==================================",
-      `Name: ${user.firstName || ""} ${user.lastName || ""}`.trim(),
-      `Email: ${user.email}`,
-      user.employeeId ? `Employee ID: ${user.employeeId}` : "",
-      user.designation?.name ? `Designation: ${user.designation.name}` : "",
-      user.designation?.department?.name ? `Department: ${user.designation.department.name}` : "",
-      `Role: ${user.systemRole}`,
-      `Login URL: ${window.location.origin}/login`,
-      "Status: Invited (Pending First Login & Password Setup)",
-      "",
-      "Please log in at the portal with your temporary credentials to establish your permanent password.",
-    ]
-      .filter((line) => line !== "")
-      .join("\n");
+  const [copyingUserId, setCopyingUserId] = React.useState<string | null>(null);
 
-    navigator.clipboard.writeText(lines);
-    setCopiedId(user.id);
-    toast.success("Invitation details copied to clipboard!");
-    setTimeout(() => setCopiedId(null), 2500);
-  };
-
-  const handleResendInvite = async () => {
-    if (!resendModalUser) return;
-    setIsResending(true);
+  const handleQuickCopyInvite = async (user: AdminUser) => {
+    setCopyingUserId(user.id);
     try {
-      const res = await api.post(`/users/${resendModalUser.id}/resend-invite`, {});
-      setResendResult({
-        email: resendModalUser.email,
-        temporaryPassword: res.temporaryPassword,
-      });
-      toast.success("Invitation and temporary credentials resent successfully!");
+      const res = await api.post(`/users/${user.id}/resend-invite`, {});
+      const tempPassword = res.temporaryPassword;
+
+      const lines = [
+        "==================================",
+        " SOFTVENCE ACCOUNT INVITATION",
+        "==================================",
+        `Name: ${user.firstName || ""} ${user.lastName || ""}`.trim(),
+        `Email: ${user.email}`,
+        user.employeeId ? `Employee ID: ${user.employeeId}` : "",
+        user.designation?.name ? `Designation: ${user.designation.name}` : "",
+        user.designation?.department?.name ? `Department: ${user.designation.department.name}` : "",
+        `Role: ${user.systemRole}`,
+        `Temporary Password: ${tempPassword}`,
+        `Login URL: ${window.location.origin}/login`,
+        "Status: Invited (Pending First Login & Password Setup)",
+        "",
+        "Please log in at the portal with your temporary credentials to establish your permanent password.",
+      ]
+        .filter((line) => line !== "")
+        .join("\n");
+
+      navigator.clipboard.writeText(lines);
+      setCopiedId(user.id);
+      toast.success(`Login info & password for ${user.email} copied!`);
       if (onRefresh) onRefresh();
+      setTimeout(() => setCopiedId(null), 2500);
     } catch (err: any) {
-      toast.error(err.message || "Failed to resend invitation");
+      toast.error(err.message || "Failed to generate login info");
     } finally {
-      setIsResending(false);
+      setCopyingUserId(null);
     }
-  };
-
-  const handleCopyCredentials = () => {
-    if (!resendResult) return;
-    const creds = `Softvence Account Invitation\nEmail: ${resendResult.email}\nTemporary Password: ${resendResult.temporaryPassword}\nLogin URL: ${window.location.origin}/login`;
-    navigator.clipboard.writeText(creds);
-    setCopiedId("resend-modal");
-    toast.success("Credentials copied to clipboard!");
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const closeResendModal = () => {
-    setResendModalUser(null);
-    setResendResult(null);
-    setCopiedId(null);
   };
 
   // Define table columns
@@ -295,21 +274,34 @@ export function UserTable({
         {
           id: "user",
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="User / Employee ID" />
+            <DataTableColumnHeader column={column} title="User / Employee" />
           ),
           cell: ({ row }) => {
             const user = row.original;
             return (
-              <div className="flex flex-col gap-0.5">
-                <span className="font-semibold text-sm text-foreground">
-                  {user.firstName || user.lastName
-                    ? `${user.firstName || ""} ${user.lastName || ""}`
-                    : "System User"}
-                </span>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Mail className="size-3 shrink-0" /> {user.email}{" "}
-                  {user.employeeId ? `• ${user.employeeId}` : ""}
-                </span>
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20 shrink-0">
+                  {user.firstName ? user.firstName[0]?.toUpperCase() : "U"}
+                  {user.lastName ? user.lastName[0]?.toUpperCase() : ""}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-sm text-foreground truncate">
+                    {user.firstName || user.lastName
+                      ? `${user.firstName || ""} ${user.lastName || ""}`
+                      : "System User"}
+                  </span>
+                  <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5">
+                    <span className="flex items-center gap-1 truncate">
+                      <Mail className="size-3 shrink-0" /> {user.email}
+                    </span>
+                    {user.employeeId && (
+                      <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground shrink-0 flex items-center gap-0.5">
+                        <IdCard className="size-2.5" />
+                        {user.employeeId}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           },
@@ -354,7 +346,7 @@ export function UserTable({
         {
           id: "status",
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Status & Access" />
+            <DataTableColumnHeader column={column} title="Status & Lifecycle" />
           ),
           cell: ({ row }) => {
             const user = row.original;
@@ -368,58 +360,93 @@ export function UserTable({
             return (
               <div className="flex items-center gap-2">
                 {caps.canEdit ? (
-                  <Select
-                    value={user.status || (user.isActive ? "ACTIVE" : "INACTIVE")}
-                    onValueChange={(val) => {
-                      if (val) handleStatusUpdate(user, val as UserStatus);
-                    }}
-                    disabled={isUpdating}
-                  >
-                    <SelectTrigger className="h-8 w-36 text-xs bg-background/50 border-input">
-                      <SelectValue>
-                        {isUpdating ? (
-                          <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                        ) : (
-                          getStatusBadge(
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      disabled={isUpdating}
+                      className="group flex items-center gap-1.5 p-1 -ml-1 rounded-lg hover:bg-muted/60 transition-colors text-left outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                      title="Click to quick-change status"
+                    >
+                      {isUpdating ? (
+                        <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground">
+                          <Loader2 className="size-3.5 animate-spin" /> Updating...
+                        </div>
+                      ) : (
+                        <>
+                          {getStatusBadge(
                             user.status || (user.isActive ? "ACTIVE" : "INACTIVE"),
                             user.mustChangePassword
-                          )
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      <SelectItem value="INVITED">
-                        <span className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
-                          <Clock className="size-3" /> Invited
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="ACTIVE">
-                        <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-                          <CheckCircle2 className="size-3" /> Active
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="INACTIVE">
-                        <span className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                          <UserX className="size-3" /> Inactive
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="SUSPENDED">
-                        <span className="flex items-center gap-1.5 text-xs text-rose-600 font-medium">
-                          <ShieldAlert className="size-3" /> Suspended
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="LOCKED">
-                        <span className="flex items-center gap-1.5 text-xs text-orange-600 font-medium">
-                          <Lock className="size-3" /> Locked
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="ARCHIVED">
-                        <span className="flex items-center gap-1.5 text-xs text-zinc-600 font-medium">
-                          <Archive className="size-3" /> Archived
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                          )}
+                          <ChevronDown className="size-3 text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity shrink-0 ml-0.5" />
+                        </>
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                        Change Status
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleStatusUpdate(user, "INVITED")}
+                        className="cursor-pointer"
+                      >
+                        <Clock className="mr-2 size-3.5 text-amber-600" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Invited</span>
+                          <span className="text-[10px] text-muted-foreground">Pending password change</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleStatusUpdate(user, "ACTIVE")}
+                        className="cursor-pointer"
+                      >
+                        <CheckCircle2 className="mr-2 size-3.5 text-emerald-600" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Active</span>
+                          <span className="text-[10px] text-muted-foreground">Full operational access</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleStatusUpdate(user, "INACTIVE")}
+                        className="cursor-pointer"
+                      >
+                        <UserX className="mr-2 size-3.5 text-slate-600" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-400">Inactive</span>
+                          <span className="text-[10px] text-muted-foreground">Temporarily deactivated</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleStatusUpdate(user, "SUSPENDED")}
+                        className="cursor-pointer"
+                      >
+                        <ShieldAlert className="mr-2 size-3.5 text-rose-600" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-rose-700 dark:text-rose-400">Suspended</span>
+                          <span className="text-[10px] text-muted-foreground">Disciplinary lock</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleStatusUpdate(user, "LOCKED")}
+                        className="cursor-pointer"
+                      >
+                        <Lock className="mr-2 size-3.5 text-orange-600" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-orange-700 dark:text-orange-400">Locked</span>
+                          <span className="text-[10px] text-muted-foreground">Block sign in attempts</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleStatusUpdate(user, "ARCHIVED")}
+                        className="cursor-pointer"
+                      >
+                        <Archive className="mr-2 size-3.5 text-zinc-600" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-400">Archived</span>
+                          <span className="text-[10px] text-muted-foreground">Offboarded account</span>
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 ) : (
                   getStatusBadge(
                     user.status || (user.isActive ? "ACTIVE" : "INACTIVE"),
@@ -446,29 +473,36 @@ export function UserTable({
           const isInvited =
             (user.status || (user.mustChangePassword ? "INVITED" : "ACTIVE")) ===
             "INVITED";
+          const isCopying = copyingUserId === user.id;
 
           return (
             <div className="flex items-center justify-end gap-1.5">
-              {/* Quick Copy Invite Action for Invited Users */}
+              {/* 1-Click Copy Invite Button with Password */}
               {isInvited && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 px-2.5 text-xs gap-1.5 border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  onClick={() => handleCopyInviteDetails(user)}
-                  title="Copy Invitation Details"
+                  className="h-8 px-2.5 text-xs gap-1.5 border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-medium"
+                  onClick={() => handleQuickCopyInvite(user)}
+                  disabled={isCopying}
+                  title="Copy Login Info with Temporary Password"
                 >
-                  {copiedId === user.id ? (
+                  {isCopying ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span className="hidden sm:inline">Copying...</span>
+                    </>
+                  ) : copiedId === user.id ? (
                     <>
                       <Check className="size-3.5 text-emerald-500" />
                       <span className="hidden sm:inline text-emerald-600 dark:text-emerald-400 font-semibold">
-                        Copied
+                        Copied!
                       </span>
                     </>
                   ) : (
                     <>
                       <Copy className="size-3.5" />
-                      <span className="hidden sm:inline font-medium">Copy Invite</span>
+                      <span className="hidden sm:inline">Copy Invite</span>
                     </>
                   )}
                 </Button>
@@ -483,32 +517,29 @@ export function UserTable({
                     <DropdownMenuLabel>User Actions</DropdownMenuLabel>
                     {caps.canEdit && (
                       <DropdownMenuItem onClick={() => onEdit(user)}>
-                        <Edit className="mr-2 size-4" /> Edit Profile & Role
+                        <Edit className="mr-2 size-4" /> Manage & Edit Profile
                       </DropdownMenuItem>
                     )}
 
                     {isInvited && (
-                      <>
-                        <DropdownMenuItem onClick={() => handleCopyInviteDetails(user)}>
-                          <Copy className="mr-2 size-4 text-amber-600" /> Copy Invite Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setResendModalUser(user)}
-                          className="text-primary focus:text-primary"
-                        >
-                          <Send className="mr-2 size-4" /> Resend Credentials
-                        </DropdownMenuItem>
-                      </>
+                      <DropdownMenuItem
+                        onClick={() => handleQuickCopyInvite(user)}
+                        disabled={isCopying}
+                        className="text-amber-700 dark:text-amber-400 focus:text-amber-700"
+                      >
+                        <Copy className="mr-2 size-4" /> Copy Login Info & Password
+                      </DropdownMenuItem>
                     )}
 
                     {caps.canManageOverrides && !isInvited && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          onClick={() => setResendModalUser(user)}
+                          onClick={() => handleQuickCopyInvite(user)}
+                          disabled={isCopying}
                           className="text-primary focus:text-primary"
                         >
-                          <KeyRound className="mr-2 size-4" /> Reset Password
+                          <KeyRound className="mr-2 size-4" /> Reset Password & Copy Info
                         </DropdownMenuItem>
                       </>
                     )}
@@ -520,7 +551,7 @@ export function UserTable({
         },
       }),
     ]);
-  }, [copiedId, updatingUserId, onEdit]);
+  }, [copiedId, copyingUserId, updatingUserId, onEdit]);
 
   const table = useTable({
     features,
@@ -568,7 +599,9 @@ export function UserTable({
             onValueChange={(val: any) => val && onRoleFilterChange(val)}
           >
             <SelectTrigger className="w-[140px] sm:w-[150px] h-9 text-xs bg-background/50">
-              <SelectValue placeholder="Filter by Role" />
+              <SelectValue placeholder="Filter by Role">
+                {roleFilter === "all" ? "All System Roles" : roleFilter}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All System Roles</SelectItem>
@@ -586,7 +619,9 @@ export function UserTable({
             onValueChange={(val: any) => val && onStatusFilterChange(val)}
           >
             <SelectTrigger className="w-[130px] sm:w-[140px] h-9 text-xs bg-background/50">
-              <SelectValue placeholder="Filter by Status" />
+              <SelectValue placeholder="Filter by Status">
+                {statusFilter === "all" ? "All Statuses" : statusFilter}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
@@ -648,94 +683,6 @@ export function UserTable({
 
       {/* Table Pagination */}
       <DataTablePagination table={table} />
-
-      {/* Resend Invite Modal */}
-      <Dialog open={!!resendModalUser} onOpenChange={(open) => !open && closeResendModal()}>
-        <DialogContent className="sm:max-w-md">
-          {resendResult ? (
-            <div className="space-y-4 py-2">
-              <DialogHeader>
-                <div className="mx-auto size-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
-                  <CheckCircle2 className="size-6" />
-                </div>
-                <DialogTitle className="text-center text-lg font-bold">
-                  New Credentials Generated
-                </DialogTitle>
-                <DialogDescription className="text-center text-xs">
-                  A new temporary password has been issued for <strong>{resendResult.email}</strong>. The user status is set to Invited.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="p-3.5 rounded-xl border bg-muted/30 space-y-2">
-                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <KeyRound className="size-3.5 text-primary" /> New Temporary Password
-                </span>
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-background border font-mono text-sm font-bold tracking-wide select-all">
-                  <span>{resendResult.temporaryPassword}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    onClick={handleCopyCredentials}
-                  >
-                    {copiedId === "resend-modal" ? (
-                      <Check className="size-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                    {copiedId === "resend-modal" ? "Copied" : "Copy"}
-                  </Button>
-                </div>
-              </div>
-
-              <DialogFooter className="pt-2">
-                <Button type="button" className="w-full" onClick={closeResendModal}>
-                  Close
-                </Button>
-              </DialogFooter>
-            </div>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Send className="size-5 text-primary" /> Resend Account Invite
-                </DialogTitle>
-                <DialogDescription>
-                  This will generate a new temporary password for <strong>{resendModalUser?.email}</strong> and send updated login instructions. The user will remain in <strong>Invited</strong> status until they log in and change their password.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="p-3 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs border border-amber-500/20 flex items-start gap-2">
-                <KeyRound className="size-4 shrink-0 mt-0.5" />
-                <span>The user will be required to change this new password upon logging in.</span>
-              </div>
-
-              <DialogFooter className="pt-2 gap-2">
-                <Button type="button" variant="outline" onClick={closeResendModal}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleResendInvite}
-                  disabled={isResending}
-                  className="gap-1.5"
-                >
-                  {isResending ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" /> Issuing...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="size-4" /> Reset & Resend Invite
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -50,6 +50,7 @@ export type UserWithoutPassword = z.infer<typeof userWithoutPasswordSchema>;
 export const createAdminUserSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  employeeId: z.string().trim().optional(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).default("Staff"),
@@ -62,6 +63,9 @@ export const resendInviteSchema = z.object({
 });
 
 export const updateAdminUserSchema = z.object({
+  firstName: z.string().min(1, "First name is required").optional(),
+  lastName: z.string().min(1, "Last name is required").optional(),
+  employeeId: z.string().min(1, "Employee ID cannot be empty").optional(),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).optional(),
   designationId: z.string().uuid("Invalid designation ID").optional(),
   isActive: z.boolean().optional(),

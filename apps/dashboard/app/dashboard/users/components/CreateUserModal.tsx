@@ -22,9 +22,7 @@ import {
 } from "@workspace/ui/components/dialog";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
-import { Label } from "@workspace/ui/components/label";
 import { Checkbox } from "@workspace/ui/components/checkbox";
-import { Badge } from "@workspace/ui/components/badge";
 import {
   Select,
   SelectContent,
@@ -40,17 +38,20 @@ import {
   UserPlus,
   Mail,
   KeyRound,
-  Send,
-  Clock,
+  IdCard,
+  Building2,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, handleFormApiError } from "@/lib/api";
+import { HelpTooltip } from "@/components/HelpTooltip";
 
 const createUserFormSchema = z
   .object({
     firstName: z.string().min(2, "First name must be at least 2 characters"),
     lastName: z.string().min(2, "Last name must be at least 2 characters"),
     email: z.string().email("Please enter a valid work email address"),
+    employeeId: z.string().trim().optional(),
     systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]),
     designationId: z.string().min(1, "Please select a designation"),
     autoGeneratePassword: z.boolean(),
@@ -76,6 +77,7 @@ interface DesignationOption {
   id: string;
   name: string;
   code: string;
+  department?: { id: string; name: string };
 }
 
 interface CreateUserModalProps {
@@ -87,9 +89,12 @@ interface CreateUserModalProps {
 
 interface CreatedResult {
   email: string;
+  employeeId?: string;
   firstName?: string;
   lastName?: string;
   systemRole: string;
+  designationName?: string;
+  departmentName?: string;
   temporaryPassword?: string;
 }
 
@@ -108,6 +113,7 @@ export function CreateUserModal({
       firstName: "",
       lastName: "",
       email: "",
+      employeeId: "",
       systemRole: "Staff",
       designationId: "",
       autoGeneratePassword: true,
@@ -118,6 +124,12 @@ export function CreateUserModal({
   });
 
   const autoGeneratePassword = form.watch("autoGeneratePassword");
+  const selectedDesignationId = form.watch("designationId");
+  const selectedSystemRole = form.watch("systemRole");
+
+  const activeDesignation = React.useMemo(() => {
+    return designations.find((d) => d.id === selectedDesignationId);
+  }, [designations, selectedDesignationId]);
 
   const resetAll = () => {
     form.reset();
@@ -138,45 +150,73 @@ export function CreateUserModal({
   const onSubmit = async (values: CreateUserFormValues) => {
     try {
       const payload: any = {
-        email: values.email,
-        firstName: values.firstName,
-        lastName: values.lastName,
+        email: values.email.trim(),
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
         systemRole: values.systemRole,
         designationId: values.designationId,
         sendInviteEmail: values.sendInviteEmail,
       };
+
+      if (values.employeeId && values.employeeId.trim()) {
+        payload.employeeId = values.employeeId.trim();
+      }
 
       if (!values.autoGeneratePassword && values.password?.trim()) {
         payload.password = values.password.trim();
       }
 
       const res = await api.post("/users", payload);
+      const targetDesig = designations.find((d) => d.id === values.designationId);
 
       setCreatedResult({
         email: res.email || values.email,
+        employeeId: res.employeeId || values.employeeId,
         firstName: res.firstName || values.firstName,
         lastName: res.lastName || values.lastName,
         systemRole: res.systemRole || values.systemRole,
+        designationName: res.designation?.name || targetDesig?.name,
+        departmentName: res.designation?.department?.name || targetDesig?.department?.name,
         temporaryPassword: res.temporaryPassword || values.password,
       });
 
-      toast.success("User created and invitation generated!");
+      toast.success("User account created!");
     } catch (err: any) {
       const message = handleFormApiError(err, form.setError, "Failed to create user");
-      if (message.toLowerCase().includes("already exists")) {
+      if (message.toLowerCase().includes("email already exists")) {
         form.setError("email", { type: "server", message: "A user with this email already exists" });
+      }
+      if (message.toLowerCase().includes("employee id")) {
+        form.setError("employeeId", { type: "server", message: "A user with this Employee ID already exists" });
       }
       toast.error(message);
     }
   };
 
-
   const handleCopyCredentials = () => {
     if (!createdResult) return;
-    const creds = `Softvence Account Invitation\nEmail: ${createdResult.email}\nTemporary Password: ${createdResult.temporaryPassword}\nLogin URL: ${window.location.origin}/login`;
-    navigator.clipboard.writeText(creds);
+    const lines = [
+      "==================================",
+      " SOFTVENCE ACCOUNT INVITATION",
+      "==================================",
+      `Name: ${createdResult.firstName || ""} ${createdResult.lastName || ""}`.trim(),
+      `Email: ${createdResult.email}`,
+      createdResult.employeeId ? `Employee ID: ${createdResult.employeeId}` : "",
+      createdResult.designationName ? `Designation: ${createdResult.designationName}` : "",
+      createdResult.departmentName ? `Department: ${createdResult.departmentName}` : "",
+      `Role: ${createdResult.systemRole}`,
+      `Temporary Password: ${createdResult.temporaryPassword || ""}`,
+      `Login URL: ${window.location.origin}/login`,
+      "Status: Invited (Pending First Login & Password Setup)",
+      "",
+      "Please log in at the portal with your temporary credentials to establish your permanent password.",
+    ]
+      .filter((l) => l !== "")
+      .join("\n");
+
+    navigator.clipboard.writeText(lines);
     setCopied(true);
-    toast.success("Credentials copied to clipboard!");
+    toast.success("Login info & password copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -184,83 +224,64 @@ export function CreateUserModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         {createdResult ? (
-          <div className="space-y-5 py-2">
+          <div className="space-y-4 py-2">
             <DialogHeader>
-              <div className="mx-auto size-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+              <div className="mx-auto size-11 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
                 <CheckCircle2 className="size-6" />
               </div>
               <DialogTitle className="text-center text-lg font-bold">
-                User Invitation Generated
+                User Created Successfully
               </DialogTitle>
               <DialogDescription className="text-center text-xs">
-                The account has been created with temporary credentials. The user will be required to change their password on first login.
+                Copy credentials below to share with the user.
               </DialogDescription>
             </DialogHeader>
 
-            {/* Credential summary card */}
-            <div className="p-4 rounded-xl border bg-muted/30 space-y-3">
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-border/50">
-                <span className="text-muted-foreground font-medium">User:</span>
+            <div className="p-3.5 rounded-xl border bg-muted/30 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Name:</span>
                 <span className="font-semibold text-foreground">
                   {createdResult.firstName} {createdResult.lastName}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-border/50">
-                <span className="text-muted-foreground font-medium">Work Email:</span>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Email:</span>
                 <span className="font-semibold text-foreground">{createdResult.email}</span>
               </div>
 
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-border/50">
-                <span className="text-muted-foreground font-medium">System Role:</span>
-                <Badge variant="outline" className="text-[11px]">
-                  {createdResult.systemRole}
-                </Badge>
-              </div>
-
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-border/50">
-                <span className="text-muted-foreground font-medium">Account Status:</span>
-                <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[11px] gap-1">
-                  <Clock className="size-3" /> Invited (Pending First Login)
-                </Badge>
-              </div>
-
-              <div className="space-y-1.5 pt-1">
+              {createdResult.employeeId && (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <KeyRound className="size-3.5 text-primary" /> Temporary Password
-                  </span>
-                  <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20">
-                    One-time use
-                  </Badge>
+                  <span className="text-muted-foreground">Employee ID:</span>
+                  <span className="font-mono font-medium text-foreground">{createdResult.employeeId}</span>
                 </div>
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-background border font-mono text-sm font-bold tracking-wide select-all">
-                  <span>{createdResult.temporaryPassword}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    onClick={handleCopyCredentials}
-                  >
-                    {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-                    {copied ? "Copied" : "Copy"}
-                  </Button>
+              )}
+
+              <div className="pt-2 border-t space-y-1.5">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <KeyRound className="size-3.5 text-primary" /> Temporary Password
+                </span>
+                <div className="p-2.5 rounded-lg bg-background border font-mono text-sm font-bold text-foreground select-all text-center tracking-wider">
+                  {createdResult.temporaryPassword}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs">
-              <Send className="size-4 shrink-0" />
-              <span>Invitation notification and login instructions have been dispatched.</span>
-            </div>
-
-            <DialogFooter className="pt-2">
+            <DialogFooter className="pt-2 flex flex-col sm:flex-row gap-2">
               <Button
                 type="button"
-                className="w-full"
+                className="w-full sm:w-1/2 gap-1.5"
+                onClick={handleCopyCredentials}
+              >
+                {copied ? <Check className="size-4 text-emerald-300" /> : <Copy className="size-4" />}
+                {copied ? "Copied!" : "Copy Credentials"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-1/2"
                 onClick={() => handleClose(false)}
               >
                 Done
@@ -271,10 +292,10 @@ export function CreateUserModal({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <UserPlus className="size-5 text-primary" /> Invite New User
+                <UserPlus className="size-5 text-primary" /> Create New User
               </DialogTitle>
               <DialogDescription>
-                Invite a new team member. Temporary login credentials will be generated for their first sign-in.
+                Fill in the details below. Temporary credentials will be generated.
               </DialogDescription>
             </DialogHeader>
 
@@ -286,7 +307,7 @@ export function CreateUserModal({
                     name="firstName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>First Name</FormLabel>
+                        <FormLabel className="text-xs">First Name</FormLabel>
                         <FormControl>
                           <Input placeholder="John" {...field} disabled={isLoading} />
                         </FormControl>
@@ -300,7 +321,7 @@ export function CreateUserModal({
                     name="lastName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Last Name</FormLabel>
+                        <FormLabel className="text-xs">Last Name</FormLabel>
                         <FormControl>
                           <Input placeholder="Doe" {...field} disabled={isLoading} />
                         </FormControl>
@@ -310,28 +331,52 @@ export function CreateUserModal({
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Work Email Address</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Work Email</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                            <Input
+                              type="email"
+                              placeholder="john.doe@company.com"
+                              className="pl-9 text-sm"
+                              {...field}
+                              disabled={isLoading}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="employeeId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs flex items-center gap-1">
+                          <IdCard className="size-3.5 text-muted-foreground" /> Employee ID
+                          <HelpTooltip text="Optional. Leave empty to auto-generate." />
+                        </FormLabel>
+                        <FormControl>
                           <Input
-                            type="email"
-                            placeholder="john.doe@company.com"
-                            className="pl-9"
+                            placeholder="e.g. EMP-10023"
+                            className="font-mono text-sm"
                             {...field}
                             disabled={isLoading}
                           />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <FormField
@@ -339,21 +384,31 @@ export function CreateUserModal({
                     name="systemRole"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>System Role</FormLabel>
+                        <FormLabel className="text-xs flex items-center gap-1">
+                          <Shield className="size-3.5 text-muted-foreground" /> System Role
+                        </FormLabel>
                         <Select
                           value={field.value}
                           onValueChange={field.onChange}
                           disabled={isLoading}
                         >
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select role" />
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select role">
+                                {selectedSystemRole || undefined}
+                              </SelectValue>
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="Staff">Staff</SelectItem>
-                            <SelectItem value="Admin">Admin</SelectItem>
-                            <SelectItem value="SuperAdmin">SuperAdmin</SelectItem>
+                          <SelectContent className="w-full">
+                            <SelectItem value="Staff">
+                              <span className="font-medium">Staff</span>
+                            </SelectItem>
+                            <SelectItem value="Admin">
+                              <span className="font-medium text-blue-600 dark:text-blue-400">Admin</span>
+                            </SelectItem>
+                            <SelectItem value="SuperAdmin">
+                              <span className="font-medium text-purple-600 dark:text-purple-400">SuperAdmin</span>
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -366,21 +421,34 @@ export function CreateUserModal({
                     name="designationId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Designation</FormLabel>
+                        <FormLabel className="text-xs flex items-center gap-1">
+                          <Building2 className="size-3.5 text-muted-foreground" /> Designation
+                        </FormLabel>
                         <Select
                           value={field.value}
                           onValueChange={field.onChange}
                           disabled={isLoading}
                         >
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select designation" />
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select designation">
+                                {activeDesignation
+                                  ? `${activeDesignation.name} (${activeDesignation.code})`
+                                  : undefined}
+                              </SelectValue>
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent className="w-full max-h-56">
                             {designations.map((d) => (
                               <SelectItem key={d.id} value={d.id}>
-                                {d.name} ({d.code})
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{d.name} ({d.code})</span>
+                                  {d.department && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {d.department.name}
+                                    </span>
+                                  )}
+                                </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -391,8 +459,8 @@ export function CreateUserModal({
                   />
                 </div>
 
-                {/* Password configuration */}
-                <div className="p-3 rounded-xl border bg-muted/20 space-y-3">
+                {/* Password option */}
+                <div className="p-3 rounded-xl border bg-muted/20 space-y-2.5">
                   <FormField
                     control={form.control}
                     name="autoGeneratePassword"
@@ -410,7 +478,7 @@ export function CreateUserModal({
                           htmlFor="autoPassword"
                           className="text-xs font-medium cursor-pointer font-normal"
                         >
-                          Auto-generate secure temporary password
+                          Auto-generate temporary password
                         </FormLabel>
                       </FormItem>
                     )}
@@ -422,7 +490,7 @@ export function CreateUserModal({
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Custom Temporary Password</FormLabel>
+                          <FormLabel className="text-xs">Custom Temporary Password</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <KeyRound className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
@@ -440,29 +508,6 @@ export function CreateUserModal({
                       )}
                     />
                   )}
-
-                  <FormField
-                    control={form.control}
-                    name="sendInviteEmail"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center space-x-2 space-y-0 pt-1 border-t border-border/50">
-                        <FormControl>
-                          <Checkbox
-                            id="sendInvite"
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={isLoading}
-                          />
-                        </FormControl>
-                        <FormLabel
-                          htmlFor="sendInvite"
-                          className="text-xs text-muted-foreground cursor-pointer font-normal"
-                        >
-                          Send invitation email with login credentials
-                        </FormLabel>
-                      </FormItem>
-                    )}
-                  />
                 </div>
 
                 <DialogFooter className="pt-2">
@@ -481,7 +526,7 @@ export function CreateUserModal({
                       </>
                     ) : (
                       <>
-                        <UserPlus className="size-4" /> Create & Invite User
+                        <UserPlus className="size-4" /> Create User
                       </>
                     )}
                   </Button>

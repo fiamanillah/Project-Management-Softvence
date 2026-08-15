@@ -9,7 +9,7 @@ import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { UserTable, type AdminUser, type UserStatus } from "./components/UserTable";
 import { CreateUserModal } from "./components/CreateUserModal";
-import { EditUserSheet } from "./components/EditUserSheet";
+import { EditUserModal } from "./components/EditUserModal";
 
 export default function UsersPage() {
   return (
@@ -29,7 +29,7 @@ function UsersContent() {
 
   // Modal states
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
-  const [editSheetOpen, setEditSheetOpen] = React.useState(false);
+  const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState<AdminUser | null>(null);
 
   const fetchUsers = React.useCallback(async () => {
@@ -70,7 +70,7 @@ function UsersContent() {
 
   const handleEditClick = (user: AdminUser) => {
     setSelectedUser(user);
-    setEditSheetOpen(true);
+    setEditModalOpen(true);
   };
 
   return (
@@ -126,11 +126,11 @@ function UsersContent() {
         onSuccess={fetchUsers}
       />
 
-      {/* Edit User Sheet */}
-      <EditUserSheet
+      {/* Edit User Modal */}
+      <EditUserModal
         user={selectedUser}
-        open={editSheetOpen}
-        onOpenChange={setEditSheetOpen}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
         designations={designations}
         onSuccess={fetchUsers}
       />

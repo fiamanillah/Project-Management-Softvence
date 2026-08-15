@@ -120,7 +120,18 @@ export class UsersService {
         : generateTemporaryPassword();
 
     const hashedPassword = await hashPassword(rawTemporaryPassword);
-    const employeeId = `EMP-${Date.now().toString().slice(-6)}`;
+
+    let employeeId = data.employeeId?.trim();
+    if (employeeId) {
+      const existingEmployee = await this.prisma.user.findUnique({
+        where: { employeeId },
+      });
+      if (existingEmployee) {
+        throw new ConflictError("A user with this employee ID already exists");
+      }
+    } else {
+      employeeId = `EMP-${Date.now().toString().slice(-6)}`;
+    }
 
     const user = await this.prisma.user.create({
       data: {
@@ -278,6 +289,15 @@ export class UsersService {
       if (!desig) throw new NotFoundError("Designation");
     }
 
+    if (data.employeeId && data.employeeId.trim() !== user.employeeId) {
+      const existingEmployee = await this.prisma.user.findUnique({
+        where: { employeeId: data.employeeId.trim() },
+      });
+      if (existingEmployee) {
+        throw new ConflictError("A user with this employee ID already exists");
+      }
+    }
+
     let targetIsActive = data.isActive;
     if (data.status) {
       if (["INACTIVE", "SUSPENDED", "LOCKED", "ARCHIVED"].includes(data.status)) {
@@ -288,6 +308,9 @@ export class UsersService {
     }
 
     const updateData: any = {
+      ...(data.firstName && { firstName: data.firstName.trim() }),
+      ...(data.lastName && { lastName: data.lastName.trim() }),
+      ...(data.employeeId && { employeeId: data.employeeId.trim() }),
       ...(data.systemRole && { systemRole: data.systemRole as any }),
       ...(data.designationId && { designationId: data.designationId }),
       ...(data.status && { status: data.status as any }),
