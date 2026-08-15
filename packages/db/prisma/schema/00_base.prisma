@@ -17,6 +17,15 @@ enum SystemRole {
   Staff
 }
 
+enum UserStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  LOCKED
+  ARCHIVED
+}
+
 enum ScopeResolutionStrategy {
   Global
   OwnDepartment

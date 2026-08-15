@@ -11,6 +11,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@workspace/ui/components/form";
 import {
   Sheet,
@@ -20,7 +21,6 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet";
 import { Button } from "@workspace/ui/components/button";
-import { Label } from "@workspace/ui/components/label";
 import {
   Select,
   SelectContent,
@@ -28,16 +28,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import { Switch } from "@workspace/ui/components/switch";
-import { Loader2 } from "lucide-react";
+import {
+  Loader2,
+  Clock,
+  CheckCircle2,
+  UserX,
+  ShieldAlert,
+  Lock,
+  Archive,
+  Info,
+} from "lucide-react";
 import { toast } from "sonner";
 import { api, handleFormApiError } from "@/lib/api";
-import type { AdminUser } from "./UserTable";
+import type { AdminUser, UserStatus } from "./UserTable";
 
 const editUserFormSchema = z.object({
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]),
   designationId: z.string().min(1, "Please select a designation"),
-  isActive: z.boolean(),
+  status: z.enum(["INVITED", "ACTIVE", "INACTIVE", "SUSPENDED", "LOCKED", "ARCHIVED"]),
 });
 
 type EditUserFormValues = z.infer<typeof editUserFormSchema>;
@@ -62,17 +70,21 @@ export function EditUserSheet({
     defaultValues: {
       systemRole: "Staff",
       designationId: "",
-      isActive: true,
+      status: "ACTIVE",
     },
     mode: "onTouched",
   });
 
   React.useEffect(() => {
     if (user) {
+      const defaultStatus: UserStatus =
+        user.status ||
+        (user.isActive ? "ACTIVE" : "INACTIVE");
+
       form.reset({
         systemRole: user.systemRole,
         designationId: user.designationId || user.designation?.id || "",
-        isActive: user.isActive,
+        status: defaultStatus,
       });
     }
   }, [user, form]);
@@ -84,10 +96,10 @@ export function EditUserSheet({
       await api.patch(`/users/${user.id}`, {
         systemRole: values.systemRole,
         designationId: values.designationId || undefined,
-        isActive: values.isActive,
+        status: values.status,
       });
 
-      toast.success("User updated successfully!");
+      toast.success("User profile and status updated successfully!");
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
@@ -96,18 +108,19 @@ export function EditUserSheet({
     }
   };
 
-
   if (!user) return null;
 
   const isLoading = form.formState.isSubmitting;
+  const currentWatchedStatus = form.watch("status");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Edit User Profile</SheetTitle>
+          <SheetTitle>Edit User Profile & Status</SheetTitle>
           <SheetDescription>
-            Update role and designation for {user.firstName} {user.lastName} ({user.email}).
+            Manage roles, designations, and account lifecycle states for{" "}
+            <strong>{user.firstName} {user.lastName}</strong> ({user.email}).
           </SheetDescription>
         </SheetHeader>
 
@@ -145,7 +158,7 @@ export function EditUserSheet({
               name="designationId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Designation</FormLabel>
+                  <FormLabel>Designation & Department</FormLabel>
                   <Select
                     value={field.value}
                     onValueChange={field.onChange}
@@ -171,22 +184,95 @@ export function EditUserSheet({
 
             <FormField
               control={form.control}
-              name="isActive"
+              name="status"
               render={({ field }) => (
-                <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-xs space-y-0">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-sm font-medium">Active Account</FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      Disabled users cannot log in or perform API actions.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      disabled={isLoading}
-                    />
-                  </FormControl>
+                <FormItem>
+                  <FormLabel>Account Status</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select account status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="INVITED">
+                        <div className="flex items-center gap-2">
+                          <Clock className="size-4 text-amber-600" />
+                          <div>
+                            <span className="font-medium text-amber-600">Invited</span>
+                            <span className="text-[11px] text-muted-foreground ml-2">(Pending first login & password change)</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ACTIVE">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                          <div>
+                            <span className="font-medium text-emerald-600">Active</span>
+                            <span className="text-[11px] text-muted-foreground ml-2">(Fully operational access)</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="INACTIVE">
+                        <div className="flex items-center gap-2">
+                          <UserX className="size-4 text-slate-600" />
+                          <div>
+                            <span className="font-medium text-slate-600">Inactive</span>
+                            <span className="text-[11px] text-muted-foreground ml-2">(Temporarily deactivated)</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="SUSPENDED">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert className="size-4 text-rose-600" />
+                          <div>
+                            <span className="font-medium text-rose-600">Suspended</span>
+                            <span className="text-[11px] text-muted-foreground ml-2">(Disciplinary / security lock)</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="LOCKED">
+                        <div className="flex items-center gap-2">
+                          <Lock className="size-4 text-orange-600" />
+                          <div>
+                            <span className="font-medium text-orange-600">Locked</span>
+                            <span className="text-[11px] text-muted-foreground ml-2">(Login attempts blocked)</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ARCHIVED">
+                        <div className="flex items-center gap-2">
+                          <Archive className="size-4 text-zinc-600" />
+                          <div>
+                            <span className="font-medium text-zinc-600">Archived</span>
+                            <span className="text-[11px] text-muted-foreground ml-2">(Offboarded historical user)</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription className="text-xs">
+                    {currentWatchedStatus === "INVITED" && (
+                      <span className="text-amber-600 flex items-center gap-1 mt-1">
+                        <Info className="size-3.5" /> User can log in with temporary credentials to change password. Admins can assign them to departments and projects.
+                      </span>
+                    )}
+                    {currentWatchedStatus === "ACTIVE" && (
+                      <span className="text-emerald-600 flex items-center gap-1 mt-1">
+                        <Info className="size-3.5" /> User has full active access according to their role permissions.
+                      </span>
+                    )}
+                    {["INACTIVE", "SUSPENDED", "LOCKED", "ARCHIVED"].includes(currentWatchedStatus) && (
+                      <span className="text-rose-600 flex items-center gap-1 mt-1">
+                        <Info className="size-3.5" /> User will be immediately logged out of all active sessions and denied login access.
+                      </span>
+                    )}
+                  </FormDescription>
+                  <FormMessage />
                 </FormItem>
               )}
             />

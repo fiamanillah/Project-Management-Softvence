@@ -11,6 +11,16 @@ export const accountStatusEnum = z.enum([
 ]);
 export type AccountStatus = z.infer<typeof accountStatusEnum>;
 
+export const userStatusEnum = z.enum([
+  "INVITED",
+  "ACTIVE",
+  "INACTIVE",
+  "SUSPENDED",
+  "LOCKED",
+  "ARCHIVED",
+]);
+export type UserStatus = z.infer<typeof userStatusEnum>;
+
 export const userSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
@@ -19,11 +29,12 @@ export const userSchema = z.object({
   lastName: z.string(),
   displayName: z.string().nullable().optional(),
   role: userRoleEnum,
-  status: accountStatusEnum,
+  status: userStatusEnum.default("INVITED"),
   emailVerifiedAt: z.date().nullable().optional(),
   bio: z.string().nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
   isDeleted: z.boolean(),
+  isActive: z.boolean().default(true),
   mustChangePassword: z.boolean().default(true),
   lastLoginAt: z.date().nullable().optional(),
   createdAt: z.date(),
@@ -54,6 +65,7 @@ export const updateAdminUserSchema = z.object({
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).optional(),
   designationId: z.string().uuid("Invalid designation ID").optional(),
   isActive: z.boolean().optional(),
+  status: userStatusEnum.optional(),
 });
 
 export const createOverrideSchema = z.object({

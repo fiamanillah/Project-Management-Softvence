@@ -22,6 +22,8 @@ export interface UserItem {
   email: string;
   employeeId?: string;
   systemRole?: string;
+  status?: string;
+  mustChangePassword?: boolean;
   avatarUrl?: string;
   isActive?: boolean;
   designation?: {
@@ -254,6 +256,11 @@ export function UserSearchSelect({
                 {u.designation?.name && (
                   <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-3.5 font-normal text-muted-foreground">
                     {u.designation.name}
+                  </Badge>
+                )}
+                {u.status === "INVITED" && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-3.5 font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                    Invited
                   </Badge>
                 )}
                 {isExcluded && (

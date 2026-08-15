@@ -95,7 +95,9 @@ async function main() {
       data: {
         passwordHash: hashedPassword,
         systemRole: "SuperAdmin",
+        status: "ACTIVE",
         isActive: true,
+        mustChangePassword: false,
       },
     });
     userId = updatedUser.id;
@@ -110,7 +112,9 @@ async function main() {
         lastName: "Admin",
         systemRole: "SuperAdmin",
         designationId: designation.id,
+        status: "ACTIVE",
         isActive: true,
+        mustChangePassword: false,
       },
     });
     userId = newUser.id;

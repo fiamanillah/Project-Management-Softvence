@@ -116,8 +116,17 @@ export class AuthServices {
       where: { email },
     });
 
-    if (!user || !user.isActive || user.deletedAt) {
-      this.logger.warn("Login failed: Invalid credentials or inactive user", { email });
+    const isBlockedStatus =
+      !user ||
+      Boolean(user.deletedAt) ||
+      !user.isActive ||
+      user.status === "INACTIVE" ||
+      user.status === "SUSPENDED" ||
+      user.status === "LOCKED" ||
+      user.status === "ARCHIVED";
+
+    if (isBlockedStatus) {
+      this.logger.warn("Login failed: Invalid credentials or disabled/suspended user", { email });
       await AuditLogService.log({
         module: "AUTH",
         action: "USER_LOGIN_FAILED",
@@ -125,7 +134,7 @@ export class AuthServices {
         entityId: email,
         status: "FAILED",
         errorMessage: "Invalid credentials or inactive user",
-        metadata: { email, deviceInfo },
+        metadata: { email, deviceInfo, status: user?.status },
         req,
       });
       throw new AuthenticationError("Invalid email or password");
@@ -441,7 +450,16 @@ export class AuthServices {
       where: { email },
     });
 
-    if (!user || !user.isActive || user.deletedAt) {
+    const isBlocked =
+      !user ||
+      Boolean(user.deletedAt) ||
+      !user.isActive ||
+      user.status === "INACTIVE" ||
+      user.status === "SUSPENDED" ||
+      user.status === "LOCKED" ||
+      user.status === "ARCHIVED";
+
+    if (isBlocked) {
       // Do not reveal email absence for security
       return { message: "If that email is registered, password reset instructions have been sent." };
     }
@@ -568,7 +586,15 @@ export class AuthServices {
       where: { id: userId },
     });
 
-    if (!user || !user.isActive || user.deletedAt) {
+    if (
+      !user ||
+      Boolean(user.deletedAt) ||
+      !user.isActive ||
+      user.status === "INACTIVE" ||
+      user.status === "SUSPENDED" ||
+      user.status === "LOCKED" ||
+      user.status === "ARCHIVED"
+    ) {
       throw new AuthenticationError("User not found or account disabled");
     }
 
@@ -588,6 +614,8 @@ export class AuthServices {
       data: {
         passwordHash: hashedNewPassword,
         mustChangePassword: false,
+        status: "ACTIVE",
+        isActive: true,
         updatedAt: new Date(),
       },
     });
@@ -666,7 +694,16 @@ export class AuthServices {
       where: { id: userId },
     });
 
-    if (!user || !user.isActive || user.deletedAt) {
+    const isBlocked =
+      !user ||
+      Boolean(user.deletedAt) ||
+      !user.isActive ||
+      user.status === "INACTIVE" ||
+      user.status === "SUSPENDED" ||
+      user.status === "LOCKED" ||
+      user.status === "ARCHIVED";
+
+    if (isBlocked) {
       throw new AuthenticationError("User account disabled or non-existent");
     }
 

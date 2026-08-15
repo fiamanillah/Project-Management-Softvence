@@ -10,6 +10,8 @@ export interface User {
   firstName?: string;
   lastName?: string;
   systemRole: "SuperAdmin" | "Admin" | "Staff";
+  status?: "INVITED" | "ACTIVE" | "INACTIVE" | "SUSPENDED" | "LOCKED" | "ARCHIVED";
+  isActive?: boolean;
   designationId?: string;
   mustChangePassword?: boolean;
 }

@@ -8,6 +8,7 @@ export {
   createDelegationSchema,
   userRoleEnum,
   accountStatusEnum,
+  userStatusEnum,
   userSchema,
   userWithoutPasswordSchema,
   type CreateAdminUserDTO,
@@ -17,6 +18,7 @@ export {
   type CreateDelegationDTO,
   type UserRole,
   type AccountStatus,
+  type UserStatus,
   type UserProfile,
   type UserWithoutPassword,
 } from "@workspace/shared";

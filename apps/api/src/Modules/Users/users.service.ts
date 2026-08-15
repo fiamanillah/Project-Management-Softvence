@@ -33,7 +33,7 @@ export class UsersService {
   // ==========================================
 
   public async getUsers(
-    query: { search?: string; role?: string; designationId?: string; page?: number; limit?: number },
+    query: { search?: string; role?: string; status?: string; designationId?: string; page?: number; limit?: number },
     actor?: AuthenticatedUser,
   ) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -45,6 +45,7 @@ export class UsersService {
     };
 
     if (query.role) where.systemRole = query.role;
+    if (query.status && query.status !== "all") where.status = query.status;
     if (query.designationId) where.designationId = query.designationId;
     if (query.search) {
       where.OR = [
@@ -130,6 +131,7 @@ export class UsersService {
         lastName: data.lastName,
         systemRole: data.systemRole as any,
         designationId: data.designationId,
+        status: "INVITED",
         isActive: true,
         mustChangePassword: true,
       },
@@ -204,7 +206,9 @@ export class UsersService {
       where: { id: userId },
       data: {
         passwordHash: hashedPassword,
+        status: "INVITED",
         mustChangePassword: true,
+        isActive: true,
         updatedAt: new Date(),
       },
       include: {
@@ -221,8 +225,8 @@ export class UsersService {
       action: "USER_INVITE_RESENT",
       entityTable: "users",
       entityId: userId,
-      oldPayload: { mustChangePassword: user.mustChangePassword },
-      newPayload: { mustChangePassword: true },
+      oldPayload: { mustChangePassword: user.mustChangePassword, status: user.status },
+      newPayload: { mustChangePassword: true, status: "INVITED" },
       req,
     });
 
@@ -274,19 +278,42 @@ export class UsersService {
       if (!desig) throw new NotFoundError("Designation");
     }
 
+    let targetIsActive = data.isActive;
+    if (data.status) {
+      if (["INACTIVE", "SUSPENDED", "LOCKED", "ARCHIVED"].includes(data.status)) {
+        targetIsActive = false;
+      } else if (["ACTIVE", "INVITED"].includes(data.status) && targetIsActive === undefined) {
+        targetIsActive = true;
+      }
+    }
+
+    const updateData: any = {
+      ...(data.systemRole && { systemRole: data.systemRole as any }),
+      ...(data.designationId && { designationId: data.designationId }),
+      ...(data.status && { status: data.status as any }),
+      ...(targetIsActive !== undefined && { isActive: targetIsActive }),
+      updatedAt: new Date(),
+    };
+
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: {
-        systemRole: data.systemRole as any,
-        designationId: data.designationId,
-        isActive: data.isActive,
-      },
+      data: updateData,
       include: {
         designation: {
           include: { department: true },
         },
       },
     });
+
+    // If status deactivated/suspended or isActive set to false, invalidate all user sessions
+    if (
+      targetIsActive === false ||
+      (data.status && ["INACTIVE", "SUSPENDED", "LOCKED", "ARCHIVED"].includes(data.status))
+    ) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId },
+      });
+    }
 
     const { passwordHash, ...result } = updated;
 

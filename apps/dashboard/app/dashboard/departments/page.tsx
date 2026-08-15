@@ -2,15 +2,12 @@
 
 import * as React from "react";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import {
   Building2,
   Plus,
   RefreshCw,
-  Search,
   CheckCircle2,
-  Shield,
   UserCheck,
   GitFork,
   LayoutList,
@@ -21,6 +18,7 @@ import { toast } from "sonner";
 import type { DepartmentItem } from "@workspace/shared";
 import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { PermissionGate } from "@/components/permission-gate/PermissionGate";
+import { DataTableToolbar } from "@/components/data-table";
 import { DepartmentTable } from "./components/DepartmentTable";
 import { DepartmentOrgChart } from "./components/DepartmentOrgChart";
 import { CreateDepartmentModal } from "./components/CreateDepartmentModal";
@@ -122,7 +120,6 @@ function DepartmentsContent() {
   return (
     <div className="space-y-6 min-w-0 max-w-full overflow-hidden">
       {/* Header */}
-
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -209,74 +206,7 @@ function DepartmentsContent() {
         </Card>
       </div>
 
-      {/* Filter and View Switcher Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card p-3 rounded-xl border">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search code or name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
-          {/* Status Filter Buttons */}
-          <div className="flex items-center gap-1">
-            <Button
-              variant={statusFilter === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter("all")}
-              className="h-8 text-xs"
-            >
-              All ({departments.length})
-            </Button>
-            <Button
-              variant={statusFilter === "active" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter("active")}
-              className="h-8 text-xs"
-            >
-              Active ({activeDepts})
-            </Button>
-            <Button
-              variant={statusFilter === "inactive" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter("inactive")}
-              className="h-8 text-xs"
-            >
-              Inactive ({totalDepts - activeDepts})
-            </Button>
-          </div>
-
-          <div className="h-4 w-px bg-border hidden sm:block" />
-
-          {/* View Mode Toggle */}
-          <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
-            <Button
-              variant={viewMode === "tree" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("tree")}
-              className={`h-7 text-xs px-2.5 gap-1.5 ${viewMode === "tree" ? "shadow-2xs font-semibold" : "text-muted-foreground"}`}
-            >
-              <LayoutList className="size-3.5" />
-              <span>Tree Table</span>
-            </Button>
-            <Button
-              variant={viewMode === "chart" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("chart")}
-              className={`h-7 text-xs px-2.5 gap-1.5 ${viewMode === "chart" ? "shadow-2xs font-semibold" : "text-muted-foreground"}`}
-            >
-              <Network className="size-3.5" />
-              <span>Org Chart</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
+      {/* Main Content Area with Single Unified Toolbar */}
       {isLoading ? (
         <div className="h-64 flex flex-col items-center justify-center border rounded-xl bg-card">
           <RefreshCw className="size-6 animate-spin text-muted-foreground mb-2" />
@@ -285,19 +215,92 @@ function DepartmentsContent() {
       ) : viewMode === "tree" ? (
         <DepartmentTable
           departments={filteredDepartments}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          totalUnitsCount={totalDepts}
+          activeUnitsCount={activeDepts}
           onEdit={handleEdit}
           onAssignManager={handleAssignManager}
           onAddSubDepartment={handleAddSubDepartment}
           onDelete={handleDelete}
         />
       ) : (
-        <DepartmentOrgChart
-          departments={filteredDepartments}
-          onEdit={handleEdit}
-          onAssignManager={handleAssignManager}
-          onAddSubDepartment={handleAddSubDepartment}
-          onDelete={handleDelete}
-        />
+        <div className="space-y-4">
+          {/* Unified Toolbar for Chart View */}
+          <DataTableToolbar
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search code or name..."
+            onReset={() => {
+              setSearchQuery("");
+              setStatusFilter("all");
+            }}
+            isFiltered={Boolean((searchQuery && searchQuery.trim() !== "") || statusFilter !== "all")}
+            showViewOptions={false}
+            actions={
+              <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewMode("tree")}
+                  className="h-7 text-xs px-2.5 gap-1.5 text-muted-foreground"
+                >
+                  <LayoutList className="size-3.5" />
+                  <span>Tree Table</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setViewMode("chart")}
+                  className="h-7 text-xs px-2.5 gap-1.5 shadow-2xs font-semibold"
+                >
+                  <Network className="size-3.5" />
+                  <span>Org Chart</span>
+                </Button>
+              </div>
+            }
+          >
+            {/* Status Filter Buttons */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant={statusFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStatusFilter("all")}
+                className="h-8 text-xs"
+              >
+                All ({departments.length})
+              </Button>
+              <Button
+                variant={statusFilter === "active" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStatusFilter("active")}
+                className="h-8 text-xs"
+              >
+                Active ({activeDepts})
+              </Button>
+              <Button
+                variant={statusFilter === "inactive" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStatusFilter("inactive")}
+                className="h-8 text-xs"
+              >
+                Inactive ({totalDepts - activeDepts})
+              </Button>
+            </div>
+          </DataTableToolbar>
+
+          <DepartmentOrgChart
+            departments={filteredDepartments}
+            onEdit={handleEdit}
+            onAssignManager={handleAssignManager}
+            onAddSubDepartment={handleAddSubDepartment}
+            onDelete={handleDelete}
+          />
+        </div>
       )}
 
       {/* Create Department Modal */}

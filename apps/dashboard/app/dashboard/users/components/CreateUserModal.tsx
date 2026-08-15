@@ -41,6 +41,7 @@ import {
   Mail,
   KeyRound,
   Send,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, handleFormApiError } from "@/lib/api";
@@ -216,6 +217,13 @@ export function CreateUserModal({
                 <span className="text-muted-foreground font-medium">System Role:</span>
                 <Badge variant="outline" className="text-[11px]">
                   {createdResult.systemRole}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-border/50">
+                <span className="text-muted-foreground font-medium">Account Status:</span>
+                <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[11px] gap-1">
+                  <Clock className="size-3" /> Invited (Pending First Login)
                 </Badge>
               </div>
 

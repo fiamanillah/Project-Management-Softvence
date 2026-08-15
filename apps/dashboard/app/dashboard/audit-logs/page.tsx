@@ -152,26 +152,24 @@ function AuditLogsContent() {
       {/* Summary Statistics Cards */}
       <AuditLogStatsCards stats={stats} isLoading={isStatsLoading} />
 
-      {/* Filters Bar */}
-      <AuditLogFilters
-        search={search}
-        onSearchChange={setSearch}
-        moduleFilter={moduleFilter}
-        onModuleChange={setModuleFilter}
-        statusFilter={statusFilter}
-        onStatusChange={setStatusFilter}
-        dateRange={dateRange}
-        onDateRangeChange={setDateRange}
-        onRefresh={handleRefreshAll}
-        onReset={handleResetFilters}
-        isLoading={isLoading}
-      />
-
-      {/* Audit Log Table */}
+      {/* Audit Log Table with Unified Search, Filters & Column Selection */}
       <AuditLogTable
         logs={logs}
         onViewDetails={handleViewDetails}
         isLoading={isLoading}
+        filterProps={{
+          search,
+          onSearchChange: setSearch,
+          moduleFilter,
+          onModuleChange: setModuleFilter,
+          statusFilter,
+          onStatusChange: setStatusFilter,
+          dateRange,
+          onDateRangeChange: setDateRange,
+          onRefresh: handleRefreshAll,
+          onReset: handleResetFilters,
+          isLoading,
+        }}
       />
 
       {/* Server Pagination Bar */}

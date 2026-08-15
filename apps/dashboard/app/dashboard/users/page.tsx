@@ -2,20 +2,12 @@
 
 import * as React from "react";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@workspace/ui/components/select";
-import { UserPlus, Search, Shield, RefreshCw } from "lucide-react";
+import { UserPlus, Shield, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { PermissionGate } from "@/components/permission-gate/PermissionGate";
-import { UserTable, type AdminUser } from "./components/UserTable";
+import { UserTable, type AdminUser, type UserStatus } from "./components/UserTable";
 import { CreateUserModal } from "./components/CreateUserModal";
 import { EditUserSheet } from "./components/EditUserSheet";
 
@@ -32,6 +24,7 @@ function UsersContent() {
   const [designations, setDesignations] = React.useState<{ id: string; name: string; code: string }[]>([]);
   const [search, setSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
   const [isLoading, setIsLoading] = React.useState(true);
 
   // Modal states
@@ -45,6 +38,7 @@ function UsersContent() {
       const queryParams = new URLSearchParams();
       if (search) queryParams.set("search", search);
       if (roleFilter !== "all") queryParams.set("role", roleFilter);
+      if (statusFilter !== "all") queryParams.set("status", statusFilter);
 
       const [resUsers, resDesig] = await Promise.all([
         api.get(`/users?${queryParams.toString()}`),
@@ -58,16 +52,16 @@ function UsersContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [search, roleFilter]);
+  }, [search, roleFilter, statusFilter]);
 
   React.useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleToggleActive = async (user: AdminUser, active: boolean) => {
+  const handleStatusChange = async (user: AdminUser, newStatus: UserStatus) => {
     try {
-      await api.patch(`/users/${user.id}`, { isActive: active });
-      toast.success(`User ${active ? "activated" : "disabled"} successfully`);
+      await api.patch(`/users/${user.id}`, { status: newStatus });
+      toast.success(`User status updated to ${newStatus}`);
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || "Failed to update user status");
@@ -88,7 +82,7 @@ function UsersContent() {
             <Shield className="size-6 text-primary" /> Users Management
           </h1>
           <p className="text-xs text-muted-foreground">
-            Manage system roles, designations, and account access statuses across your organization.
+            Manage system roles, designations, invitations, and account lifecycle statuses across your organization.
           </p>
         </div>
 
@@ -104,32 +98,7 @@ function UsersContent() {
         </div>
       </div>
 
-      {/* Filters bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, email, employee ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10 text-sm"
-          />
-        </div>
-
-        <Select value={roleFilter} onValueChange={(val: any) => val && setRoleFilter(val)}>
-          <SelectTrigger className="w-full sm:w-44 h-10">
-            <SelectValue placeholder="Filter by Role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All System Roles</SelectItem>
-            <SelectItem value="SuperAdmin">SuperAdmin</SelectItem>
-            <SelectItem value="Admin">Admin</SelectItem>
-            <SelectItem value="Staff">Staff</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* User Table */}
+      {/* User Table with Unified Toolbar (Search, Filters, and Column Visibility) */}
       {isLoading ? (
         <div className="h-64 flex items-center justify-center border rounded-xl bg-card">
           <RefreshCw className="size-6 animate-spin text-muted-foreground" />
@@ -137,8 +106,14 @@ function UsersContent() {
       ) : (
         <UserTable
           users={users}
+          search={search}
+          onSearchChange={setSearch}
+          roleFilter={roleFilter}
+          onRoleFilterChange={setRoleFilter}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
           onEdit={handleEditClick}
-          onToggleActive={handleToggleActive}
+          onStatusChange={handleStatusChange}
           onRefresh={fetchUsers}
         />
       )}
