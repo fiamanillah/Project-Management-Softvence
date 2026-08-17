@@ -33,7 +33,15 @@ export class UsersService {
   // ==========================================
 
   public async getUsers(
-    query: { search?: string; role?: string; status?: string; designationId?: string; page?: number; limit?: number },
+    query: {
+      search?: string;
+      role?: string;
+      roleId?: string;
+      designationId?: string;
+      status?: string;
+      page?: number;
+      limit?: number;
+    },
     actor?: AuthenticatedUser,
   ) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -45,8 +53,9 @@ export class UsersService {
     };
 
     if (query.role) where.systemRole = query.role;
-    if (query.status && query.status !== "all") where.status = query.status;
+    if (query.roleId) where.roleId = query.roleId;
     if (query.designationId) where.designationId = query.designationId;
+    if (query.status && query.status !== "all") where.status = query.status;
     if (query.search) {
       where.OR = [
         { email: { contains: query.search, mode: "insensitive" } },
@@ -63,6 +72,9 @@ export class UsersService {
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
+          role: {
+            include: { department: true },
+          },
           designation: {
             include: { department: true },
           },
@@ -97,6 +109,27 @@ export class UsersService {
     };
   }
 
+  public async getUserById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: {
+          include: { department: true },
+        },
+        designation: {
+          include: { department: true },
+        },
+      },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new NotFoundError("User");
+    }
+
+    const { passwordHash, ...result } = user;
+    return result;
+  }
+
   public async createAdminUser(data: CreateAdminUserDTO, req?: Request) {
     const existing = await this.prisma.user.findUnique({
       where: { email: data.email },
@@ -106,12 +139,20 @@ export class UsersService {
       throw new ConflictError("A user with this email address already exists");
     }
 
-    const designation = await this.prisma.designation.findUnique({
-      where: { id: data.designationId },
+    const role = await this.prisma.role.findUnique({
+      where: { id: data.roleId },
     });
+    if (!role) {
+      throw new NotFoundError("Role");
+    }
 
-    if (!designation) {
-      throw new NotFoundError("Designation");
+    if (data.designationId) {
+      const designation = await this.prisma.designation.findUnique({
+        where: { id: data.designationId },
+      });
+      if (!designation) {
+        throw new NotFoundError("Designation");
+      }
     }
 
     const rawTemporaryPassword =
@@ -141,12 +182,16 @@ export class UsersService {
         firstName: data.firstName,
         lastName: data.lastName,
         systemRole: data.systemRole as any,
-        designationId: data.designationId,
+        roleId: data.roleId,
+        designationId: data.designationId || null,
         status: "INVITED",
         isActive: true,
         mustChangePassword: true,
       },
       include: {
+        role: {
+          include: { department: true },
+        },
         designation: {
           include: { department: true },
         },
@@ -199,7 +244,10 @@ export class UsersService {
   public async resendInvite(userId: string, customTemporaryPassword?: string, req?: Request) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { designation: { include: { department: true } } },
+      include: {
+        role: { include: { department: true } },
+        designation: { include: { department: true } },
+      },
     });
 
     if (!user || user.deletedAt) {
@@ -223,9 +271,8 @@ export class UsersService {
         updatedAt: new Date(),
       },
       include: {
-        designation: {
-          include: { department: true },
-        },
+        role: { include: { department: true } },
+        designation: { include: { department: true } },
       },
     });
 
@@ -282,6 +329,13 @@ export class UsersService {
 
     const { passwordHash: _, ...oldUserSanitized } = user;
 
+    if (data.roleId) {
+      const role = await this.prisma.role.findUnique({
+        where: { id: data.roleId },
+      });
+      if (!role) throw new NotFoundError("Role");
+    }
+
     if (data.designationId) {
       const desig = await this.prisma.designation.findUnique({
         where: { id: data.designationId },
@@ -312,7 +366,8 @@ export class UsersService {
       ...(data.lastName && { lastName: data.lastName.trim() }),
       ...(data.employeeId && { employeeId: data.employeeId.trim() }),
       ...(data.systemRole && { systemRole: data.systemRole as any }),
-      ...(data.designationId && { designationId: data.designationId }),
+      ...(data.roleId && { roleId: data.roleId }),
+      ...(data.designationId !== undefined && { designationId: data.designationId }),
       ...(data.status && { status: data.status as any }),
       ...(targetIsActive !== undefined && { isActive: targetIsActive }),
       updatedAt: new Date(),
@@ -322,6 +377,9 @@ export class UsersService {
       where: { id: userId },
       data: updateData,
       include: {
+        role: {
+          include: { department: true },
+        },
         designation: {
           include: { department: true },
         },
@@ -336,6 +394,11 @@ export class UsersService {
       await this.prisma.refreshToken.deleteMany({
         where: { userId },
       });
+    }
+
+    await AuthorizationEngine.getInstance().invalidateUserCache(userId);
+    if (data.roleId || data.systemRole) {
+      await AuthorizationEngine.getInstance().invalidateCache();
     }
 
     const { passwordHash, ...result } = updated;
@@ -424,6 +487,7 @@ export class UsersService {
       });
     }
 
+    await AuthorizationEngine.getInstance().invalidateUserCache(data.userId);
     await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({
@@ -449,6 +513,7 @@ export class UsersService {
       where: { id: overrideId },
     });
 
+    await AuthorizationEngine.getInstance().invalidateUserCache(override.userId);
     await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({
@@ -513,6 +578,7 @@ export class UsersService {
       },
     });
 
+    await AuthorizationEngine.getInstance().invalidateUserCache(data.delegateeId);
     await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({
@@ -538,6 +604,7 @@ export class UsersService {
       where: { id: delegationId },
     });
 
+    await AuthorizationEngine.getInstance().invalidateUserCache(del.delegateeId);
     await AuthorizationEngine.getInstance().invalidateCache();
 
     await AuditLogService.log({

@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { prisma } from "@/lib/prisma";
 import { OrganizationService } from "./organization.service";
 import { ScopeEvaluator } from "@/core/authorization/ScopeEvaluator";
-import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
+import type { AuthenticatedUser, ResolvedRoleGrant } from "@/core/authorization/authorization.types";
 
 describe("Department Hierarchy & Sub-Departments", () => {
   let orgService: OrganizationService;
@@ -15,15 +15,17 @@ describe("Department Hierarchy & Sub-Departments", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.team.deleteMany({});
     await prisma.department.deleteMany({});
@@ -102,7 +104,7 @@ describe("Department Hierarchy & Sub-Departments", () => {
       orgService.updateDepartment(deptA.id, {
         parentId: deptC.id,
       }),
-    ).rejects.toThrow("Circular department hierarchy detected");
+    ).rejects.toThrow("circular hierarchy detected");
   });
 
   it("should prevent deleting a department that contains sub-departments", async () => {
@@ -118,7 +120,7 @@ describe("Department Hierarchy & Sub-Departments", () => {
     });
 
     expect(orgService.deleteDepartment(parent.id)).rejects.toThrow(
-      "Cannot delete department containing 1 sub-department(s)",
+      "Cannot delete department with 1 sub-department(s)",
     );
   });
 
@@ -134,7 +136,7 @@ describe("Department Hierarchy & Sub-Departments", () => {
       parentId: rootDept.id,
     });
 
-    const desig = await prisma.designation.create({
+    const role = await prisma.role.create({
       data: {
         code: "TECH_LEAD",
         name: "Tech Director",
@@ -152,18 +154,18 @@ describe("Department Hierarchy & Sub-Departments", () => {
         firstName: "Tech",
         lastName: "Lead",
         systemRole: "Staff",
-        designationId: desig.id,
+        roleId: role.id,
       },
     });
 
     const user: AuthenticatedUser = {
       id: dbUser.id,
       systemRole: "Staff",
-      designationId: desig.id,
+      roleId: role.id,
       email: dbUser.email,
     };
 
-    const grant: import("@/core/authorization/authorization.types").ResolvedDesignationGrant = {
+    const grant: ResolvedRoleGrant = {
       permissionId: "perm-dept-view",
       permissionCode: "organization.department.view",
       resolutionStrategy: "OwnDepartment",

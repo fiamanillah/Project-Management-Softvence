@@ -10,9 +10,11 @@ import {
   createDepartmentSchema,
   updateDepartmentSchema,
   assignDepartmentManagerSchema,
+  createRoleSchema,
+  updateRoleSchema,
+  saveRolePermissionsSchema,
   createDesignationSchema,
   updateDesignationSchema,
-  savePermissionAssignmentsSchema,
 } from "./OrganizationDTO";
 
 export class OrganizationModule extends BaseModule {
@@ -77,11 +79,56 @@ export class OrganizationModule extends BaseModule {
       controller.removeDepartmentManager.bind(controller),
     );
 
-    // Designations & Permission Matrix
+    // Roles & Permission Matrix (Authorization)
+    this.router.get(
+      "/roles",
+      requirePermission("auth.user.view"),
+      controller.getRoles.bind(controller),
+    );
+    this.router.get(
+      "/roles/:id",
+      requirePermission("auth.user.view"),
+      controller.getRoleById.bind(controller),
+    );
+    this.router.post(
+      "/roles",
+      requirePermission("auth.user.manage"),
+      validateRequest({ body: createRoleSchema }),
+      controller.createRole.bind(controller),
+    );
+    this.router.put(
+      "/roles/:id",
+      requirePermission("auth.user.manage"),
+      validateRequest({ body: updateRoleSchema }),
+      controller.updateRole.bind(controller),
+    );
+    this.router.delete(
+      "/roles/:id",
+      requirePermission("auth.user.manage"),
+      controller.deleteRole.bind(controller),
+    );
+    this.router.get(
+      "/roles/:id/permissions",
+      requirePermission("auth.user.view"),
+      controller.getRolePermissions.bind(controller),
+    );
+    this.router.put(
+      "/roles/:id/permissions",
+      requirePermission("auth.user.manage"),
+      validateRequest({ body: saveRolePermissionsSchema }),
+      controller.saveRolePermissions.bind(controller),
+    );
+
+    // Designations (Pure HR Job Titles)
     this.router.get(
       "/designations",
       requirePermission("auth.user.view"),
       controller.getDesignations.bind(controller),
+    );
+    this.router.get(
+      "/designations/:id",
+      requirePermission("auth.user.view"),
+      controller.getDesignationById.bind(controller),
     );
     this.router.post(
       "/designations",
@@ -99,17 +146,6 @@ export class OrganizationModule extends BaseModule {
       "/designations/:id",
       requirePermission("auth.user.manage"),
       controller.deleteDesignation.bind(controller),
-    );
-    this.router.get(
-      "/designations/:id/permissions",
-      requirePermission("auth.user.view"),
-      controller.getDesignationPermissions.bind(controller),
-    );
-    this.router.put(
-      "/designations/:id/permissions",
-      requirePermission("auth.user.manage"),
-      validateRequest({ body: savePermissionAssignmentsSchema }),
-      controller.saveDesignationPermissions.bind(controller),
     );
   }
 }

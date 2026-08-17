@@ -89,6 +89,8 @@ export class AuthorizationError extends AppError {
   }
 }
 
+export const ForbiddenError = AuthorizationError;
+
 export class ConflictError extends AppError {
   constructor(message = "Resource conflict", details?: unknown) {
     super({

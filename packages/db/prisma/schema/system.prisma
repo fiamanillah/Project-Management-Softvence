@@ -136,7 +136,7 @@ model PermissionScopeType {
   isActive           Boolean                 @default(true) @map("is_active")
   createdAt          DateTime                @default(now()) @map("created_at")
 
-  designationPermissions DesignationPermission[]
+  rolePermissions RolePermission[]
 
   @@map("permission_scope_types")
 }

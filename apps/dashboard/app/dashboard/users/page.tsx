@@ -21,7 +21,8 @@ export default function UsersPage() {
 
 function UsersContent() {
   const [users, setUsers] = React.useState<AdminUser[]>([]);
-  const [designations, setDesignations] = React.useState<{ id: string; name: string; code: string }[]>([]);
+  const [roles, setRoles] = React.useState<{ id: string; name: string; code: string; department?: { id: string; name: string } | null }[]>([]);
+  const [designations, setDesignations] = React.useState<{ id: string; name: string; code: string; department?: { id: string; name: string } | null }[]>([]);
   const [search, setSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
@@ -40,12 +41,14 @@ function UsersContent() {
       if (roleFilter !== "all") queryParams.set("role", roleFilter);
       if (statusFilter !== "all") queryParams.set("status", statusFilter);
 
-      const [resUsers, resDesig] = await Promise.all([
+      const [resUsers, resRoles, resDesig] = await Promise.all([
         api.get(`/users?${queryParams.toString()}`),
+        api.get("/organization/roles"),
         api.get("/organization/designations"),
       ]);
 
       setUsers(resUsers.data || []);
+      setRoles(resRoles || []);
       setDesignations(resDesig || []);
     } catch (err: any) {
       toast.error(err.message || "Failed to load users");
@@ -82,7 +85,7 @@ function UsersContent() {
             <Shield className="size-6 text-primary" /> Users Management
           </h1>
           <p className="text-xs text-muted-foreground">
-            Manage system roles, designations, invitations, and account lifecycle statuses across your organization.
+            Manage system authorization roles, job titles/designations, invitations, and account lifecycle statuses across your organization.
           </p>
         </div>
 
@@ -98,7 +101,7 @@ function UsersContent() {
         </div>
       </div>
 
-      {/* User Table with Unified Toolbar (Search, Filters, and Column Visibility) */}
+      {/* User Table with Unified Toolbar */}
       {isLoading ? (
         <div className="h-64 flex items-center justify-center border rounded-xl bg-card">
           <RefreshCw className="size-6 animate-spin text-muted-foreground" />
@@ -122,6 +125,7 @@ function UsersContent() {
       <CreateUserModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
+        roles={roles}
         designations={designations}
         onSuccess={fetchUsers}
       />
@@ -131,6 +135,7 @@ function UsersContent() {
         user={selectedUser}
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
+        roles={roles}
         designations={designations}
         onSuccess={fetchUsers}
       />

@@ -18,6 +18,8 @@ export default function DashboardOverviewPage() {
   const [stats, setStats] = React.useState({
     usersCount: 0,
     departmentsCount: 0,
+    teamsCount: 0,
+    rolesCount: 0,
     designationsCount: 0,
     overridesCount: 0,
     auditLogsCount: 0,
@@ -29,19 +31,23 @@ export default function DashboardOverviewPage() {
     try {
       const canViewUsers = hasPermission(permissions, "auth.user.view");
       const canViewDepts = hasPermission(permissions, "organization.department.view");
-      const canViewDesig = hasPermission(permissions, "organization.designation.view");
+      const canViewTeams = hasPermission(permissions, "organization.team.view");
       const canManageUsers = hasPermission(permissions, "auth.user.manage");
 
-      const [usersRes, deptsRes, desigRes, overridesRes, logsRes] = await Promise.all([
+      const [usersRes, deptsRes, teamsRes, rolesRes, desigRes, overridesRes, logsRes] = await Promise.all([
         canViewUsers ? api.get("/users?limit=1").catch(() => null) : null,
         canViewDepts ? api.get("/organization/departments").catch(() => null) : null,
-        canViewDesig ? api.get("/organization/designations").catch(() => null) : null,
+        canViewTeams ? api.get("/teams/stats").catch(() => null) : null,
+        canViewUsers ? api.get("/organization/roles").catch(() => null) : null,
+        canViewUsers ? api.get("/organization/designations").catch(() => null) : null,
         canManageUsers ? api.get("/users/overrides").catch(() => null) : null,
         canManageUsers ? api.get("/audit-logs?limit=5").catch(() => null) : null,
       ]);
 
       const usersTotal = usersRes?.meta?.total ?? (usersRes?.data?.length || 0);
       const deptsTotal = Array.isArray(deptsRes) ? deptsRes.length : 0;
+      const teamsTotal = teamsRes?.totalTeams ?? 0;
+      const rolesTotal = Array.isArray(rolesRes) ? rolesRes.length : 0;
       const desigTotal = Array.isArray(desigRes) ? desigRes.length : 0;
       const overridesTotal = Array.isArray(overridesRes) ? overridesRes.length : 0;
       const logsData = logsRes?.data || logsRes?.logs || (Array.isArray(logsRes) ? logsRes : []);
@@ -50,6 +56,8 @@ export default function DashboardOverviewPage() {
       setStats({
         usersCount: usersTotal,
         departmentsCount: deptsTotal,
+        teamsCount: teamsTotal,
+        rolesCount: rolesTotal,
         designationsCount: desigTotal,
         overridesCount: overridesTotal,
         auditLogsCount: logsTotal,

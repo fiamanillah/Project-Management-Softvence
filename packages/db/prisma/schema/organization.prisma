@@ -15,8 +15,9 @@ model Department {
 
   managers        DepartmentManager[]
   teams           Team[]
+  roles           Role[]
   designations    Designation[]
-  scopeTargets    DesignationPermissionScopeTarget[]
+  scopeTargets    RolePermissionScopeTarget[]
   overrideTargets UserPermissionOverride[]
 
   @@index([parentId])
@@ -51,11 +52,10 @@ model Team {
   department Department @relation(fields: [departmentId], references: [id])
 
   members              TeamMember[]
-  serviceLines         TeamServiceLine[]
   projectAssignments   ProjectTeamAssignment[]
   componentAssignments ComponentTeamAssignment[]
   bdOrders             BdOrder[]
-  scopeTargets         DesignationPermissionScopeTarget[]
+  scopeTargets         RolePermissionScopeTarget[]
   overrideTargets      UserPermissionOverride[]
 
   @@map("teams")
@@ -80,21 +80,6 @@ model TeamMember {
   @@map("team_members")
 }
 
-model TeamServiceLine {
-  id            String   @id @default(uuid()) @db.Uuid
-  teamId        String   @map("team_id") @db.Uuid
-  serviceLineId String   @map("service_line_id") @db.Uuid
-  isPrimary     Boolean  @default(false) @map("is_primary")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  team        Team        @relation(fields: [teamId], references: [id])
-  serviceLine ServiceLine @relation(fields: [serviceLineId], references: [id])
-
-  @@unique([teamId, serviceLineId])
-  @@index([serviceLineId])
-  @@map("team_service_lines")
-}
-
 model ServiceLine {
   id                  String   @id @default(uuid()) @db.Uuid
   parentServiceLineId String?  @map("parent_service_line_id") @db.Uuid
@@ -106,8 +91,7 @@ model ServiceLine {
   parentServiceLine ServiceLine?  @relation("ServiceLineHierarchy", fields: [parentServiceLineId], references: [id])
   childServiceLines ServiceLine[] @relation("ServiceLineHierarchy")
 
-  teamServiceLines TeamServiceLine[]
-  projects         Project[]
+  projects Project[]
 
   @@index([parentServiceLineId])
   @@map("service_lines")

@@ -31,7 +31,7 @@ model Project {
   issues                 Issue[]
   supportTickets         SupportTicket[]
   group                  ProjectGroup?
-  scopeTargets           DesignationPermissionScopeTarget[]
+  scopeTargets           RolePermissionScopeTarget[]
   permissionOverrides    UserPermissionOverride[]
 
   @@index([profileId])

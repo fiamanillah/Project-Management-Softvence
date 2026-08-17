@@ -5,7 +5,8 @@ import type { ScopeResolutionStrategy } from "@workspace/db";
 export interface AuthenticatedUser {
   id: string;
   systemRole: string;
-  designationId: string;
+  roleId: string;
+  designationId?: string | null;
   email?: string;
   ipAddress?: string;
   userAgent?: string;
@@ -24,15 +25,15 @@ export interface ScopeTargets {
   projectIds: string[];
 }
 
-export interface ResolvedDesignationGrant {
+export interface ResolvedRoleGrant {
   permissionCode: string;
   permissionId: string;
   resolutionStrategy: ScopeResolutionStrategy;
   scopeTargets: ScopeTargets;
 }
 
-export interface ResolvedDesignationGrantSet {
-  designationId: string;
+export interface ResolvedRoleGrantSet {
+  roleId: string;
   version: number;
-  grants: ResolvedDesignationGrant[];
+  grants: ResolvedRoleGrant[];
 }

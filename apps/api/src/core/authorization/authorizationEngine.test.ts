@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { prisma } from "@/lib/prisma";
-import { AuthorizationEngine, can } from "./AuthorizationEngine";
+import { AuthorizationEngine, can, getUserPermissions } from "./AuthorizationEngine";
 import { requirePermission } from "@/middleware/requirePermission";
 import type { Request, Response } from "express";
 
 describe("AuthorizationEngine", () => {
   let testDepartmentId: string;
-  let testDesignationId: string;
+  let testRoleId: string;
   let testPermissionId: string;
   let testUserId: string;
   let granterUserId: string;
@@ -20,28 +20,31 @@ describe("AuthorizationEngine", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
     await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
     await prisma.team.deleteMany({});
     await prisma.permission.deleteMany({});
     await prisma.permissionScopeType.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
 
-    // 1. Seed base Department & Designation
+    // 1. Seed base Department & Role
     const dept = await prisma.department.create({
       data: { code: "ENGINEERING", name: "Engineering Dept" },
     });
     testDepartmentId = dept.id;
 
-    const desig = await prisma.designation.create({
+    const role = await prisma.role.create({
       data: {
         code: "SOFTWARE_DEV",
         name: "Software Developer",
@@ -49,7 +52,7 @@ describe("AuthorizationEngine", () => {
         hierarchyLevel: 3,
       },
     });
-    testDesignationId = desig.id;
+    testRoleId = role.id;
 
     // 2. Seed Users
     const user = await prisma.user.create({
@@ -60,7 +63,7 @@ describe("AuthorizationEngine", () => {
         firstName: "Jane",
         lastName: "Doe",
         systemRole: "Staff",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
     });
     testUserId = user.id;
@@ -73,7 +76,7 @@ describe("AuthorizationEngine", () => {
         firstName: "Admin",
         lastName: "Granter",
         systemRole: "Admin",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
     });
     granterUserId = granter.id;
@@ -116,23 +119,24 @@ describe("AuthorizationEngine", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.delegation.deleteMany({});
+    await prisma.projectAssignment.deleteMany({});
+    await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.project.deleteMany({});
     await prisma.teamMember.deleteMany({});
     await prisma.assignmentRole.deleteMany({});
-    await prisma.permission.deleteMany({});
-    await prisma.permissionScopeType.deleteMany({});
-    await prisma.user.deleteMany({});
-    await prisma.designation.deleteMany({});
-    await prisma.department.deleteMany({});
+    await prisma.team.deleteMany({});
   });
 
   it("Step 1: SuperAdmin bypass should return true", async () => {
     const superAdminUser = {
       id: testUserId,
       systemRole: "SuperAdmin",
-      designationId: testDesignationId,
+      roleId: testRoleId,
       email: "superadmin@example.com",
     };
 
@@ -141,10 +145,10 @@ describe("AuthorizationEngine", () => {
   });
 
   it("Step 2: Explicit DENY override should short-circuit and win over grant", async () => {
-    // Grant designation permission (Global)
-    await prisma.designationPermission.create({
+    // Grant role permission (Global)
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -165,7 +169,7 @@ describe("AuthorizationEngine", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed = await can(staffUser, "project.view");
@@ -185,17 +189,17 @@ describe("AuthorizationEngine", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed = await can(staffUser, "project.view");
     expect(allowed).toBe(true);
   });
 
-  it("Step 3: Designation grant with Global scope should return true", async () => {
-    await prisma.designationPermission.create({
+  it("Step 3: Role grant with Global scope should return true", async () => {
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -205,14 +209,14 @@ describe("AuthorizationEngine", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed = await can(staffUser, "project.view");
     expect(allowed).toBe(true);
   });
 
-  it("Step 3: Designation grant with OwnTeam scope should allow team members", async () => {
+  it("Step 3: Role grant with OwnTeam scope should allow team members", async () => {
     // Create team and membership
     const team = await prisma.team.create({
       data: {
@@ -239,9 +243,9 @@ describe("AuthorizationEngine", () => {
       },
     });
 
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdOwnTeam,
         grantedBy: granterUserId,
@@ -251,7 +255,7 @@ describe("AuthorizationEngine", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     // Correct team -> true
@@ -264,7 +268,7 @@ describe("AuthorizationEngine", () => {
   });
 
   it("Step 4: Active Delegation should allow delegatee to inherit delegator permissions", async () => {
-    // Delegator user has Global designation permission
+    // Delegator user has Global role permission
     const delegatorUser = await prisma.user.create({
       data: {
         employeeId: `DLG-${Date.now()}`,
@@ -273,13 +277,13 @@ describe("AuthorizationEngine", () => {
         firstName: "Lead",
         lastName: "Delegator",
         systemRole: "Staff",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
     });
 
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -302,7 +306,7 @@ describe("AuthorizationEngine", () => {
     const delegateeUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: "00000000-0000-0000-0000-000000000000", // Empty designation
+      roleId: "00000000-0000-0000-0000-000000000000", // Empty role
     };
 
     const allowed = await can(delegateeUser, "project.view");
@@ -313,7 +317,7 @@ describe("AuthorizationEngine", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed = await can(staffUser, "project.view");
@@ -322,9 +326,9 @@ describe("AuthorizationEngine", () => {
 
   it("Middleware: requirePermission should pass when can() is true and throw 403 when false", async () => {
     // Grant permission
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -335,7 +339,7 @@ describe("AuthorizationEngine", () => {
       user: {
         sub: testUserId,
         systemRole: "Staff",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
       headers: {},
       socket: {},
@@ -365,5 +369,60 @@ describe("AuthorizationEngine", () => {
     expect(nextCalled).toBe(false);
     expect(errPassed).toBeDefined();
     expect(errPassed?.statusCode).toBe(403);
+  });
+
+  it("Performance: getUserPermissions should return complete permission map with SuperAdmin fast-path", async () => {
+    const superAdminUser = {
+      id: granterUserId,
+      systemRole: "SuperAdmin",
+      roleId: testRoleId,
+    };
+
+    const permMap = await getUserPermissions(superAdminUser);
+    expect(permMap["project.view"]).toBeDefined();
+    expect(permMap["project.view"].allowed).toBe(true);
+    expect(permMap["project.view"].scope).toBe("Global");
+  });
+
+  it("Performance: getUserPermissions batch resolver should resolve grants, overrides, and support cache invalidation", async () => {
+    // Seed role grant
+    await prisma.rolePermission.create({
+      data: {
+        roleId: testRoleId,
+        permissionId: testPermissionId,
+        scopeTypeId: scopeTypeIdGlobal,
+        grantedBy: granterUserId,
+      },
+    });
+
+    const staffUser = {
+      id: testUserId,
+      systemRole: "Staff",
+      roleId: testRoleId,
+    };
+
+    // First call (batch resolved and cached)
+    const permMap1 = await getUserPermissions(staffUser);
+    expect(permMap1["project.view"]).toBeDefined();
+    expect(permMap1["project.view"].allowed).toBe(true);
+    expect(permMap1["project.view"].scope).toBe("Global");
+
+    // Add global deny override for this user
+    await prisma.userPermissionOverride.create({
+      data: {
+        userId: testUserId,
+        permissionId: testPermissionId,
+        isDeny: true,
+        grantedBy: granterUserId,
+      },
+    });
+
+    // Invalidate user cache
+    await AuthorizationEngine.getInstance().invalidateUserCache(testUserId);
+
+    // Second call should reflect the deny override
+    const permMap2 = await getUserPermissions(staffUser);
+    expect(permMap2["project.view"].allowed).toBe(false);
+    expect(permMap2["project.view"].scope).toBe("None");
   });
 });

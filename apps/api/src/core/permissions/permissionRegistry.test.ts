@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 describe("PermissionRegistry", () => {
   beforeEach(async () => {
     // Clean up permissions and dependent tables before test runs
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.permissionGroupItem.deleteMany({});
     await prisma.permission.deleteMany({});
@@ -14,8 +14,8 @@ describe("PermissionRegistry", () => {
 
   afterAll(async () => {
     // Clean up permissions and dependent tables after test runs
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.permissionGroupItem.deleteMany({});
     await prisma.permission.deleteMany({});
@@ -79,7 +79,7 @@ describe("PermissionRegistry", () => {
     const updated = await prisma.permission.findUnique({
       where: { code: "project.view" },
     });
-    expect(updated?.description).toBe("View project details");
+    expect(updated?.description).toBe("View project details, milestones, and assigned rosters");
   });
 
   it("should soft-deprecate permissions missing from manifests (-K deprecated)", async () => {

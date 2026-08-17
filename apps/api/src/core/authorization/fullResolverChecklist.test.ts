@@ -5,7 +5,7 @@ import { AuthorizationEngine, can, getUserPermissions } from "./AuthorizationEng
 describe("Section 8 Resolver Verification Checklist", () => {
   let testDepartmentId1: string;
   let testDepartmentId2: string;
-  let testDesignationId: string;
+  let testRoleId: string;
   let testPermissionId: string;
   let testUserId: string;
   let granterUserId: string;
@@ -20,19 +20,21 @@ describe("Section 8 Resolver Verification Checklist", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
     await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
     await prisma.team.deleteMany({});
     await prisma.permission.deleteMany({});
     await prisma.permissionScopeType.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
 
@@ -46,15 +48,15 @@ describe("Section 8 Resolver Verification Checklist", () => {
     });
     testDepartmentId2 = dept2.id;
 
-    const desig = await prisma.designation.create({
+    const role = await prisma.role.create({
       data: {
-        code: "TEST_DESIGNATION",
-        name: "Test Designation",
+        code: "TEST_ROLE",
+        name: "Test Role",
         departmentId: testDepartmentId1,
         hierarchyLevel: 2,
       },
     });
-    testDesignationId = desig.id;
+    testRoleId = role.id;
 
     const user = await prisma.user.create({
       data: {
@@ -64,7 +66,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
         firstName: "Member",
         lastName: "One",
         systemRole: "Staff",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
     });
     testUserId = user.id;
@@ -77,7 +79,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
         firstName: "Super",
         lastName: "Granter",
         systemRole: "SuperAdmin",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
     });
     granterUserId = granter.id;
@@ -126,19 +128,21 @@ describe("Section 8 Resolver Verification Checklist", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
     await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
     await prisma.team.deleteMany({});
     await prisma.permission.deleteMany({});
     await prisma.permissionScopeType.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
   });
@@ -147,7 +151,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const superAdminUser = {
       id: granterUserId,
       systemRole: "SuperAdmin",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
     const allowed = await can(superAdminUser, "project.view");
     expect(allowed).toBe(true);
@@ -178,9 +182,9 @@ describe("Section 8 Resolver Verification Checklist", () => {
       },
     });
 
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdOwnTeam,
         grantedBy: granterUserId,
@@ -190,7 +194,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     // Active membership -> allow
@@ -209,9 +213,9 @@ describe("Section 8 Resolver Verification Checklist", () => {
   });
 
   it("Rule 3: ExplicitDepartments grant with target rows allows matching target departments and nothing else", async () => {
-    const dg = await prisma.designationPermission.create({
+    const dg = await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdExplicitDepts,
         grantedBy: granterUserId,
@@ -219,9 +223,9 @@ describe("Section 8 Resolver Verification Checklist", () => {
     });
 
     // Add target for testDepartmentId1 only
-    await prisma.designationPermissionScopeTarget.create({
+    await prisma.rolePermissionScopeTarget.create({
       data: {
-        designationPermissionId: dg.id,
+        rolePermissionId: dg.id,
         departmentId: testDepartmentId1,
       },
     });
@@ -229,7 +233,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed1 = await can(staffUser, "project.view", { departmentId: testDepartmentId1 });
@@ -239,10 +243,10 @@ describe("Section 8 Resolver Verification Checklist", () => {
     expect(allowed2).toBe(false);
   });
 
-  it("Rule 4: user_permission_overrides deny row (isDeny: true) blocks access even when designation grants it", async () => {
-    await prisma.designationPermission.create({
+  it("Rule 4: user_permission_overrides deny row (isDeny: true) blocks access even when role grants it", async () => {
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -262,7 +266,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed = await can(staffUser, "project.view");
@@ -270,9 +274,9 @@ describe("Section 8 Resolver Verification Checklist", () => {
   });
 
   it("Rule 5: Delegation expires at valid_until and is not usable after expiry", async () => {
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -295,14 +299,14 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const delegateeUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: "00000000-0000-0000-0000-000000000000",
+      roleId: "00000000-0000-0000-0000-000000000000",
     };
 
     const allowed = await can(delegateeUser, "project.view");
     expect(allowed).toBe(false);
   });
 
-  it("Rule 6: Changing designation permission set invalidates cache via invalidateCache()", async () => {
+  it("Rule 6: Changing role permission set invalidates cache via invalidateCache()", async () => {
     const engine = AuthorizationEngine.getInstance();
     const nextVer = await engine.invalidateCache();
     expect(nextVer).toBeGreaterThan(1);
@@ -314,9 +318,9 @@ describe("Section 8 Resolver Verification Checklist", () => {
       data: { isActive: false },
     });
 
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -326,7 +330,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const allowed = await can(staffUser, "project.view");
@@ -334,9 +338,9 @@ describe("Section 8 Resolver Verification Checklist", () => {
   });
 
   it("Rule 8: getUserPermissions should return accurate permission map", async () => {
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeTypeIdGlobal,
         grantedBy: granterUserId,
@@ -346,7 +350,7 @@ describe("Section 8 Resolver Verification Checklist", () => {
     const staffUser = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const permMap = await getUserPermissions(staffUser);

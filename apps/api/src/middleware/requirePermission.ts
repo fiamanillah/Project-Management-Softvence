@@ -32,7 +32,8 @@ export function requirePermission(
       const user = {
         id: req.user.sub,
         systemRole: req.user.systemRole,
-        designationId: req.user.designationId,
+        roleId: req.user.roleId || (req.user as any).designationId || "",
+        designationId: req.user.designationId || null,
         email: (req.user as any).email || undefined,
         ipAddress,
         userAgent,

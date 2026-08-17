@@ -28,24 +28,25 @@ export const userSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
   displayName: z.string().nullable().optional(),
-  role: userRoleEnum,
+  roleId: z.string().uuid(),
+  designationId: z.string().uuid().nullable().optional(),
+  systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).default("Staff"),
   status: userStatusEnum.default("INVITED"),
   emailVerifiedAt: z.date().nullable().optional(),
   bio: z.string().nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
-  isDeleted: z.boolean(),
   isActive: z.boolean().default(true),
   mustChangePassword: z.boolean().default(true),
   lastLoginAt: z.date().nullable().optional(),
   createdAt: z.date(),
-  updatedAt: z.date(),
+  updatedAt: z.date().nullable().optional(),
   deletedAt: z.date().nullable().optional(),
 });
 
 export type UserProfile = z.infer<typeof userSchema>;
 
 export const userWithoutPasswordSchema = userSchema;
-export type UserWithoutPassword = z.infer<typeof userWithoutPasswordSchema>;
+export type UserWithoutPassword = UserProfile;
 
 export const createAdminUserSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -54,7 +55,8 @@ export const createAdminUserSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).default("Staff"),
-  designationId: z.string().uuid("Invalid designation ID"),
+  roleId: z.string().uuid("Invalid role ID"),
+  designationId: z.string().uuid("Invalid designation ID").optional().nullable(),
   sendInviteEmail: z.boolean().default(true).optional(),
 });
 
@@ -67,7 +69,8 @@ export const updateAdminUserSchema = z.object({
   lastName: z.string().min(1, "Last name is required").optional(),
   employeeId: z.string().min(1, "Employee ID cannot be empty").optional(),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).optional(),
-  designationId: z.string().uuid("Invalid designation ID").optional(),
+  roleId: z.string().uuid("Invalid role ID").optional(),
+  designationId: z.string().uuid("Invalid designation ID").optional().nullable(),
   isActive: z.boolean().optional(),
   status: userStatusEnum.optional(),
 });
@@ -113,4 +116,44 @@ export type UpdateAdminUserDTO = z.infer<typeof updateAdminUserSchema>;
 export type CreateOverrideDTO = z.infer<typeof createOverrideSchema>;
 export type CreateDelegationDTO = z.infer<typeof createDelegationSchema>;
 
-
+export interface UserItem {
+  id: string;
+  employeeId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  systemRole: "SuperAdmin" | "Admin" | "Staff";
+  status: UserStatus;
+  roleId?: string;
+  designationId?: string | null;
+  isActive: boolean;
+  mustChangePassword?: boolean;
+  lastLoginAt?: string | Date | null;
+  createdAt: string | Date;
+  updatedAt?: string | Date | null;
+  role?: {
+    id: string;
+    code: string;
+    name: string;
+    department?: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
+  } | null;
+  designation?: {
+    id: string;
+    code: string;
+    name: string;
+    department?: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
+  } | null;
+  _capabilities?: {
+    canEdit?: boolean;
+    canDelete?: boolean;
+    canManageOverrides?: boolean;
+  };
+}

@@ -87,7 +87,17 @@ export interface AdminUser {
   status?: UserStatus;
   isActive: boolean;
   mustChangePassword?: boolean;
-  designationId?: string;
+  roleId?: string;
+  role?: {
+    id: string;
+    code: string;
+    name: string;
+    department?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+  designationId?: string | null;
   designation?: {
     id: string;
     code: string;
@@ -95,8 +105,8 @@ export interface AdminUser {
     department?: {
       id: string;
       name: string;
-    };
-  };
+    } | null;
+  } | null;
   _capabilities?: UserCapabilities;
 }
 
@@ -308,30 +318,47 @@ export function UserTable({
         }
       ),
 
-      columnHelper.accessor("systemRole", {
-        id: "role",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Role" />
-        ),
-        cell: ({ row }) => getRoleBadge(row.original.systemRole),
-      }),
+      columnHelper.accessor(
+        (row) => row.role?.name || row.systemRole,
+        {
+          id: "role",
+          header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="Authorization Role" />
+          ),
+          cell: ({ row }) => {
+            const user = row.original;
+            return user.role ? (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-primary">
+                  {user.role.name}
+                </span>
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  {user.role.code}
+                </span>
+              </div>
+            ) : (
+              getRoleBadge(user.systemRole)
+            );
+          },
+        }
+      ),
 
       columnHelper.accessor(
         (row) => row.designation?.name || "Unassigned",
         {
           id: "designation",
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Designation & Department" />
+            <DataTableColumnHeader column={column} title="Job Title / Designation" />
           ),
           cell: ({ row }) => {
             const user = row.original;
             return user.designation ? (
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-xs font-medium text-foreground">
                   {user.designation.name}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  {user.designation.department?.name || "System"}
+                  {user.designation.department?.name || user.role?.department?.name || "Company-Wide"}
                 </span>
               </div>
             ) : (
@@ -340,6 +367,14 @@ export function UserTable({
           },
         }
       ),
+
+      columnHelper.accessor("systemRole", {
+        id: "systemRole",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="System Tier" />
+        ),
+        cell: ({ row }) => getRoleBadge(row.original.systemRole),
+      }),
 
       columnHelper.accessor(
         (row) => row.status || (row.isActive ? "ACTIVE" : "INACTIVE"),

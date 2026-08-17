@@ -18,7 +18,6 @@ import {
 } from "@workspace/ui/components/table";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,13 +27,12 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import {
-  ShieldCheck,
   Building,
   MoreHorizontal,
   Pencil,
   Trash2,
   Users,
-  Search,
+  Briefcase,
 } from "lucide-react";
 import {
   features,
@@ -48,7 +46,6 @@ import {
 export interface DesignationCapabilities {
   canEdit?: boolean;
   canDelete?: boolean;
-  canManageMatrix?: boolean;
 }
 
 export interface DesignationItem {
@@ -61,9 +58,8 @@ export interface DesignationItem {
     id: string;
     code: string;
     name: string;
-  };
+  } | null;
   _count?: {
-    permissions?: number;
     users?: number;
   };
   _capabilities?: DesignationCapabilities;
@@ -71,7 +67,7 @@ export interface DesignationItem {
 
 interface DesignationTableProps {
   designations: DesignationItem[];
-  onEdit: (designation: DesignationItem, initialTab?: "details" | "permissions") => void;
+  onEdit: (designation: DesignationItem) => void;
   onDelete?: (designation: DesignationItem) => void;
 }
 
@@ -98,14 +94,17 @@ export function DesignationTable({
         {
           id: "designation",
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Designation Code & Name" />
+            <DataTableColumnHeader column={column} title="Designation / Job Title" />
           ),
           cell: ({ row }) => {
             const desig = row.original;
             return (
               <div className="flex flex-col">
-                <span className="font-bold text-sm text-foreground">{desig.name}</span>
-                <span className="text-xs text-muted-foreground font-mono">{desig.code}</span>
+                <span className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                  <Briefcase className="size-3.5 text-primary/70" />
+                  {desig.name}
+                </span>
+                <span className="text-xs text-muted-foreground font-mono pl-5">{desig.code}</span>
               </div>
             );
           },
@@ -113,7 +112,7 @@ export function DesignationTable({
       ),
 
       columnHelper.accessor(
-        (row) => row.department?.name || "System",
+        (row) => row.department?.name || "Company-Wide",
         {
           id: "department",
           header: ({ column }) => (
@@ -122,7 +121,7 @@ export function DesignationTable({
           cell: ({ row }) => (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Building className="size-3.5" />
-              <span>{row.original.department?.name || "System"}</span>
+              <span>{row.original.department?.name || "Company-Wide"}</span>
             </div>
           ),
         }
@@ -131,7 +130,7 @@ export function DesignationTable({
       columnHelper.accessor("hierarchyLevel", {
         id: "level",
         header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Level / Leadership" />
+          <DataTableColumnHeader column={column} title="Level / Seniority" />
         ),
         cell: ({ row }) => {
           const desig = row.original;
@@ -151,23 +150,19 @@ export function DesignationTable({
       }),
 
       columnHelper.accessor(
-        (row) => row._count?.permissions ?? 0,
+        (row) => row._count?.users ?? 0,
         {
-          id: "grants",
+          id: "users",
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Assigned Grants & Users" />
+            <DataTableColumnHeader column={column} title="Assigned Employees" />
           ),
           cell: ({ row }) => {
             const desig = row.original;
+            const userCount = desig._count?.users ?? 0;
             return (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold text-primary">
-                  {desig._count?.permissions || 0} Permissions Granted
-                </span>
-                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <Users className="size-3" />
-                  {desig._count?.users || 0} Active User{(desig._count?.users ?? 0) === 1 ? "" : "s"}
-                </span>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Users className="size-3.5" />
+                <span>{userCount} employee{userCount !== 1 ? "s" : ""}</span>
               </div>
             );
           },
@@ -176,72 +171,50 @@ export function DesignationTable({
 
       columnHelper.display({
         id: "actions",
-        header: () => <div className="text-right w-[90px]">Actions</div>,
+        header: () => <div className="text-right">Actions</div>,
         cell: ({ row }) => {
           const desig = row.original;
-          const caps = desig._capabilities || {
-            canEdit: true,
-            canDelete: true,
-            canManageMatrix: true,
-          };
-          const hasAnyAction =
-            caps.canEdit || caps.canManageMatrix || caps.canDelete;
+          const caps = desig._capabilities || {};
 
           return (
-            <div className="flex items-center justify-end">
-              {hasAnyAction ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-muted-foreground hover:bg-accent"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    }
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => onEdit(desig)}
+                disabled={caps.canEdit === false}
+              >
+                <Pencil className="size-3.5 mr-1" /> Edit
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon" className="size-8" />
+                  }
+                >
+                  <MoreHorizontal className="size-4" />
+                  <span className="sr-only">Actions</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Designation Actions</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => onEdit(desig)}
+                    disabled={caps.canEdit === false}
                   >
-                    <MoreHorizontal className="size-4" />
-                    <span className="sr-only">Actions</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel>Manage Designation</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {caps.canEdit && (
-                      <DropdownMenuItem
-                        onClick={() => onEdit(desig, "details")}
-                        className="cursor-pointer"
-                      >
-                        <Pencil className="mr-2 size-4 text-muted-foreground" />
-                        Edit Designation
-                      </DropdownMenuItem>
-                    )}
-                    {caps.canManageMatrix && (
-                      <DropdownMenuItem
-                        onClick={() => onEdit(desig, "permissions")}
-                        className="cursor-pointer"
-                      >
-                        <ShieldCheck className="mr-2 size-4 text-muted-foreground" />
-                        Permission Matrix
-                      </DropdownMenuItem>
-                    )}
-                    {caps.canDelete && onDelete && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive cursor-pointer"
-                          onClick={() => onDelete(desig)}
-                        >
-                          <Trash2 className="mr-2 size-4" />
-                          Delete Designation
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <span className="text-xs text-muted-foreground">—</span>
-              )}
+                    <Pencil className="size-4 mr-2" /> Edit Details
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete?.(desig)}
+                    disabled={caps.canDelete === false}
+                  >
+                    <Trash2 className="size-4 mr-2" /> Delete Designation
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           );
         },
@@ -249,45 +222,48 @@ export function DesignationTable({
     ]);
   }, [onEdit, onDelete]);
 
-  const table = useTable({
-    features,
-    data: designations,
-    columns,
-    getRowId: (row) => row.id,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
-    onPaginationChange: setPagination,
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      rowSelection,
-      pagination,
-    },
-  });
+  const table = useTable(
+    {
+      features,
+      data: designations,
+      columns,
+      state: {
+        sorting,
+        columnFilters,
+        columnVisibility,
+        rowSelection,
+        pagination,
+      },
+      onSortingChange: setSorting,
+      onColumnFiltersChange: setColumnFilters,
+      onColumnVisibilityChange: setColumnVisibility,
+      onRowSelectionChange: setRowSelection,
+      onPaginationChange: setPagination,
+    }
+  );
 
   return (
     <div className="space-y-4">
-      {/* Table Toolbar */}
       <DataTableToolbar
         table={table}
         searchKey="designation"
-        searchPlaceholder="Search designations by name or code..."
-      />
+        searchPlaceholder="Filter designations by code or job title..."
+      >
+        <DataTableViewOptions table={table} />
+      </DataTableToolbar>
 
-      {/* TanStack Table Container */}
-      <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+      <div className="rounded-xl border bg-card overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/40">
+          <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
-                    {header.isPlaceholder ? null : (
-                      <table.FlexRender header={header} />
-                    )}
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : header.column.columnDef.header instanceof Function
+                      ? header.column.columnDef.header(header.getContext())
+                      : header.column.columnDef.header}
                   </TableHead>
                 ))}
               </TableRow>
@@ -299,22 +275,21 @@ export function DesignationTable({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="hover:bg-muted/20 transition-colors"
+                  className="hover:bg-muted/40 transition-colors"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      <table.FlexRender cell={cell} />
+                      {cell.column.columnDef.cell instanceof Function
+                        ? cell.column.columnDef.cell(cell.getContext())
+                        : (cell.getValue() as React.ReactNode)}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-28 text-center text-muted-foreground text-sm"
-                >
-                  No designations found.
+                <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                  No designations found matching filter.
                 </TableCell>
               </TableRow>
             )}
@@ -322,7 +297,6 @@ export function DesignationTable({
         </Table>
       </div>
 
-      {/* Table Pagination */}
       <DataTablePagination table={table} />
     </div>
   );

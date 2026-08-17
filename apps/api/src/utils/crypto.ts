@@ -6,7 +6,8 @@ import { env } from "@/env";
 export interface JWTCustomPayload {
   sub: string; // user_id
   systemRole: string; // system_role
-  designationId: string; // designation_id
+  roleId: string; // role_id (authorization role)
+  designationId?: string | null; // designation_id (optional HR title)
 }
 
 /**
@@ -80,13 +81,14 @@ export function verifyAccessToken(token: string): JWTCustomPayload {
 
   const decoded = jwt.verify(token, key, options) as jwt.JwtPayload & JWTCustomPayload;
   
-  if (!decoded.sub || !decoded.systemRole || !decoded.designationId) {
+  if (!decoded.sub || !decoded.systemRole) {
     throw new Error("Invalid JWT payload identity structure");
   }
 
   return {
     sub: decoded.sub,
     systemRole: decoded.systemRole,
-    designationId: decoded.designationId,
+    roleId: decoded.roleId || (decoded as any).designationId || "",
+    designationId: decoded.designationId || null,
   };
 }

@@ -4,7 +4,7 @@ import type { PrismaClient } from "@workspace/db";
 import type {
   AuthenticatedUser,
   AuthorizationResourceContext,
-  ResolvedDesignationGrant,
+  ResolvedRoleGrant,
 } from "./authorization.types";
 
 export class ScopeEvaluator {
@@ -31,15 +31,20 @@ export class ScopeEvaluator {
   }
 
   /**
-   * Evaluate a resolved designation grant strategy against a resource context for a given user
+   * Evaluate a resolved role grant strategy against a resource context for a given user
    */
   public static async evaluate(
     user: AuthenticatedUser,
-    grant: ResolvedDesignationGrant,
+    grant: ResolvedRoleGrant,
     resource: AuthorizationResourceContext | undefined,
     prisma: PrismaClient,
   ): Promise<boolean> {
     const strategy = grant.resolutionStrategy;
+
+    // Coarse permission check (route / list level where resource is not yet bound)
+    if (!resource) {
+      return true;
+    }
 
     switch (strategy) {
       case "Global":
@@ -48,27 +53,60 @@ export class ScopeEvaluator {
       case "OwnDepartment": {
         if (!resource?.departmentId) return false;
 
-        // Check if resource.departmentId matches user's designation department or its descendants
-        const designation = await prisma.designation.findUnique({
-          where: { id: user.designationId },
-          select: { departmentId: true },
-        });
+        // 1. Check if resource.departmentId matches user's role department or descendants
+        let effectiveRoleId = user.roleId;
+        if (!effectiveRoleId && user.id) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { roleId: true },
+          });
+          effectiveRoleId = dbUser?.roleId || "";
+        }
 
-        if (designation?.departmentId) {
-          if (designation.departmentId === resource.departmentId) {
-            return true;
-          }
+        if (effectiveRoleId) {
+          const role = await prisma.role.findUnique({
+            where: { id: effectiveRoleId },
+            select: { departmentId: true },
+          });
 
-          const descendantIds = await this.getDepartmentDescendants(
-            designation.departmentId,
-            prisma,
-          );
-          if (descendantIds.includes(resource.departmentId)) {
-            return true;
+          if (role?.departmentId) {
+            if (role.departmentId === resource.departmentId) {
+              return true;
+            }
+
+            const descendantIds = await this.getDepartmentDescendants(
+              role.departmentId,
+              prisma,
+            );
+            if (descendantIds.includes(resource.departmentId)) {
+              return true;
+            }
           }
         }
 
-        // Or if user belongs to an active team under this department or its ancestors
+        // 2. Check if resource.departmentId matches user's designation department or descendants
+        if (user.designationId) {
+          const designation = await prisma.designation.findUnique({
+            where: { id: user.designationId },
+            select: { departmentId: true },
+          });
+
+          if (designation?.departmentId) {
+            if (designation.departmentId === resource.departmentId) {
+              return true;
+            }
+
+            const descendantIds = await this.getDepartmentDescendants(
+              designation.departmentId,
+              prisma,
+            );
+            if (descendantIds.includes(resource.departmentId)) {
+              return true;
+            }
+          }
+        }
+
+        // 3. Or if user belongs to an active team under this department or its ancestors
         const userTeams = await prisma.teamMember.findMany({
           where: {
             userId: user.id,
@@ -133,20 +171,22 @@ export class ScopeEvaluator {
       case "OwnProject": {
         if (!resource?.projectId) return false;
 
-        // Direct project assignment check
+        // Direct project assignment check (active only)
         const directAssignment = await prisma.projectAssignment.findFirst({
           where: {
             userId: user.id,
             projectId: resource.projectId,
+            unassignedAt: null,
           },
         });
         if (directAssignment) return true;
 
-        // Component assignment check
+        // Component assignment check (active only)
         const componentAssignment = await prisma.componentAssignment.findFirst({
           where: {
             userId: user.id,
             component: { projectId: resource.projectId },
+            unassignedAt: null,
           },
         });
         return Boolean(componentAssignment);

@@ -2,16 +2,18 @@ import type { PrismaClient } from "@workspace/db";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
-import { can } from "@/core/authorization/AuthorizationEngine";
+import { AuthorizationEngine, can } from "@/core/authorization/AuthorizationEngine";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import type { Request } from "express";
 import type {
   CreateDepartmentDTO,
   UpdateDepartmentDTO,
   AssignDepartmentManagerDTO,
+  CreateRoleDTO,
+  UpdateRoleDTO,
+  SaveRolePermissionsDTO,
   CreateDesignationDTO,
   UpdateDesignationDTO,
-  SavePermissionAssignmentsDTO,
 } from "./OrganizationDTO";
 
 export class OrganizationService {
@@ -23,9 +25,6 @@ export class OrganizationService {
   // DEPARTMENTS MANAGEMENT
   // ==========================================
 
-  /**
-   * Recursively collect all descendant department IDs of a given department
-   */
   public async getDepartmentDescendantIds(departmentId: string): Promise<string[]> {
     const children = await this.prisma.department.findMany({
       where: { parentId: departmentId },
@@ -42,9 +41,6 @@ export class OrganizationService {
     return [...childIds, ...subChildIds.flat()];
   }
 
-  /**
-   * Check if a candidate department is a descendant of an ancestor department
-   */
   public async isDescendant(ancestorId: string, candidateDescendantId: string): Promise<boolean> {
     const descendantIds = await this.getDepartmentDescendantIds(ancestorId);
     return descendantIds.includes(candidateDescendantId);
@@ -76,6 +72,7 @@ export class OrganizationService {
         },
         _count: {
           select: {
+            roles: true,
             designations: true,
             teams: true,
             subDepartments: true,
@@ -133,10 +130,12 @@ export class OrganizationService {
           },
           orderBy: { assignedAt: "desc" },
         },
+        roles: true,
         designations: true,
         teams: true,
         _count: {
           select: {
+            roles: true,
             designations: true,
             teams: true,
             subDepartments: true,
@@ -172,12 +171,7 @@ export class OrganizationService {
       const parent = await this.prisma.department.findUnique({
         where: { id: data.parentId },
       });
-      if (!parent) {
-        throw new NotFoundError("Parent department");
-      }
-      if (!parent.isActive) {
-        throw new BadRequestError("Cannot assign an inactive department as parent");
-      }
+      if (!parent) throw new NotFoundError("Parent Department");
     }
 
     const dept = await this.prisma.department.create({
@@ -188,16 +182,9 @@ export class OrganizationService {
         isActive: data.isActive ?? true,
       },
       include: {
-        parent: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
+        parent: true,
       },
     });
-    this.logger.info(`Department created: ${dept.code} (${dept.id})`);
 
     await AuditLogService.log({
       module: "ORGANIZATION",
@@ -213,50 +200,32 @@ export class OrganizationService {
   }
 
   public async updateDepartment(id: string, data: UpdateDepartmentDTO, req?: Request) {
-    const dept = await this.prisma.department.findUnique({ where: { id } });
-    if (!dept) throw new NotFoundError("Department");
+    const existing = await this.prisma.department.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError("Department");
 
-    if (data.parentId !== undefined) {
+    if (data.parentId !== undefined && data.parentId !== null) {
       if (data.parentId === id) {
-        throw new BadRequestError("A department cannot be its own parent");
+        throw new BadRequestError("A department cannot be its own parent.");
       }
-
-      if (data.parentId !== null) {
-        const parent = await this.prisma.department.findUnique({
-          where: { id: data.parentId },
-        });
-        if (!parent) {
-          throw new NotFoundError("Parent department");
-        }
-        if (!parent.isActive) {
-          throw new BadRequestError("Cannot assign an inactive department as parent");
-        }
-
-        // Circular hierarchy check
-        const isCycle = await this.isDescendant(id, data.parentId);
-        if (isCycle) {
-          throw new BadRequestError(
-            "Circular department hierarchy detected. Cannot set a descendant as parent.",
-          );
-        }
+      const isLoop = await this.isDescendant(id, data.parentId);
+      if (isLoop) {
+        throw new BadRequestError(
+          "Cannot set a descendant department as the parent (circular hierarchy detected).",
+        );
       }
+      const parent = await this.prisma.department.findUnique({ where: { id: data.parentId } });
+      if (!parent) throw new NotFoundError("Parent Department");
     }
 
     const updated = await this.prisma.department.update({
       where: { id },
       data: {
-        ...(data.name && { name: data.name }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-        ...(data.parentId !== undefined && { parentId: data.parentId }),
+        name: data.name ?? undefined,
+        parentId: data.parentId !== undefined ? data.parentId : undefined,
+        isActive: data.isActive !== undefined ? data.isActive : undefined,
       },
       include: {
-        parent: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
+        parent: true,
       },
     });
 
@@ -264,8 +233,8 @@ export class OrganizationService {
       module: "ORGANIZATION",
       action: "DEPARTMENT_UPDATE",
       entityTable: "Department",
-      entityId: updated.id,
-      oldPayload: dept,
+      entityId: id,
+      oldPayload: existing,
       newPayload: updated,
       req,
     });
@@ -279,6 +248,7 @@ export class OrganizationService {
       include: {
         _count: {
           select: {
+            roles: true,
             designations: true,
             teams: true,
             subDepartments: true,
@@ -290,13 +260,25 @@ export class OrganizationService {
 
     if (dept._count.subDepartments > 0) {
       throw new BadRequestError(
-        `Cannot delete department containing ${dept._count.subDepartments} sub-department(s). Delete or reassign sub-departments first.`,
+        `Cannot delete department with ${dept._count.subDepartments} sub-department(s). Reassign or delete them first.`,
       );
     }
 
-    if (dept._count.designations > 0 || dept._count.teams > 0) {
+    if (dept._count.roles > 0) {
       throw new BadRequestError(
-        `Cannot delete department containing ${dept._count.designations} designations and ${dept._count.teams} teams. Deactivate it instead.`,
+        `Cannot delete department with ${dept._count.roles} assigned role(s). Reassign or delete them first.`,
+      );
+    }
+
+    if (dept._count.designations > 0) {
+      throw new BadRequestError(
+        `Cannot delete department with ${dept._count.designations} assigned designation(s). Reassign or delete them first.`,
+      );
+    }
+
+    if (dept._count.teams > 0) {
+      throw new BadRequestError(
+        `Cannot delete department with ${dept._count.teams} assigned team(s). Reassign or delete them first.`,
       );
     }
 
@@ -326,7 +308,6 @@ export class OrganizationService {
       where: { departmentId, unassignedAt: null },
     });
 
-    // Unassign currently active manager(s) for this department
     await this.prisma.departmentManager.updateMany({
       where: {
         departmentId,
@@ -395,11 +376,11 @@ export class OrganizationService {
   }
 
   // ==========================================
-  // DESIGNATIONS & PERMISSION MATRIX
+  // ROLES & PERMISSION MATRIX (Security Access)
   // ==========================================
 
-  public async getDesignations(actor?: AuthenticatedUser) {
-    const designations = await this.prisma.designation.findMany({
+  public async getRoles(actor?: AuthenticatedUser) {
+    const roles = await this.prisma.role.findMany({
       orderBy: { hierarchyLevel: "asc" },
       include: {
         department: true,
@@ -413,12 +394,12 @@ export class OrganizationService {
     });
 
     return Promise.all(
-      designations.map(async (desig) => {
+      roles.map(async (role) => {
         const canManage = actor
-          ? await can(actor, "organization.designation.manage", { departmentId: desig.departmentId })
+          ? await can(actor, "organization.role.manage", { departmentId: role.departmentId ?? undefined })
           : false;
         return {
-          ...desig,
+          ...role,
           _capabilities: {
             canEdit: canManage,
             canDelete: canManage,
@@ -429,7 +410,36 @@ export class OrganizationService {
     );
   }
 
-  private async getGranterUserId(providedUserId?: string, designationIdForFallback?: string): Promise<string> {
+  public async getRoleById(roleId: string, actor?: AuthenticatedUser) {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: {
+        department: true,
+        _count: {
+          select: {
+            permissions: true,
+            users: true,
+          },
+        },
+      },
+    });
+    if (!role) throw new NotFoundError("Role");
+
+    const canManage = actor
+      ? await can(actor, "organization.role.manage", { departmentId: role.departmentId ?? undefined })
+      : false;
+
+    return {
+      ...role,
+      _capabilities: {
+        canEdit: canManage,
+        canDelete: canManage,
+        canManageMatrix: canManage,
+      },
+    };
+  }
+
+  private async getGranterUserId(providedUserId?: string, roleIdForFallback?: string): Promise<string> {
     if (providedUserId) {
       const userExists = await this.prisma.user.findUnique({
         where: { id: providedUserId },
@@ -442,7 +452,7 @@ export class OrganizationService {
     });
     if (fallbackUser) return fallbackUser.id;
 
-    if (designationIdForFallback) {
+    if (roleIdForFallback) {
       const sysUser = await this.prisma.user.create({
         data: {
           employeeId: `SYS-${Date.now()}`,
@@ -451,7 +461,7 @@ export class OrganizationService {
           firstName: "System",
           lastName: "Granter",
           systemRole: "SuperAdmin",
-          designationId: designationIdForFallback,
+          roleId: roleIdForFallback,
         },
       });
       return sysUser.id;
@@ -460,27 +470,31 @@ export class OrganizationService {
     throw new BadRequestError("No valid granter user found to assign permissions.");
   }
 
-  public async createDesignation(data: CreateDesignationDTO, grantedByUserId?: string, req?: Request) {
-    const existing = await this.prisma.designation.findUnique({
+  public async createRole(data: CreateRoleDTO, grantedByUserId?: string, req?: Request) {
+    const existing = await this.prisma.role.findUnique({
       where: { code: data.code },
     });
     if (existing) {
-      throw new ConflictError(`Designation code '${data.code}' already exists`);
+      throw new ConflictError(`Role code '${data.code}' already exists`);
     }
 
-    const dept = await this.prisma.department.findUnique({
-      where: { id: data.departmentId },
-    });
-    if (!dept) throw new NotFoundError("Department");
+    if (data.departmentId) {
+      const dept = await this.prisma.department.findUnique({
+        where: { id: data.departmentId },
+      });
+      if (!dept) throw new NotFoundError("Department");
+    }
 
-    const desig = await this.prisma.$transaction(async (tx) => {
-      const createdDesig = await tx.designation.create({
+    const role = await this.prisma.$transaction(async (tx) => {
+      const createdRole = await tx.role.create({
         data: {
           code: data.code,
           name: data.name,
-          departmentId: data.departmentId,
-          hierarchyLevel: data.hierarchyLevel,
-          isLeadership: data.isLeadership,
+          description: data.description ?? null,
+          departmentId: data.departmentId ?? null,
+          hierarchyLevel: data.hierarchyLevel ?? 1,
+          isLeadership: data.isLeadership ?? false,
+          isActive: data.isActive ?? true,
         },
         include: {
           department: true,
@@ -515,87 +529,87 @@ export class OrganizationService {
               firstName: "System",
               lastName: "Granter",
               systemRole: "SuperAdmin",
-              designationId: createdDesig.id,
+              roleId: createdRole.id,
             },
           });
           granterId = sysUser.id;
         }
 
         for (const item of data.assignments) {
-          const grant = await tx.designationPermission.create({
-            data: {
-              designationId: createdDesig.id,
-              permissionId: item.permissionId,
-              scopeTypeId: item.scopeTypeId,
-              grantedBy: granterId,
-            },
-          });
+            const grant = await tx.rolePermission.create({
+              data: {
+                roleId: createdRole.id,
+                permissionId: item.permissionId,
+                scopeTypeId: item.scopeTypeId,
+                grantedBy: granterId,
+              },
+            });
 
-          if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
-            for (const deptId of item.targetDepartmentIds) {
-              await tx.designationPermissionScopeTarget.create({
-                data: {
-                  designationPermissionId: grant.id,
-                  departmentId: deptId,
-                },
-              });
+            if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
+              for (const deptId of item.targetDepartmentIds) {
+                await tx.rolePermissionScopeTarget.create({
+                  data: {
+                    rolePermissionId: grant.id,
+                    departmentId: deptId,
+                  },
+                });
+              }
             }
-          }
 
-          if (item.targetTeamIds && item.targetTeamIds.length > 0) {
-            for (const teamId of item.targetTeamIds) {
-              await tx.designationPermissionScopeTarget.create({
-                data: {
-                  designationPermissionId: grant.id,
-                  teamId: teamId,
-                },
-              });
+            if (item.targetTeamIds && item.targetTeamIds.length > 0) {
+              for (const teamId of item.targetTeamIds) {
+                await tx.rolePermissionScopeTarget.create({
+                  data: {
+                    rolePermissionId: grant.id,
+                    teamId: teamId,
+                  },
+                });
+              }
             }
-          }
 
-          if (item.targetProjectIds && item.targetProjectIds.length > 0) {
-            for (const projId of item.targetProjectIds) {
-              await tx.designationPermissionScopeTarget.create({
-                data: {
-                  designationPermissionId: grant.id,
-                  projectId: projId,
-                },
-              });
+            if (item.targetProjectIds && item.targetProjectIds.length > 0) {
+              for (const projId of item.targetProjectIds) {
+                await tx.rolePermissionScopeTarget.create({
+                  data: {
+                    rolePermissionId: grant.id,
+                    projectId: projId,
+                  },
+                });
+              }
             }
           }
         }
-      }
 
-      return createdDesig;
+      return createdRole;
     });
 
     await AuditLogService.log({
       module: "ORGANIZATION",
-      action: "DESIGNATION_CREATE",
-      entityTable: "Designation",
-      entityId: desig.id,
+      action: "ROLE_CREATE",
+      entityTable: "Role",
+      entityId: role.id,
       oldPayload: undefined,
-      newPayload: desig,
+      newPayload: role,
       req,
     });
 
-    return desig;
+    return role;
   }
 
-  public async updateDesignation(
-    designationId: string,
-    data: UpdateDesignationDTO,
+  public async updateRole(
+    roleId: string,
+    data: UpdateRoleDTO,
     grantedByUserId?: string,
     req?: Request,
   ) {
-    const existing = await this.prisma.designation.findUnique({
-      where: { id: designationId },
+    const existing = await this.prisma.role.findUnique({
+      where: { id: roleId },
       include: {
         department: true,
         permissions: { include: { scopeTargets: true } },
       },
     });
-    if (!existing) throw new NotFoundError("Designation");
+    if (!existing) throw new NotFoundError("Role");
 
     if (data.departmentId) {
       const dept = await this.prisma.department.findUnique({
@@ -605,13 +619,15 @@ export class OrganizationService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const updatedDesig = await tx.designation.update({
-        where: { id: designationId },
+      const updatedRole = await tx.role.update({
+        where: { id: roleId },
         data: {
           name: data.name ?? undefined,
-          departmentId: data.departmentId ?? undefined,
+          description: data.description !== undefined ? data.description : undefined,
+          departmentId: data.departmentId !== undefined ? data.departmentId : undefined,
           hierarchyLevel: data.hierarchyLevel ?? undefined,
           isLeadership: data.isLeadership !== undefined ? data.isLeadership : undefined,
+          isActive: data.isActive !== undefined ? data.isActive : undefined,
         },
         include: {
           department: true,
@@ -637,82 +653,403 @@ export class OrganizationService {
           const firstUser = await tx.user.findFirst({ select: { id: true } });
           if (firstUser) granterId = firstUser.id;
         }
-        if (!granterId) {
-          const sysUser = await tx.user.create({
-            data: {
-              employeeId: `SYS-${Date.now()}`,
-              email: `system-${Date.now()}@internal.app`,
-              passwordHash: "system",
-              firstName: "System",
-              lastName: "Granter",
-              systemRole: "SuperAdmin",
-              designationId: updatedDesig.id,
-            },
-          });
-          granterId = sysUser.id;
-        }
 
-        const existingGrants = await tx.designationPermission.findMany({
-          where: { designationId },
+        const existingGrants = await tx.rolePermission.findMany({
+          where: { roleId },
           select: { id: true },
         });
         const grantIds = existingGrants.map((g) => g.id);
 
         if (grantIds.length > 0) {
-          await tx.designationPermissionScopeTarget.deleteMany({
-            where: { designationPermissionId: { in: grantIds } },
+          await tx.rolePermissionScopeTarget.deleteMany({
+            where: { rolePermissionId: { in: grantIds } },
           });
-          await tx.designationPermission.deleteMany({
-            where: { designationId },
+          await tx.rolePermission.deleteMany({
+            where: { roleId },
           });
         }
 
-        for (const item of data.assignments) {
-          const grant = await tx.designationPermission.create({
-            data: {
-              designationId,
-              permissionId: item.permissionId,
-              scopeTypeId: item.scopeTypeId,
-              grantedBy: granterId,
-            },
-          });
+        if (granterId) {
+          for (const item of data.assignments) {
+            const grant = await tx.rolePermission.create({
+              data: {
+                roleId,
+                permissionId: item.permissionId,
+                scopeTypeId: item.scopeTypeId,
+                grantedBy: granterId,
+              },
+            });
 
-          if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
-            for (const deptId of item.targetDepartmentIds) {
-              await tx.designationPermissionScopeTarget.create({
-                data: {
-                  designationPermissionId: grant.id,
-                  departmentId: deptId,
-                },
-              });
+            if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
+              for (const deptId of item.targetDepartmentIds) {
+                await tx.rolePermissionScopeTarget.create({
+                  data: {
+                    rolePermissionId: grant.id,
+                    departmentId: deptId,
+                  },
+                });
+              }
             }
-          }
 
-          if (item.targetTeamIds && item.targetTeamIds.length > 0) {
-            for (const teamId of item.targetTeamIds) {
-              await tx.designationPermissionScopeTarget.create({
-                data: {
-                  designationPermissionId: grant.id,
-                  teamId: teamId,
-                },
-              });
+            if (item.targetTeamIds && item.targetTeamIds.length > 0) {
+              for (const teamId of item.targetTeamIds) {
+                await tx.rolePermissionScopeTarget.create({
+                  data: {
+                    rolePermissionId: grant.id,
+                    teamId: teamId,
+                  },
+                });
+              }
             }
-          }
 
-          if (item.targetProjectIds && item.targetProjectIds.length > 0) {
-            for (const projId of item.targetProjectIds) {
-              await tx.designationPermissionScopeTarget.create({
-                data: {
-                  designationPermissionId: grant.id,
-                  projectId: projId,
-                },
-              });
+            if (item.targetProjectIds && item.targetProjectIds.length > 0) {
+              for (const projId of item.targetProjectIds) {
+                await tx.rolePermissionScopeTarget.create({
+                  data: {
+                    rolePermissionId: grant.id,
+                    projectId: projId,
+                  },
+                });
+              }
             }
           }
         }
       }
 
-      return updatedDesig;
+      return updatedRole;
+    });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "ROLE_UPDATE",
+      entityTable: "Role",
+      entityId: roleId,
+      oldPayload: existing,
+      newPayload: updated,
+      req,
+    });
+
+    return updated;
+  }
+
+  public async deleteRole(roleId: string, req?: Request) {
+    const existing = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: {
+        _count: {
+          select: { users: true },
+        },
+      },
+    });
+    if (!existing) throw new NotFoundError("Role");
+
+    if (existing._count.users > 0) {
+      throw new BadRequestError(
+        `Cannot delete role assigned to ${existing._count.users} active user(s). Reassign them first.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const existingGrants = await tx.rolePermission.findMany({
+        where: { roleId },
+        select: { id: true },
+      });
+      const grantIds = existingGrants.map((g) => g.id);
+
+      if (grantIds.length > 0) {
+        await tx.rolePermissionScopeTarget.deleteMany({
+          where: { rolePermissionId: { in: grantIds } },
+        });
+        await tx.rolePermission.deleteMany({
+          where: { roleId },
+        });
+      }
+
+      await tx.role.delete({
+        where: { id: roleId },
+      });
+    });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "ROLE_DELETE",
+      entityTable: "Role",
+      entityId: roleId,
+      oldPayload: existing,
+      newPayload: undefined,
+      req,
+    });
+
+    return { message: "Role deleted successfully" };
+  }
+
+  public async getRolePermissions(roleId: string) {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: { department: true },
+    });
+    if (!role) throw new NotFoundError("Role");
+
+    const permissions = await this.prisma.rolePermission.findMany({
+      where: { roleId, isActive: true },
+      include: {
+        permission: true,
+        scopeType: true,
+        scopeTargets: {
+          include: {
+            department: true,
+            team: true,
+            project: true,
+          },
+        },
+      },
+    });
+
+    return {
+      role,
+      permissions,
+    };
+  }
+
+  public async saveRolePermissions(
+    roleId: string,
+    dto: SaveRolePermissionsDTO,
+    grantedByUserId?: string,
+    req?: Request,
+  ) {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!role) throw new NotFoundError("Role");
+
+    const granterId = await this.getGranterUserId(grantedByUserId, roleId);
+
+    const existingGrantsBefore = await this.prisma.rolePermission.findMany({
+      where: { roleId },
+      include: { scopeTargets: true },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      const existingGrants = await tx.rolePermission.findMany({
+        where: { roleId },
+        select: { id: true },
+      });
+      const grantIds = existingGrants.map((g) => g.id);
+
+      if (grantIds.length > 0) {
+        await tx.rolePermissionScopeTarget.deleteMany({
+          where: { rolePermissionId: { in: grantIds } },
+        });
+        await tx.rolePermission.deleteMany({
+          where: { roleId },
+        });
+      }
+
+      for (const item of dto.assignments) {
+        const grant = await tx.rolePermission.create({
+          data: {
+            roleId,
+            permissionId: item.permissionId,
+            scopeTypeId: item.scopeTypeId,
+            grantedBy: granterId,
+          },
+        });
+
+        if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
+          for (const deptId of item.targetDepartmentIds) {
+            await tx.rolePermissionScopeTarget.create({
+              data: {
+                rolePermissionId: grant.id,
+                departmentId: deptId,
+              },
+            });
+          }
+        }
+
+        if (item.targetTeamIds && item.targetTeamIds.length > 0) {
+          for (const teamId of item.targetTeamIds) {
+            await tx.rolePermissionScopeTarget.create({
+              data: {
+                rolePermissionId: grant.id,
+                teamId: teamId,
+              },
+            });
+          }
+        }
+
+        if (item.targetProjectIds && item.targetProjectIds.length > 0) {
+          for (const projId of item.targetProjectIds) {
+            await tx.rolePermissionScopeTarget.create({
+              data: {
+                rolePermissionId: grant.id,
+                projectId: projId,
+              },
+            });
+          }
+        }
+      }
+    });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "ROLE_PERMISSIONS_UPDATE",
+      entityTable: "RolePermission",
+      entityId: roleId,
+      oldPayload: { permissions: existingGrantsBefore },
+      newPayload: { assignments: dto.assignments },
+      req,
+    });
+
+    return { message: "Role permissions updated successfully" };
+  }
+
+  // ==========================================
+  // DESIGNATIONS (Pure HR Job Titles / Tags)
+  // ==========================================
+
+  public async getDesignations(actor?: AuthenticatedUser) {
+    const designations = await this.prisma.designation.findMany({
+      orderBy: { hierarchyLevel: "asc" },
+      include: {
+        department: true,
+        _count: {
+          select: {
+            users: true,
+          },
+        },
+      },
+    });
+
+    return Promise.all(
+      designations.map(async (desig) => {
+        const canManage = actor
+          ? await can(actor, "organization.designation.manage", { departmentId: desig.departmentId ?? undefined })
+          : false;
+        return {
+          ...desig,
+          _capabilities: {
+            canEdit: canManage,
+            canDelete: canManage,
+          },
+        };
+      }),
+    );
+  }
+
+  public async getDesignationById(id: string, actor?: AuthenticatedUser) {
+    const designation = await this.prisma.designation.findUnique({
+      where: { id },
+      include: {
+        department: true,
+        _count: {
+          select: {
+            users: true,
+          },
+        },
+      },
+    });
+    if (!designation) throw new NotFoundError("Designation");
+
+    const canManage = actor
+      ? await can(actor, "organization.designation.manage", { departmentId: designation.departmentId ?? undefined })
+      : false;
+
+    return {
+      ...designation,
+      _capabilities: {
+        canEdit: canManage,
+        canDelete: canManage,
+      },
+    };
+  }
+
+  public async createDesignation(data: CreateDesignationDTO, req?: Request) {
+    const existing = await this.prisma.designation.findUnique({
+      where: { code: data.code },
+    });
+    if (existing) {
+      throw new ConflictError(`Designation code '${data.code}' already exists`);
+    }
+
+    if (data.departmentId) {
+      const dept = await this.prisma.department.findUnique({
+        where: { id: data.departmentId },
+      });
+      if (!dept) throw new NotFoundError("Department");
+    }
+
+    const desig = await this.prisma.designation.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        departmentId: data.departmentId ?? null,
+        hierarchyLevel: data.hierarchyLevel ?? 1,
+        isLeadership: data.isLeadership ?? false,
+        isActive: data.isActive ?? true,
+      },
+      include: {
+        department: true,
+        _count: {
+          select: {
+            users: true,
+          },
+        },
+      },
+    });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DESIGNATION_CREATE",
+      entityTable: "Designation",
+      entityId: desig.id,
+      oldPayload: undefined,
+      newPayload: desig,
+      req,
+    });
+
+    return desig;
+  }
+
+  public async updateDesignation(
+    designationId: string,
+    data: UpdateDesignationDTO,
+    req?: Request,
+  ) {
+    const existing = await this.prisma.designation.findUnique({
+      where: { id: designationId },
+    });
+    if (!existing) throw new NotFoundError("Designation");
+
+    if (data.departmentId) {
+      const dept = await this.prisma.department.findUnique({
+        where: { id: data.departmentId },
+      });
+      if (!dept) throw new NotFoundError("Department");
+    }
+
+    const updated = await this.prisma.designation.update({
+      where: { id: designationId },
+      data: {
+        name: data.name ?? undefined,
+        departmentId: data.departmentId !== undefined ? data.departmentId : undefined,
+        hierarchyLevel: data.hierarchyLevel ?? undefined,
+        isLeadership: data.isLeadership !== undefined ? data.isLeadership : undefined,
+        isActive: data.isActive !== undefined ? data.isActive : undefined,
+      },
+      include: {
+        department: true,
+        _count: {
+          select: {
+            users: true,
+          },
+        },
+      },
     });
 
     await AuditLogService.log({
@@ -745,25 +1082,8 @@ export class OrganizationService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      const existingGrants = await tx.designationPermission.findMany({
-        where: { designationId },
-        select: { id: true },
-      });
-      const grantIds = existingGrants.map((g) => g.id);
-
-      if (grantIds.length > 0) {
-        await tx.designationPermissionScopeTarget.deleteMany({
-          where: { designationPermissionId: { in: grantIds } },
-        });
-        await tx.designationPermission.deleteMany({
-          where: { designationId },
-        });
-      }
-
-      await tx.designation.delete({
-        where: { id: designationId },
-      });
+    await this.prisma.designation.delete({
+      where: { id: designationId },
     });
 
     await AuditLogService.log({
@@ -778,125 +1098,4 @@ export class OrganizationService {
 
     return { message: "Designation deleted successfully" };
   }
-
-  public async getDesignationPermissions(designationId: string) {
-    const designation = await this.prisma.designation.findUnique({
-      where: { id: designationId },
-      include: { department: true },
-    });
-    if (!designation) throw new NotFoundError("Designation");
-
-    const permissions = await this.prisma.designationPermission.findMany({
-      where: { designationId, isActive: true },
-      include: {
-        permission: true,
-        scopeType: true,
-        scopeTargets: {
-          include: {
-            department: true,
-            team: true,
-            project: true,
-          },
-        },
-      },
-    });
-
-    return {
-      designation,
-      permissions,
-    };
-  }
-
-  public async saveDesignationPermissions(
-    designationId: string,
-    dto: SavePermissionAssignmentsDTO,
-    grantedByUserId?: string,
-    req?: Request,
-  ) {
-    const designation = await this.prisma.designation.findUnique({
-      where: { id: designationId },
-    });
-    if (!designation) throw new NotFoundError("Designation");
-
-    const granterId = await this.getGranterUserId(grantedByUserId);
-
-    const existingGrantsBefore = await this.prisma.designationPermission.findMany({
-      where: { designationId },
-      include: { scopeTargets: true },
-    });
-
-    await this.prisma.$transaction(async (tx) => {
-      const existingGrants = await tx.designationPermission.findMany({
-        where: { designationId },
-        select: { id: true },
-      });
-      const grantIds = existingGrants.map((g) => g.id);
-
-      if (grantIds.length > 0) {
-        await tx.designationPermissionScopeTarget.deleteMany({
-          where: { designationPermissionId: { in: grantIds } },
-        });
-        await tx.designationPermission.deleteMany({
-          where: { designationId },
-        });
-      }
-
-      for (const item of dto.assignments) {
-        const grant = await tx.designationPermission.create({
-          data: {
-            designationId,
-            permissionId: item.permissionId,
-            scopeTypeId: item.scopeTypeId,
-            grantedBy: granterId,
-          },
-        });
-
-        if (item.targetDepartmentIds && item.targetDepartmentIds.length > 0) {
-          for (const deptId of item.targetDepartmentIds) {
-            await tx.designationPermissionScopeTarget.create({
-              data: {
-                designationPermissionId: grant.id,
-                departmentId: deptId,
-              },
-            });
-          }
-        }
-
-        if (item.targetTeamIds && item.targetTeamIds.length > 0) {
-          for (const teamId of item.targetTeamIds) {
-            await tx.designationPermissionScopeTarget.create({
-              data: {
-                designationPermissionId: grant.id,
-                teamId: teamId,
-              },
-            });
-          }
-        }
-
-        if (item.targetProjectIds && item.targetProjectIds.length > 0) {
-          for (const projId of item.targetProjectIds) {
-            await tx.designationPermissionScopeTarget.create({
-              data: {
-                designationPermissionId: grant.id,
-                projectId: projId,
-              },
-            });
-          }
-        }
-      }
-    });
-
-    await AuditLogService.log({
-      module: "ORGANIZATION",
-      action: "DESIGNATION_PERMISSIONS_UPDATE",
-      entityTable: "DesignationPermission",
-      entityId: designationId,
-      oldPayload: { permissions: existingGrantsBefore },
-      newPayload: { assignments: dto.assignments },
-      req,
-    });
-
-    return { message: "Designation permissions updated successfully" };
-  }
 }
-

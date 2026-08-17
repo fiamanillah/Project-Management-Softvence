@@ -8,11 +8,12 @@ import { Button } from "@workspace/ui/components/button";
 import {
   Users,
   Building2,
-  Lock,
+  UsersRound,
+  ShieldCheck,
+  Briefcase,
   KeyRound,
   FileSpreadsheet,
   ArrowUpRight,
-  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { usePermissions, hasPermission } from "@/lib/permissions/PermissionContext";
@@ -32,7 +33,7 @@ export const METRIC_WIDGETS: MetricCardConfig[] = [
     id: "users",
     title: "Users Management",
     permission: "auth.user.view",
-    description: "Active system users & roles",
+    description: "Active system users & accounts",
     icon: Users,
     href: "/dashboard/users",
     getValue: (stats) => stats.usersCount ?? 0,
@@ -47,11 +48,29 @@ export const METRIC_WIDGETS: MetricCardConfig[] = [
     getValue: (stats) => stats.departmentsCount ?? 0,
   },
   {
+    id: "teams",
+    title: "Teams",
+    permission: "organization.team.view",
+    description: "Active teams & operational rosters",
+    icon: UsersRound,
+    href: "/dashboard/teams",
+    getValue: (stats) => stats.teamsCount ?? 0,
+  },
+  {
+    id: "roles",
+    title: "Roles & Security Matrix",
+    permission: "auth.user.view",
+    description: "Authorization roles & permission scopes",
+    icon: ShieldCheck,
+    href: "/dashboard/roles",
+    getValue: (stats) => stats.rolesCount ?? 0,
+  },
+  {
     id: "designations",
-    title: "Designations & Matrix",
-    permission: "organization.designation.view",
-    description: "Configured roles & permission sets",
-    icon: Lock,
+    title: "Designations",
+    permission: "auth.user.view",
+    description: "Corporate job titles & employee tiers",
+    icon: Briefcase,
     href: "/dashboard/designations",
     getValue: (stats) => stats.designationsCount ?? 0,
   },
@@ -88,29 +107,37 @@ export function DashboardMetricGrid({
     (widget) => !widget.permission || hasPermission(permissions, widget.permission),
   );
 
-  if (authorizedWidgets.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {authorizedWidgets.map((widget) => {
         const Icon = widget.icon;
+        const value = widget.getValue(stats);
+
         return (
-          <Link key={widget.id} href={widget.href}>
-            <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{widget.title}</CardTitle>
-                <Icon className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {loading ? "..." : widget.getValue(stats)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{widget.description}</p>
-              </CardContent>
-            </Card>
-          </Link>
+          <Card key={widget.id} className="relative overflow-hidden group hover:border-primary/50 transition-colors">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{widget.title}</CardTitle>
+              <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                <Icon className="size-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {loading ? (
+                  <div className="h-8 w-16 bg-muted animate-pulse rounded" />
+                ) : (
+                  value
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{widget.description}</p>
+              <Link
+                href={widget.href}
+                className="inline-flex items-center text-xs font-medium text-primary hover:underline mt-3 group-hover:translate-x-0.5 transition-transform"
+              >
+                View Details <ArrowUpRight className="size-3 ml-1" />
+              </Link>
+            </CardContent>
+          </Card>
         );
       })}
     </div>
@@ -124,51 +151,53 @@ export function RecentAuditLogsWidget({
   logs: any[];
   loading: boolean;
 }) {
-  const permissions = usePermissions();
-
-  if (!hasPermission(permissions, "auth.user.manage")) {
-    return null;
-  }
-
   return (
-    <Card className="lg:col-span-4">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Recent Security Audit Events</CardTitle>
-          <CardDescription>Live forensic log stream from MongoDB audit store</CardDescription>
-        </div>
-        <Link href="/dashboard/audit-logs">
-          <Button variant="ghost" size="sm">
-            View all <ArrowUpRight className="ml-1 size-4" />
-          </Button>
-        </Link>
+    <Card className="col-span-4">
+      <CardHeader>
+        <CardTitle className="text-base font-bold flex items-center gap-2">
+          <FileSpreadsheet className="size-4 text-primary" /> Recent Security Audit Logs
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Chronological stream of authorization evaluation and administrative events.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent>
         {loading ? (
-          <div className="py-8 flex justify-center text-muted-foreground">
-            <span className="text-xs">Loading audit events...</span>
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 bg-muted animate-pulse rounded" />
+            ))}
           </div>
         ) : logs.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            No recent audit log events found.
-          </p>
+          <div className="h-32 flex items-center justify-center text-xs text-muted-foreground border rounded-lg">
+            No audit log entries recorded yet.
+          </div>
         ) : (
-          logs.map((log) => (
-            <div
-              key={log.id || log._id}
-              className="flex items-center justify-between p-3 rounded-lg border bg-card text-xs"
-            >
-              <div className="space-y-1">
-                <p className="font-semibold">{log.action}</p>
-                <p className="text-muted-foreground">
-                  Module: {log.module} &bull; Actor: {log.actor?.email || log.actorId || "System"}
-                </p>
+          <div className="space-y-3">
+            {logs.map((log: any, idx: number) => (
+              <div
+                key={log.id || idx}
+                className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 text-xs"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-semibold text-foreground">
+                    {log.action || log.event || "SYSTEM_EVENT"}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    {log.userEmail || log.userId || "System"} • {log.ipAddress || "Internal"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                    {log.status || (log.allowed ? "ALLOWED" : "DENIED")}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : ""}
+                  </span>
+                </div>
               </div>
-              <Badge variant={log.status === "SUCCESS" ? "default" : "destructive"}>
-                {log.status}
-              </Badge>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -177,54 +206,33 @@ export function RecentAuditLogsWidget({
 
 export function SystemServicesWidget() {
   return (
-    <Card className="lg:col-span-3">
+    <Card className="col-span-3">
       <CardHeader>
-        <CardTitle>Active Microservices & Endpoints</CardTitle>
-        <CardDescription>Status of API integrated modules</CardDescription>
+        <CardTitle className="text-base font-bold flex items-center gap-2">
+          <ShieldCheck className="size-4 text-primary" /> Authorization Subsystem
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Centralized Scoped Permission Engine status.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="size-5 text-emerald-500" />
-            <div>
-              <p className="text-sm font-medium">Auth & Identity</p>
-              <p className="text-xs text-muted-foreground">/api/v1/auth &bull; JWT & Refresh Token</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="text-emerald-600 border-emerald-300">Operational</Badge>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20 text-xs">
+          <span className="font-medium">Permission Cache Engine</span>
+          <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+            Redis L1/L2 Active
+          </Badge>
         </div>
-
-        <div className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="size-5 text-emerald-500" />
-            <div>
-              <p className="text-sm font-medium">Organization & Structure</p>
-              <p className="text-xs text-muted-foreground">/api/v1/organization &bull; Departments & Matrix</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="text-emerald-600 border-emerald-300">Operational</Badge>
+        <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20 text-xs">
+          <span className="font-medium">Role & Scope Resolver</span>
+          <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+            Operational
+          </Badge>
         </div>
-
-        <div className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="size-5 text-emerald-500" />
-            <div>
-              <p className="text-sm font-medium">User Administration</p>
-              <p className="text-xs text-muted-foreground">/api/v1/users &bull; Accounts & Overrides</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="text-emerald-600 border-emerald-300">Operational</Badge>
-        </div>
-
-        <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="size-5 text-emerald-500" />
-            <div>
-              <p className="text-sm font-medium">Audit Logger</p>
-              <p className="text-xs text-muted-foreground">/api/v1/audit-logs &bull; Forensic pipeline</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="text-emerald-600 border-emerald-300">Operational</Badge>
+        <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20 text-xs">
+          <span className="font-medium">Audit Pipeline</span>
+          <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+            MongoDB Async Log
+          </Badge>
         </div>
       </CardContent>
     </Card>

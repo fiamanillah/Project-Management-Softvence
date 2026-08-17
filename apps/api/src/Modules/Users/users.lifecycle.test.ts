@@ -9,6 +9,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
   let authService: AuthServices;
   let orgService: OrganizationService;
   let testDepartment: any;
+  let testRole: any;
   let testDesignation: any;
 
   beforeEach(async () => {
@@ -22,15 +23,18 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
+    await prisma.team.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
 
@@ -38,6 +42,14 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       code: "ENG",
       name: "Engineering",
       isActive: true,
+    });
+
+    testRole = await orgService.createRole({
+      code: "SE_ROLE",
+      name: "Software Engineer Role",
+      departmentId: testDepartment.id,
+      hierarchyLevel: 1,
+      isLeadership: false,
     });
 
     testDesignation = await orgService.createDesignation({
@@ -55,6 +67,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "Jane",
       lastName: "Doe",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -72,6 +85,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "Alex",
       lastName: "Smith",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -88,6 +102,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "Bob",
       lastName: "Williams",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -116,6 +131,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "Sarah",
       lastName: "Connor",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -142,6 +158,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "Test",
       lastName: "Blocked",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -167,6 +184,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "Charlie",
       lastName: "Brown",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -202,6 +220,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "David",
       lastName: "Miller",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -222,6 +241,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "U1",
       lastName: "Invited",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
 
@@ -230,6 +250,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "U2",
       lastName: "Active",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
     await authService.changePassword(u2.id, u2.temporaryPassword!, "PermanentPass123#!");
@@ -239,6 +260,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       firstName: "U3",
       lastName: "Suspended",
       systemRole: "Staff",
+      roleId: testRole.id,
       designationId: testDesignation.id,
     });
     await usersService.updateAdminUser(u3.id, { status: "SUSPENDED" });

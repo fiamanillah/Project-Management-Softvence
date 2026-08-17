@@ -3,59 +3,62 @@
 // ==========================================
 
 model User {
-  id            String     @id @default(uuid()) @db.Uuid
-  employeeId    String     @unique @map("employee_id")
-  email         String     @unique
-  passwordHash  String     @map("password_hash")
-  firstName     String     @map("first_name")
-  lastName      String     @map("last_name")
-  systemRole    SystemRole @default(Staff) @map("system_role")
-  status        UserStatus @default(INVITED) @map("status")
-  designationId String     @map("designation_id") @db.Uuid
+  id                 String     @id @default(uuid()) @db.Uuid
+  employeeId         String     @unique @map("employee_id")
+  email              String     @unique
+  passwordHash       String     @map("password_hash")
+  firstName          String     @map("first_name")
+  lastName           String     @map("last_name")
+  systemRole         SystemRole @default(Staff) @map("system_role")
+  status             UserStatus @default(INVITED) @map("status")
+  roleId             String?    @map("role_id") @db.Uuid
+  designationId      String?    @map("designation_id") @db.Uuid
   isActive           Boolean    @default(true) @map("is_active")
   mustChangePassword Boolean    @default(true) @map("must_change_password")
   lastLoginAt        DateTime?  @map("last_login_at")
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime?  @map("updated_at")
-  deletedAt     DateTime?  @map("deleted_at")
+  deletedAt          DateTime?  @map("deleted_at")
 
-  designation Designation @relation(fields: [designationId], references: [id])
+  role        Role?        @relation(fields: [roleId], references: [id])
+  designation Designation? @relation(fields: [designationId], references: [id])
 
   // Relations
-  refreshTokens                 RefreshToken[]
-  passwordResetTokens           PasswordResetToken[]
-  managedDepartments            DepartmentManager[]
-  teamMemberships               TeamMember[]
-  grantedDesignationPermissions DesignationPermission[]          @relation("DesignationPermissionGranter")
-  receivedPermissionOverrides   UserPermissionOverride[]         @relation("OverrideUser")
-  grantedPermissionOverrides    UserPermissionOverride[]         @relation("OverrideGranter")
-  absences                      UserAbsence[]                    @relation("AbsenceUser")
-  absenceCovers                 UserAbsence[]                    @relation("AbsenceCover")
-  createdAbsences               UserAbsence[]                    @relation("AbsenceCreator")
-  profileAssignments            ProfileSeller[]
-  projectAssignments            ProjectAssignment[]
-  componentAssignments          ComponentAssignment[]
-  messages                      Message[]                        @relation("MessageAuthor")
-  messageRevisions              MessageRevision[]                @relation("MessageEditor")
-  messageApprovals              MessageApproval[]                @relation("MessageApprover")
-  loggedPlatformMessages        PlatformThreadMessage[]          @relation("PlatformThreadLogger")
-  createdIssues                 Issue[]                          @relation("IssueAuthor")
-  resolvedIssues                Issue[]                          @relation("IssueResolver")
-  issueComments                 IssueComment[]
-  supportTickets                SupportTicket[]
-  projectGroupMemberships       ProjectGroupMember[]             @relation("GroupMemberUser")
-  addedProjectGroupMembers      ProjectGroupMember[]             @relation("GroupMemberAdder")
-  chatMessages                  ChatMessage[]
-  chatMessageReads              ChatMessageRead[]
-  createdBdOrders               BdOrder[]
-  bdOrderAssignments            BdOrderAssignment[]
-  attachments                   Attachment[]
-  notifications                 Notification[]
-  madeDelegations               Delegation[]                     @relation("Delegator")
-  receivedDelegations           Delegation[]                     @relation("Delegatee")
-  createdDelegations            Delegation[]                     @relation("DelegationCreator")
+  refreshTokens               RefreshToken[]
+  passwordResetTokens         PasswordResetToken[]
+  managedDepartments          DepartmentManager[]
+  teamMemberships             TeamMember[]
+  grantedRolePermissions      RolePermission[]                 @relation("RolePermissionGranter")
+  receivedPermissionOverrides UserPermissionOverride[]         @relation("OverrideUser")
+  grantedPermissionOverrides  UserPermissionOverride[]         @relation("OverrideGranter")
+  absences                    UserAbsence[]                    @relation("AbsenceUser")
+  absenceCovers               UserAbsence[]                    @relation("AbsenceCover")
+  createdAbsences             UserAbsence[]                    @relation("AbsenceCreator")
+  profileAssignments          ProfileSeller[]
+  projectAssignments          ProjectAssignment[]
+  componentAssignments        ComponentAssignment[]
+  messages                    Message[]                        @relation("MessageAuthor")
+  messageRevisions            MessageRevision[]                @relation("MessageEditor")
+  messageApprovals            MessageApproval[]                @relation("MessageApprover")
+  loggedPlatformMessages      PlatformThreadMessage[]          @relation("PlatformThreadLogger")
+  createdIssues               Issue[]                          @relation("IssueAuthor")
+  resolvedIssues              Issue[]                          @relation("IssueResolver")
+  issueComments               IssueComment[]
+  supportTickets              SupportTicket[]
+  projectGroupMemberships     ProjectGroupMember[]             @relation("GroupMemberUser")
+  addedProjectGroupMembers    ProjectGroupMember[]             @relation("GroupMemberAdder")
+  chatMessages                ChatMessage[]
+  chatMessageReads            ChatMessageRead[]
+  createdBdOrders             BdOrder[]
+  bdOrderAssignments          BdOrderAssignment[]
+  attachments                 Attachment[]
+  notifications               Notification[]
+  madeDelegations             Delegation[]                     @relation("Delegator")
+  receivedDelegations         Delegation[]                     @relation("Delegatee")
+  createdDelegations          Delegation[]                     @relation("DelegationCreator")
 
   @@index([email])
+  @@index([roleId])
   @@index([designationId])
   @@index([isActive, deletedAt])
   @@index([status, deletedAt])
@@ -90,19 +93,44 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// ----------------------------------------------------
+// AUTHORIZATION ROLE (Holds Scoped Permission Grants)
+// ----------------------------------------------------
+model Role {
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String   @unique
+  name           String
+  description    String?
+  departmentId   String?  @map("department_id") @db.Uuid
+  hierarchyLevel Int      @default(1) @map("hierarchy_level")
+  isLeadership   Boolean  @default(false) @map("is_leadership")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  department Department? @relation(fields: [departmentId], references: [id])
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@index([departmentId])
+  @@map("roles")
+}
+
+// ----------------------------------------------------
+// DESIGNATION (Pure Corporate Job Title / HR Metadata)
+// ----------------------------------------------------
 model Designation {
   id             String   @id @default(uuid()) @db.Uuid
   code           String   @unique
   name           String
-  departmentId   String   @map("department_id") @db.Uuid
-  hierarchyLevel Int      @map("hierarchy_level")
+  departmentId   String?  @map("department_id") @db.Uuid
+  hierarchyLevel Int      @default(1) @map("hierarchy_level")
   isLeadership   Boolean  @default(false) @map("is_leadership")
+  isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  department Department @relation(fields: [departmentId], references: [id])
-
-  users       User[]
-  permissions DesignationPermission[]
+  department Department? @relation(fields: [departmentId], references: [id])
+  users      User[]
 
   @@index([departmentId])
   @@map("designations")
@@ -119,51 +147,51 @@ model Permission {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime? @updatedAt @map("updated_at")
 
-  designationPermissions DesignationPermission[]
-  permissionGroupItems   PermissionGroupItem[]
-  userOverrides          UserPermissionOverride[]
+  rolePermissions      RolePermission[]
+  permissionGroupItems PermissionGroupItem[]
+  userOverrides        UserPermissionOverride[]
 
   @@map("permissions")
 }
 
-model DesignationPermission {
-  id            String   @id @default(uuid()) @db.Uuid
-  designationId String   @map("designation_id") @db.Uuid
-  permissionId  String   @map("permission_id") @db.Uuid
-  scopeTypeId   String   @map("scope_type_id") @db.Uuid
-  isActive      Boolean  @default(true) @map("is_active")
-  grantedBy     String   @map("granted_by") @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at")
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  scopeTypeId  String   @map("scope_type_id") @db.Uuid
+  isActive     Boolean  @default(true) @map("is_active")
+  grantedBy    String   @map("granted_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  designation Designation         @relation(fields: [designationId], references: [id])
-  permission  Permission          @relation(fields: [permissionId], references: [id])
-  scopeType   PermissionScopeType @relation(fields: [scopeTypeId], references: [id])
-  granter     User                @relation("DesignationPermissionGranter", fields: [grantedBy], references: [id])
+  role         Role                @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission          @relation(fields: [permissionId], references: [id])
+  scopeType    PermissionScopeType @relation(fields: [scopeTypeId], references: [id])
+  granter      User                @relation("RolePermissionGranter", fields: [grantedBy], references: [id])
 
-  scopeTargets DesignationPermissionScopeTarget[]
+  scopeTargets RolePermissionScopeTarget[]
 
-  @@unique([designationId, permissionId])
+  @@unique([roleId, permissionId])
   @@index([scopeTypeId])
-  @@map("designation_permissions")
+  @@map("role_permissions")
 }
 
-model DesignationPermissionScopeTarget {
-  id                      String  @id @default(uuid()) @db.Uuid
-  designationPermissionId String  @map("designation_permission_id") @db.Uuid
-  departmentId            String? @map("department_id") @db.Uuid
-  teamId                  String? @map("team_id") @db.Uuid
-  projectId               String? @map("project_id") @db.Uuid
+model RolePermissionScopeTarget {
+  id               String  @id @default(uuid()) @db.Uuid
+  rolePermissionId String  @map("role_permission_id") @db.Uuid
+  departmentId     String? @map("department_id") @db.Uuid
+  teamId           String? @map("team_id") @db.Uuid
+  projectId        String? @map("project_id") @db.Uuid
 
-  designationPermission DesignationPermission @relation(fields: [designationPermissionId], references: [id])
-  department            Department?           @relation(fields: [departmentId], references: [id])
-  team                  Team?                 @relation(fields: [teamId], references: [id])
-  project               Project?              @relation(fields: [projectId], references: [id])
+  rolePermission RolePermission @relation(fields: [rolePermissionId], references: [id], onDelete: Cascade)
+  department     Department?    @relation(fields: [departmentId], references: [id])
+  team           Team?          @relation(fields: [teamId], references: [id])
+  project        Project?       @relation(fields: [projectId], references: [id])
 
-  @@index([designationPermissionId])
+  @@index([rolePermissionId])
   @@index([departmentId])
   @@index([teamId])
   @@index([projectId])
-  @@map("designation_permission_scope_targets")
+  @@map("role_permission_scope_targets")
 }
 
 model UserPermissionOverride {

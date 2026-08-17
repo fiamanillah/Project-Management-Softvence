@@ -22,12 +22,26 @@ import {
 } from "@workspace/ui/components/dialog";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { UserSearchSelect } from "@/components/user-search-select";
 import { UserCheck, Loader2, Calendar, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { api, handleFormApiError } from "@/lib/api";
 import { HelpTooltip } from "./HelpTooltip";
 import type { UserSummary } from "../types";
+
+const SCOPE_PRESETS = [
+  { label: "* (All)", value: "*" },
+  { label: "project.*", value: "project.*" },
+  { label: "organization.*", value: "organization.*" },
+];
+
+const DURATION_PRESETS = [
+  { label: "1 Day", hours: 24 },
+  { label: "7 Days", hours: 24 * 7 },
+  { label: "14 Days", hours: 24 * 14 },
+  { label: "30 Days", hours: 24 * 30 },
+];
 
 const createDelegationFormSchema = z
   .object({
@@ -103,11 +117,11 @@ export function CreateDelegationModal({
     }
   }, [open, form]);
 
-  const setDurationPreset = (days: number) => {
+  const handleApplyDurationPreset = (hours: number) => {
     const fromDate = form.getValues("validFrom")
       ? new Date(form.getValues("validFrom"))
       : new Date();
-    const until = new Date(fromDate.getTime() + days * 24 * 60 * 60 * 1000);
+    const until = new Date(fromDate.getTime() + hours * 60 * 60 * 1000);
     const year = until.getFullYear();
     const month = String(until.getMonth() + 1).padStart(2, "0");
     const day = String(until.getDate()).padStart(2, "0");
@@ -144,14 +158,14 @@ export function CreateDelegationModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] sm:max-w-xl sm:min-w-[580px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-2">
           <div className="flex items-center gap-2">
             <div className="size-9 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
               <UserCheck className="size-5" />
             </div>
             <div>
-              <DialogTitle className="text-lg font-semibold">
+              <DialogTitle className="text-lg font-bold">
                 Create User Delegation
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
@@ -162,198 +176,162 @@ export function CreateDelegationModal({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-            {/* Delegator (Source) */}
-            <FormField
-              control={form.control}
-              name="delegatorId"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center gap-1.5">
-                    <FormLabel>Delegator (Grantor User)</FormLabel>
-                    <HelpTooltip text="The user whose permissions and designation role grants will be temporarily inherited." />
-                  </div>
-                  <FormControl>
-                    <UserSearchSelect
-                      value={field.value}
-                      onValueChange={(val) => {
-                        field.onChange(val);
-                        // If delegatee is currently the same as new delegator, clear delegatee
-                        if (form.getValues("delegateeId") === val) {
-                          form.setValue("delegateeId", "");
-                        }
-                      }}
-                      placeholder="Search and select grantor user..."
-                      searchPlaceholder="Search delegator by name, email, or employee ID..."
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
+            <ScrollArea className="max-h-[60vh] h-[440px] w-full px-6 py-2">
+              <div className="space-y-4 pr-2">
+                {/* Delegator (Source) */}
+                <FormField
+                  control={form.control}
+                  name="delegatorId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel>Delegator (Grantor User)</FormLabel>
+                        <HelpTooltip text="The user whose permissions and designation role grants will be temporarily inherited." />
+                      </div>
+                      <FormControl>
+                        <UserSearchSelect
+                          value={field.value}
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            // If delegatee is currently the same as new delegator, clear delegatee
+                            if (form.getValues("delegateeId") === val) {
+                              form.setValue("delegateeId", "");
+                            }
+                          }}
+                          placeholder="Search and select grantor user..."
+                          searchPlaceholder="Search delegator by name, email, or employee ID..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Delegatee (Recipient) */}
-            <FormField
-              control={form.control}
-              name="delegateeId"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center gap-1.5">
-                    <FormLabel>Delegatee (Recipient User)</FormLabel>
-                    <HelpTooltip text="The acting user who will execute actions on behalf of the delegator." />
-                  </div>
-                  <FormControl>
-                    <UserSearchSelect
-                      value={field.value}
-                      onValueChange={(val) => field.onChange(val)}
-                      excludeUserIds={selectedDelegatorId ? [selectedDelegatorId] : []}
-                      placeholder="Search and select recipient user..."
-                      searchPlaceholder="Search delegatee by name, email, or employee ID..."
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                {/* Delegatee (Recipient) */}
+                <FormField
+                  control={form.control}
+                  name="delegateeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel>Delegatee (Recipient User)</FormLabel>
+                        <HelpTooltip text="The acting user who will execute actions on behalf of the delegator." />
+                      </div>
+                      <FormControl>
+                        <UserSearchSelect
+                          value={field.value}
+                          onValueChange={(val) => field.onChange(val)}
+                          excludeUserIds={selectedDelegatorId ? [selectedDelegatorId] : []}
+                          placeholder="Search and select recipient user..."
+                          searchPlaceholder="Search delegatee by name, email, or employee ID..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Scope Pattern & Quick Presets */}
-            <FormField
-              control={form.control}
-              name="scope"
-              render={({ field }) => (
-                <FormItem>
+                {/* Scope Pattern & Quick Presets */}
+                <FormField
+                  control={form.control}
+                  name="scope"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <FormLabel className="flex items-center gap-1.5">
+                            <Lock className="size-3.5 text-muted-foreground" /> Delegation Scope Pattern
+                          </FormLabel>
+                          <HelpTooltip text="Wildcard pattern matching permission codes to delegate (e.g. '*' for full permissions, 'project:*' for all project operations)." />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {SCOPE_PRESETS.map((preset) => (
+                            <Button
+                              key={preset.value}
+                              type="button"
+                              variant="ghost"
+                              size="xs"
+                              className="text-[11px] h-6 px-1.5"
+                              onClick={() => field.onChange(preset.value)}
+                            >
+                              {preset.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g. project:* or project:approve or *"
+                          className="font-mono text-xs"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Delegation Duration Window with Quick Presets */}
+                <div className="space-y-3 rounded-xl border p-3 bg-muted/20">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <FormLabel className="flex items-center gap-1.5">
-                        <Lock className="size-3.5 text-muted-foreground" /> Delegation Scope
-                      </FormLabel>
-                      <HelpTooltip text="Use * for full authority delegation, or namespace prefix patterns like project.* to restrict authority." />
+                      <Calendar className="size-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-foreground">
+                        Delegation Time Window
+                      </span>
+                      <HelpTooltip text="Active validity window. Permissions are automatically revoked outside this range." />
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className="text-[11px] h-6 px-1.5 font-mono"
-                        onClick={() => form.setValue("scope", "*", { shouldValidate: true })}
-                      >
-                        * (All)
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className="text-[11px] h-6 px-1.5 font-mono"
-                        onClick={() => form.setValue("scope", "project.*", { shouldValidate: true })}
-                      >
-                        project.*
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className="text-[11px] h-6 px-1.5 font-mono"
-                        onClick={() =>
-                          form.setValue("scope", "organization.*", { shouldValidate: true })
-                        }
-                      >
-                        organization.*
-                      </Button>
+                      {DURATION_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.label}
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="text-[11px] h-6 px-1.5"
+                          onClick={() => handleApplyDurationPreset(preset.hours)}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
                     </div>
                   </div>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. * or project.* or auth.user.view"
-                      className="font-mono text-xs"
-                      {...field}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="validFrom"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Start Date & Time</FormLabel>
+                          <FormControl>
+                            <Input type="datetime-local" className="text-xs" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
-            {/* Validity Time Window with Duration Presets */}
-            <div className="space-y-2 rounded-xl border p-3 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold flex items-center gap-1.5">
-                    <Calendar className="size-3.5 text-muted-foreground" /> Validity Window
-                  </span>
-                  <HelpTooltip text="Delegated authority will automatically activate at Start Time and expire at End Time." />
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="text-[11px] h-6 px-1.5"
-                    onClick={() => setDurationPreset(1)}
-                  >
-                    1 Day
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="text-[11px] h-6 px-1.5"
-                    onClick={() => setDurationPreset(7)}
-                  >
-                    7 Days
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="text-[11px] h-6 px-1.5"
-                    onClick={() => setDurationPreset(14)}
-                  >
-                    14 Days
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="text-[11px] h-6 px-1.5"
-                    onClick={() => setDurationPreset(30)}
-                  >
-                    30 Days
-                  </Button>
+                    <FormField
+                      control={form.control}
+                      name="validUntil"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">End Date & Time</FormLabel>
+                          <FormControl>
+                            <Input type="datetime-local" className="text-xs" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
+            </ScrollArea>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <FormField
-                  control={form.control}
-                  name="validFrom"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Start Date & Time</FormLabel>
-                      <FormControl>
-                        <Input type="datetime-local" className="text-xs" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="validUntil"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">End Date & Time</FormLabel>
-                      <FormControl>
-                        <Input type="datetime-local" className="text-xs" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <DialogFooter className="p-6 pt-3 border-t mt-auto">
               <Button
                 type="button"
                 variant="outline"

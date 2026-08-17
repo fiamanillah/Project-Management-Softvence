@@ -118,7 +118,18 @@ export const authResponseDataSchema = z.object({
     firstName: z.string().optional().nullable(),
     lastName: z.string().optional().nullable(),
     systemRole: z.string(),
+    roleId: z.string().optional().nullable(),
     designationId: z.string().optional().nullable(),
+    role: z.object({
+      id: z.string(),
+      code: z.string(),
+      name: z.string(),
+    }).optional().nullable(),
+    designation: z.object({
+      id: z.string(),
+      code: z.string(),
+      name: z.string(),
+    }).optional().nullable(),
     mustChangePassword: z.boolean().optional(),
   }),
   accessToken: z.string().optional(),

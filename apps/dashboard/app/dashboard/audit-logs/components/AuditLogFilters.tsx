@@ -82,7 +82,9 @@ export function AuditLogFilters({
       >
         <SelectTrigger className="w-[140px] sm:w-[150px] h-9 text-xs bg-background/50">
           <Filter className="size-3.5 mr-1.5 text-muted-foreground" />
-          <SelectValue placeholder="Module" />
+          <SelectValue placeholder="Module">
+            {moduleFilter === "all" ? "All Modules" : moduleFilter}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Modules</SelectItem>
@@ -103,7 +105,13 @@ export function AuditLogFilters({
         }}
       >
         <SelectTrigger className="w-[130px] sm:w-[140px] h-9 text-xs bg-background/50">
-          <SelectValue placeholder="Status" />
+          <SelectValue placeholder="Status">
+            {statusFilter === "all"
+              ? "All Statuses"
+              : statusFilter === "SUCCESS"
+                ? "SUCCESS"
+                : "FAILED / DENIED"}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Statuses</SelectItem>
@@ -121,7 +129,15 @@ export function AuditLogFilters({
       >
         <SelectTrigger className="w-[130px] sm:w-[140px] h-9 text-xs bg-background/50">
           <Calendar className="size-3.5 mr-1.5 text-muted-foreground" />
-          <SelectValue placeholder="Timeframe" />
+          <SelectValue placeholder="Timeframe">
+            {dateRange === "all"
+              ? "All Time"
+              : dateRange === "today"
+                ? "Today"
+                : dateRange === "7days"
+                  ? "Last 7 Days"
+                  : "Last 30 Days"}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Time</SelectItem>

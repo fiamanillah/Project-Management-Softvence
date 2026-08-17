@@ -47,14 +47,14 @@ export class AuthServices {
 
     const hashedPassword = await hashPassword(password);
 
-    // Fallback default designation if not provided
-    let finalDesignationId = designationId;
-    if (!finalDesignationId) {
-      const defaultDesignation = await this.prisma.designation.findFirst();
-      if (!defaultDesignation) {
-        throw new BadRequestError("No default designation configured in system");
+    // Fallback default role and designation if not provided
+    let finalRoleId = (req?.body as any)?.roleId;
+    if (!finalRoleId) {
+      const defaultRole = await this.prisma.role.findFirst();
+      if (!defaultRole) {
+        throw new BadRequestError("No default role configured in system");
       }
-      finalDesignationId = defaultDesignation.id;
+      finalRoleId = defaultRole.id;
     }
 
     const newUser = await this.prisma.user.create({
@@ -65,9 +65,14 @@ export class AuthServices {
         lastName,
         passwordHash: hashedPassword,
         systemRole: "Staff",
-        designationId: finalDesignationId,
+        roleId: finalRoleId,
+        designationId: designationId || null,
         isActive: true,
         mustChangePassword: false,
+      },
+      include: {
+        role: { include: { department: true } },
+        designation: { include: { department: true } },
       },
     });
 
@@ -161,7 +166,8 @@ export class AuthServices {
     const accessToken = signAccessToken({
       sub: user.id,
       systemRole: user.systemRole,
-      designationId: user.designationId,
+      roleId: user.roleId || "",
+      designationId: user.designationId || null,
     });
 
     // 2. Generate opaque 64-byte refresh token and hash with SHA-256
@@ -627,7 +633,8 @@ export class AuthServices {
     const accessToken = signAccessToken({
       sub: updatedUser.id,
       systemRole: updatedUser.systemRole,
-      designationId: updatedUser.designationId,
+      roleId: updatedUser.roleId || "",
+      designationId: updatedUser.designationId || null,
     });
 
     const rawRefreshToken = generateOpaqueToken();
@@ -710,7 +717,8 @@ export class AuthServices {
     const authenticatedUser = {
       id: user.id,
       systemRole: user.systemRole,
-      designationId: user.designationId,
+      roleId: user.roleId || "",
+      designationId: user.designationId || null,
       email: user.email,
     };
 

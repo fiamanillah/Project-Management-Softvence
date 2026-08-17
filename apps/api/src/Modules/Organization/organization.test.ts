@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { prisma } from "@/lib/prisma";
 import { OrganizationService } from "./organization.service";
 
-describe("OrganizationService (Department & Designation Management)", () => {
+describe("OrganizationService (Department, Role & Designation Management)", () => {
   let orgService: OrganizationService;
 
   beforeEach(async () => {
@@ -14,15 +14,18 @@ describe("OrganizationService (Department & Designation Management)", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
+    await prisma.team.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
   });
@@ -60,7 +63,7 @@ describe("OrganizationService (Department & Designation Management)", () => {
       name: "Operations",
     });
 
-    const desig = await prisma.designation.create({
+    const role = await prisma.role.create({
       data: {
         code: "OPS_MGR",
         name: "Ops Manager",
@@ -78,7 +81,7 @@ describe("OrganizationService (Department & Designation Management)", () => {
         firstName: "Manager",
         lastName: "One",
         systemRole: "Admin",
-        designationId: desig.id,
+        roleId: role.id,
       },
     });
 
@@ -90,7 +93,7 @@ describe("OrganizationService (Department & Designation Management)", () => {
         firstName: "Manager",
         lastName: "Two",
         systemRole: "Admin",
-        designationId: desig.id,
+        roleId: role.id,
       },
     });
 
@@ -112,13 +115,13 @@ describe("OrganizationService (Department & Designation Management)", () => {
     expect(activeManagers[0].userId).toBe(user2.id);
   });
 
-  it("should prevent deleting a department if it contains designations", async () => {
+  it("should prevent deleting a department if it contains roles", async () => {
     const dept = await orgService.createDepartment({
       code: "SALES",
       name: "Sales Department",
     });
 
-    await prisma.designation.create({
+    await prisma.role.create({
       data: {
         code: "SALES_REP",
         name: "Sales Representative",
@@ -130,7 +133,7 @@ describe("OrganizationService (Department & Designation Management)", () => {
     expect(orgService.deleteDepartment(dept.id)).rejects.toThrow("Cannot delete department");
   });
 
-  it("should create a designation with initial permission assignments", async () => {
+  it("should create a role with initial permission assignments", async () => {
     const dept = await orgService.createDepartment({
       code: "FIN",
       name: "Finance",
@@ -157,7 +160,7 @@ describe("OrganizationService (Department & Designation Management)", () => {
       },
     });
 
-    const desig = await orgService.createDesignation({
+    const role = await orgService.createRole({
       code: "FIN_ANALYST",
       name: "Financial Analyst",
       departmentId: dept.id,
@@ -171,12 +174,31 @@ describe("OrganizationService (Department & Designation Management)", () => {
       ],
     });
 
-    expect(desig).toBeDefined();
-    expect(desig.code).toBe("FIN_ANALYST");
+    expect(role).toBeDefined();
+    expect(role.code).toBe("FIN_ANALYST");
 
-    const desigPerms = await orgService.getDesignationPermissions(desig.id);
-    expect(desigPerms.permissions.length).toBe(1);
-    expect(desigPerms.permissions[0].permissionId).toBe(perm.id);
-    expect(desigPerms.permissions[0].scopeTypeId).toBe(scopeType.id);
+    const rolePerms = await orgService.getRolePermissions(role.id);
+    expect(rolePerms.permissions.length).toBe(1);
+    expect(rolePerms.permissions[0].permissionId).toBe(perm.id);
+    expect(rolePerms.permissions[0].scopeTypeId).toBe(scopeType.id);
+  });
+
+  it("should create a designation purely as an HR job title", async () => {
+    const dept = await orgService.createDepartment({
+      code: "ENG_HR",
+      name: "Engineering HR",
+    });
+
+    const desig = await orgService.createDesignation({
+      code: "SR_DEV_TITLE",
+      name: "Senior Software Engineer II",
+      departmentId: dept.id,
+      hierarchyLevel: 3,
+      isLeadership: false,
+    });
+
+    expect(desig).toBeDefined();
+    expect(desig.code).toBe("SR_DEV_TITLE");
+    expect(desig.name).toBe("Senior Software Engineer II");
   });
 });

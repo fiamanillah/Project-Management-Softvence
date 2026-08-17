@@ -6,7 +6,7 @@ import type { Request, Response } from "express";
 
 describe("API & Middleware Shape (Section 5)", () => {
   let testDepartmentId: string;
-  let testDesignationId: string;
+  let testRoleId: string;
   let testPermissionId: string;
   let testUserId: string;
 
@@ -16,17 +16,20 @@ describe("API & Middleware Shape (Section 5)", () => {
     await prisma.passwordResetToken.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
-    await prisma.designationPermissionScopeTarget.deleteMany({});
-    await prisma.designationPermission.deleteMany({});
+    await prisma.rolePermissionScopeTarget.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
     await prisma.permission.deleteMany({});
     await prisma.permissionScopeType.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
     await prisma.projectAssignment.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.projectComponent.deleteMany({});
+    await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.project.deleteMany({});
+    await prisma.teamMember.deleteMany({});
+    await prisma.assignmentRole.deleteMany({});
+    await prisma.team.deleteMany({});
     await prisma.user.deleteMany({});
+    await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
   };
@@ -39,7 +42,7 @@ describe("API & Middleware Shape (Section 5)", () => {
     });
     testDepartmentId = dept.id;
 
-    const desig = await prisma.designation.create({
+    const role = await prisma.role.create({
       data: {
         code: "FINANCE_ANALYST",
         name: "Financial Analyst",
@@ -47,7 +50,7 @@ describe("API & Middleware Shape (Section 5)", () => {
         hierarchyLevel: 2,
       },
     });
-    testDesignationId = desig.id;
+    testRoleId = role.id;
 
     const user = await prisma.user.create({
       data: {
@@ -57,7 +60,7 @@ describe("API & Middleware Shape (Section 5)", () => {
         firstName: "Financial",
         lastName: "User",
         systemRole: "Staff",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
     });
     testUserId = user.id;
@@ -82,7 +85,7 @@ describe("API & Middleware Shape (Section 5)", () => {
       user: {
         sub: testUserId,
         systemRole: "Staff",
-        designationId: testDesignationId,
+        roleId: testRoleId,
       },
       headers: {},
       socket: {},
@@ -113,9 +116,9 @@ describe("API & Middleware Shape (Section 5)", () => {
       },
     });
 
-    await prisma.designationPermission.create({
+    await prisma.rolePermission.create({
       data: {
-        designationId: testDesignationId,
+        roleId: testRoleId,
         permissionId: testPermissionId,
         scopeTypeId: scopeGlobal.id,
         grantedBy: testUserId,
@@ -125,7 +128,7 @@ describe("API & Middleware Shape (Section 5)", () => {
     const userObj = {
       id: testUserId,
       systemRole: "Staff",
-      designationId: testDesignationId,
+      roleId: testRoleId,
     };
 
     const permMap = await getUserPermissions(userObj);

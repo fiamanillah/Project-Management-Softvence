@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@workspace/ui/components/button";
-import { Plus, RefreshCw, Lock } from "lucide-react";
+import { Plus, RefreshCw, Briefcase } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { RouteGuard } from "@/components/permission-gate/RouteGuard";
@@ -14,7 +14,7 @@ import { DeleteDesignationDialog } from "./components/DeleteDesignationDialog";
 
 export default function DesignationsPage() {
   return (
-    <RouteGuard code="organization.designation.view">
+    <RouteGuard code="auth.user.view">
       <DesignationsContent />
     </RouteGuard>
   );
@@ -28,7 +28,6 @@ function DesignationsContent() {
   // Modals
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
-  const [editInitialTab, setEditInitialTab] = React.useState<"details" | "permissions">("details");
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [selectedDesignation, setSelectedDesignation] = React.useState<DesignationItem | null>(null);
 
@@ -52,9 +51,8 @@ function DesignationsContent() {
     fetchData();
   }, [fetchData]);
 
-  const handleEdit = (desig: DesignationItem, initialTab: "details" | "permissions" = "details") => {
+  const handleEdit = (desig: DesignationItem) => {
     setSelectedDesignation(desig);
-    setEditInitialTab(initialTab);
     setEditModalOpen(true);
   };
 
@@ -69,10 +67,10 @@ function DesignationsContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Lock className="size-6 text-primary" /> Designations & Permission Matrix
+            <Briefcase className="size-6 text-primary" /> Corporate Designations
           </h1>
           <p className="text-xs text-muted-foreground">
-            Manage organizational roles and configure fine-grained permission scope matrix assignments.
+            Manage corporate HR job titles and organizational career levels for employee directory and profiling.
           </p>
         </div>
 
@@ -80,7 +78,7 @@ function DesignationsContent() {
           <Button variant="outline" size="sm" onClick={() => fetchData()}>
             <RefreshCw className="mr-2 size-4" /> Refresh
           </Button>
-          <PermissionGate code="organization.designation.manage">
+          <PermissionGate code="auth.user.manage">
             <Button size="sm" onClick={() => setCreateModalOpen(true)}>
               <Plus className="mr-2 size-4" /> Add Designation
             </Button>
@@ -115,7 +113,6 @@ function DesignationsContent() {
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
         departments={departments}
-        initialTab={editInitialTab}
         onSuccess={fetchData}
       />
 

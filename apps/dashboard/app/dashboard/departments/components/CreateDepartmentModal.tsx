@@ -17,7 +17,6 @@ import {
   FieldGroup,
   Field,
   FieldLabel,
-  FieldDescription,
   FieldError,
 } from "@workspace/ui/components/field";
 import {
@@ -31,6 +30,8 @@ import { Loader2, Building2, GitFork } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api";
 import { createDepartmentSchema, type DepartmentItem } from "@workspace/shared";
+import { HelpTooltip } from "@/components/HelpTooltip";
+import { ScrollArea } from "@workspace/ui/components/scroll-area";
 
 interface CreateDepartmentModalProps {
   open: boolean;
@@ -76,7 +77,6 @@ export function CreateDepartmentModal({
     e.preventDefault();
     setErrors({});
 
-    // Validate using shared Zod schema from @workspace/shared
     const validationResult = createDepartmentSchema.safeParse({
       code: code.trim(),
       name: name.trim(),
@@ -115,116 +115,147 @@ export function CreateDepartmentModal({
     return departments.filter((d) => d.isActive);
   }, [departments]);
 
+  const selectedParent = React.useMemo(() => {
+    if (!parentId || parentId === "NONE") return null;
+    return activeDepartments.find((d) => d.id === parentId);
+  }, [activeDepartments, parentId]);
+
   return (
-    <Dialog open={open} onOpenChange={(val) => {
-      if (!val) handleReset();
-      onOpenChange(val);
-    }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Dialog
+      open={open}
+      onOpenChange={(val) => {
+        if (!val) handleReset();
+        onOpenChange(val);
+      }}
+    >
+      <DialogContent className="w-[95vw] sm:max-w-xl sm:min-w-[540px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-2">
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold">
             <Building2 className="size-5 text-primary" /> Create New Department
           </DialogTitle>
-          <DialogDescription>
-            Add a new organizational unit or sub-department. Code must be unique across the organization.
+          <DialogDescription className="text-xs text-muted-foreground">
+            Add a new organizational unit or sub-department to your company hierarchy.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <FieldSet>
-            <FieldGroup>
-              {/* Department Code Field */}
-              <Field data-invalid={Boolean(errors.code)}>
-                <FieldLabel htmlFor="create-dept-code">Department Code *</FieldLabel>
-                <Input
-                  id="create-dept-code"
-                  placeholder="ENG"
-                  value={code}
-                  onChange={(e) => {
-                    setCode(e.target.value.toUpperCase());
-                    if (errors.code) setErrors((prev) => ({ ...prev, code: "" }));
-                  }}
-                  className="font-mono uppercase"
-                  autoComplete="off"
-                />
-                <FieldDescription>
-                  Unique uppercase identifier code (e.g. ENG, HR, FIN, MKT).
-                </FieldDescription>
-                <FieldError errors={errors.code} />
-              </Field>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <ScrollArea className="max-h-[60vh] h-[360px] w-full px-6 py-2">
+            <FieldSet>
+              <FieldGroup className="space-y-4 pr-2">
+                {/* Department Code Field */}
+                <Field data-invalid={Boolean(errors.code)}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <FieldLabel htmlFor="create-dept-code" className="text-xs font-semibold">
+                      Department Code <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <HelpTooltip text="Unique uppercase identifier code across your company (e.g. ENG, HR, FIN, MKT)." />
+                  </div>
+                  <Input
+                    id="create-dept-code"
+                    placeholder="e.g. ENG, HR, DESIGN"
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value.toUpperCase());
+                      if (errors.code) setErrors((prev) => ({ ...prev, code: "" }));
+                    }}
+                    className="font-mono uppercase text-xs"
+                    autoComplete="off"
+                    disabled={isLoading}
+                  />
+                  <FieldError errors={errors.code} />
+                </Field>
 
-              {/* Department Name Field */}
-              <Field data-invalid={Boolean(errors.name)}>
-                <FieldLabel htmlFor="create-dept-name">Department Name *</FieldLabel>
-                <Input
-                  id="create-dept-name"
-                  placeholder="Engineering & Technology"
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
-                  }}
-                  autoComplete="off"
-                />
-                <FieldDescription>
-                  Full name of the department as shown on reports and invoices.
-                </FieldDescription>
-                <FieldError errors={errors.name} />
-              </Field>
+                {/* Department Name Field */}
+                <Field data-invalid={Boolean(errors.name)}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <FieldLabel htmlFor="create-dept-name" className="text-xs font-semibold">
+                      Department Name <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <HelpTooltip text="Full title of the department as displayed on organizational charts and reports." />
+                  </div>
+                  <Input
+                    id="create-dept-name"
+                    placeholder="e.g. Engineering & Product Architecture"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                    }}
+                    className="text-xs"
+                    autoComplete="off"
+                    disabled={isLoading}
+                  />
+                  <FieldError errors={errors.name} />
+                </Field>
 
-              {/* Parent Department Selection */}
-              <Field data-invalid={Boolean(errors.parentId)}>
-                <FieldLabel htmlFor="create-dept-parent">Parent Department (Optional)</FieldLabel>
-                <Select value={parentId} onValueChange={(val: string | null) => setParentId(val || "NONE")}>
-                  <SelectTrigger id="create-dept-parent" className="w-full text-xs">
-                    <SelectValue placeholder="None (Top-Level Department)" />
-                  </SelectTrigger>
-                  <SelectContent className="w-full">
-                    <SelectItem value="NONE" className="text-muted-foreground">
-                      <div className="flex items-center gap-1.5">
-                        <Building2 className="size-3.5 text-muted-foreground" />
-                        <span>None (Top-Level Department)</span>
-                      </div>
-                    </SelectItem>
-                    {activeDepartments.map((dept) => (
-                      <SelectItem key={dept.id} value={dept.id}>
+                {/* Parent Department Selection */}
+                <Field data-invalid={Boolean(errors.parentId)}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <FieldLabel htmlFor="create-dept-parent" className="text-xs font-semibold">
+                      Parent Department (Hierarchy Tier)
+                    </FieldLabel>
+                    <HelpTooltip text="Select a parent department to nest this as a sub-unit, or select None for a top-level department." />
+                  </div>
+                  <Select
+                    value={parentId}
+                    onValueChange={(val: string | null) => setParentId(val || "NONE")}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger id="create-dept-parent" className="w-full text-xs">
+                      <SelectValue placeholder="None (Top-Level Department)">
+                        {selectedParent
+                          ? `${selectedParent.name} (${selectedParent.code})`
+                          : "None (Top-Level Department)"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-full max-h-56">
+                      <SelectItem value="NONE" className="text-xs text-muted-foreground">
                         <div className="flex items-center gap-1.5">
-                          <GitFork className="size-3.5 text-primary" />
-                          <span>{dept.name} ({dept.code})</span>
+                          <Building2 className="size-3.5 text-muted-foreground" />
+                          <span>None (Top-Level Department)</span>
                         </div>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  Select a parent department to create this as a sub-department, or leave empty for top-level.
-                </FieldDescription>
-                <FieldError errors={errors.parentId} />
-              </Field>
+                      {activeDepartments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id} className="text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <GitFork className="size-3.5 text-primary" />
+                            <span>{dept.name} ({dept.code})</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError errors={errors.parentId} />
+                </Field>
 
-              {/* Active Status Switch Field */}
-              <Field orientation="horizontal" className="rounded-lg border p-3 bg-muted/20">
-                <div className="space-y-0.5">
-                  <FieldLabel htmlFor="create-dept-active" className="cursor-pointer">
-                    Active Status
-                  </FieldLabel>
-                  <FieldDescription>
-                    Active departments can have designations and teams assigned to them.
-                  </FieldDescription>
+                {/* Status Switch */}
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <FieldLabel className="text-xs font-semibold cursor-pointer">
+                        Active Operational Status
+                      </FieldLabel>
+                      <HelpTooltip text="Inactive departments cannot have teams created or new members assigned to them." />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Enable this department for operations and user assignment.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={isActive}
+                    onCheckedChange={setIsActive}
+                    disabled={isLoading}
+                  />
                 </div>
-                <Switch
-                  id="create-dept-active"
-                  checked={isActive}
-                  onCheckedChange={setIsActive}
-                />
-              </Field>
-            </FieldGroup>
-          </FieldSet>
+              </FieldGroup>
+            </FieldSet>
+          </ScrollArea>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="p-6 pt-3 border-t mt-auto">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => {
                 handleReset();
                 onOpenChange(false);
@@ -233,8 +264,8 @@ export function CreateDepartmentModal({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button type="submit" size="sm" disabled={isLoading} className="gap-1.5">
+              {isLoading && <Loader2 className="size-3.5 animate-spin" />}
               Create Department
             </Button>
           </DialogFooter>

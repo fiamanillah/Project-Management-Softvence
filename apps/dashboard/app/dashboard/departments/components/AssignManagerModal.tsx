@@ -114,19 +114,19 @@ export function AssignManagerModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+      <DialogContent className="w-[95vw] sm:max-w-lg sm:min-w-[560px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-2">
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold">
             <UserCheck className="size-5 text-primary" /> Department Managers
           </DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogDescription className="text-xs text-muted-foreground">
             Manage active manager assignments for{" "}
             <span className="font-semibold text-foreground">{department?.name}</span> (
-            <span className="font-mono text-primary">{department?.code}</span>).
+            <span className="font-mono text-primary font-bold">{department?.code}</span>).
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-1">
+        <div className="flex-1 overflow-y-auto px-6 py-2 space-y-5">
           {/* Active Managers Section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
