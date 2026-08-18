@@ -239,7 +239,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Profile
     const profile = await projectsService.createProfile(
-      { platformId: platform.id, username: `agency_lead_${timestamp}` },
+      { platformId: platform.id, username: `agency_lead_${timestamp}`, isActive: true },
       superAdminUser,
     );
     expect(profile.username).toBe(`agency_lead_${timestamp}`);
@@ -247,7 +247,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Client
     const client = await projectsService.createClient(
-      { name: `Apex Dynamics ${timestamp}`, platformId: platform.id, contactNotes: "Lead via Direct" },
+      { name: `Apex Dynamics ${timestamp}`, platformId: platform.id, contactNotes: "Lead via Direct", isActive: true },
       superAdminUser,
     );
     expect(client.name).toBe(`Apex Dynamics ${timestamp}`);
@@ -255,7 +255,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Service Line
     const serviceLine = await projectsService.createServiceLine(
-      { name: `Data Science ${timestamp}`, slug: `data-science-${timestamp}` },
+      { name: `Data Science ${timestamp}`, slug: `data-science-${timestamp}`, isActive: true },
       superAdminUser,
     );
     expect(serviceLine.name).toBe(`Data Science ${timestamp}`);
@@ -263,7 +263,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Status
     const status = await projectsService.createStatus(
-      { name: `Under QA ${timestamp}`, code: `QA_${timestamp}`, color: "#8b5cf6", requiresAction: true },
+      { name: `Under QA ${timestamp}`, code: `QA_${timestamp}`, color: "#8b5cf6", requiresAction: true, isActive: true },
       superAdminUser,
     );
     expect(status.name).toBe(`Under QA ${timestamp}`);
@@ -387,4 +387,144 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     expect(errorCaught).not.toBeNull();
     expect(errorCaught.statusCode).toBe(403);
   });
+
+  it("7. Auto-generates structured project code (PRJ-YYYYMM-XXXX) when projectName is omitted", async () => {
+    const testOrderId = `ORD-AUTO-${Date.now()}`;
+    const project = await projectsService.createProject(
+      {
+        orderId: testOrderId,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+      },
+      superAdminUser,
+    );
+
+    expect(project.projectName).toMatch(/^PRJ-\d{6}-\d{4}$/);
+    expect(project.orderId).toBe(testOrderId);
+  });
+
+  it("8. Supports parent project and nested sub-project / child order hierarchy", async () => {
+    const parentOrderId = `ORD-PARENT-${Date.now()}`;
+    const parentProject = await projectsService.createProject(
+      {
+        orderId: parentOrderId,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+        value: 10000,
+      },
+      superAdminUser,
+    );
+
+    const childOrderId = `ORD-CHILD-${Date.now()}`;
+    const childProject = await projectsService.createProject(
+      {
+        orderId: childOrderId,
+        parentId: parentProject.id,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+        value: 4000,
+      },
+      superAdminUser,
+    );
+
+    expect(childProject.parentId).toBe(parentProject.id);
+    expect(childProject.parentOrderId).toBe(parentOrderId);
+
+    // Fetch parent detail and verify subProjects array contains child
+    const parentDetail = await projectsService.getProjectById(parentProject.id, superAdminUser);
+    expect(parentDetail.subProjects).toBeDefined();
+    expect(parentDetail.subProjects?.some((sp) => sp.id === childProject.id)).toBe(true);
+
+    // Fetch child detail and verify parentProject is populated
+    const childDetail = await projectsService.getProjectById(childProject.id, superAdminUser);
+    expect(childDetail.parentProject).toBeDefined();
+    expect(childDetail.parentProject?.id).toBe(parentProject.id);
+    expect(childDetail.parentProject?.orderId).toBe(parentOrderId);
+  });
+
+  it("9. Prevents circular references in parent project assignment", async () => {
+    const projA = await projectsService.createProject(
+      {
+        orderId: `ORD-CYC-A-${Date.now()}`,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+      },
+      superAdminUser,
+    );
+
+    const projB = await projectsService.createProject(
+      {
+        orderId: `ORD-CYC-B-${Date.now()}`,
+        parentId: projA.id,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+      },
+      superAdminUser,
+    );
+
+    // Setting Proj A's parent to Proj B should throw BadRequestError (circular hierarchy)
+    let cycleError: any = null;
+    try {
+      await projectsService.updateProject(projA.id, { parentId: projB.id }, superAdminUser);
+    } catch (err) {
+      cycleError = err;
+    }
+
+    expect(cycleError).not.toBeNull();
+    expect(cycleError.statusCode).toBe(400);
+  });
+
+  it("10. Supports operational spreadsheet fields (Amount, Percentage, Email, Order Link, Remarks, Service) and masks accordingly", async () => {
+    const timestamp = Date.now();
+    const orderId = `ORD-OPS-${timestamp}`;
+
+    const project = await projectsService.createProject(
+      {
+        orderId,
+        service: "Enterprise E-Commerce Store",
+        email: `contact_${timestamp}@example.com`,
+        orderLink: "https://www.fiverr.com/orders/FO918234",
+        remarks: "Urgent milestone delivery for European client",
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+        assignedTeamIds: [sampleTeamId],
+        value: 1200,
+        amount: 960,
+        percentage: 20,
+      },
+      superAdminUser,
+    );
+
+    expect(project.service).toBe("Enterprise E-Commerce Store");
+    expect(project.email).toBe(`contact_${timestamp}@example.com`);
+    expect(project.orderLink).toBe("https://www.fiverr.com/orders/FO918234");
+    expect(project.remarks).toBe("Urgent milestone delivery for European client");
+    expect(project.value).toBe(1200);
+    expect(project.amount).toBe(960);
+    expect(project.percentage).toBe(20);
+
+    // Sanitize for non-privileged restricted user -> email, amount, percentage, value must be null
+    const normalView = await projectsService.sanitizeAndDecorateProject(project, restrictedUser);
+    expect(normalView.service).toBe("Enterprise E-Commerce Store");
+    expect(normalView.orderLink).toBe("https://www.fiverr.com/orders/FO918234");
+    expect(normalView.remarks).toBe("Urgent milestone delivery for European client");
+    expect(normalView.email).toBeNull();
+    expect(normalView.amount).toBeNull();
+    expect(normalView.percentage).toBeNull();
+    expect(normalView.value).toBeNull();
+  });
 });
+
+

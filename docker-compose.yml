@@ -51,6 +51,22 @@ services:
         networks:
             - manage_project_network
 
+    rustfs:
+        image: rustfs/rustfs:latest
+        container_name: manage_project_rustfs
+        restart: unless-stopped
+        environment:
+            RUSTFS_ACCESS_KEY: rustfsadmin
+            RUSTFS_SECRET_KEY: rustfsadmin
+            RUSTFS_CONSOLE_ENABLE: "true"
+        ports:
+            - '9000:9000'
+            - '9001:9001'
+        volumes:
+            - manage_project_storage:/data
+        networks:
+            - manage_project_network
+
 networks:
     manage_project_network:
         driver: bridge
@@ -60,4 +76,7 @@ volumes:
         driver: local
     manage_project_mongo:
         driver: local
+    manage_project_storage:
+        driver: local
+
 

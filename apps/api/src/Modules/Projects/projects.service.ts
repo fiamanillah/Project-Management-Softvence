@@ -30,6 +30,7 @@ export interface GetProjectsQuery {
   page?: number;
   limit?: number;
   search?: string;
+  parentId?: string;
   statusId?: string;
   serviceLineId?: string;
   platformId?: string;
@@ -58,6 +59,54 @@ export class ProjectsService {
       departmentId: primaryTeamAssignment?.team?.departmentId || primaryTeamAssignment?.team?.department?.id,
       profileId: project.profileId,
     };
+  }
+
+  /**
+   * Helper to generate a unique structured project code/identifier (e.g. PRJ-202608-4821)
+   */
+  public async generateProjectCode(): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const prefix = `PRJ-${year}${month}-`;
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const candidateCode = `${prefix}${randomSuffix}`;
+      const existing = await this.prisma.project.findFirst({
+        where: { projectName: candidateCode },
+        select: { id: true },
+      });
+      if (!existing) {
+        return candidateCode;
+      }
+    }
+    return `${prefix}${Date.now().toString().slice(-4)}`;
+  }
+
+  /**
+   * Ensure that setting targetParentId does not create a circular dependency
+   */
+  private async validateHierarchyNoCycles(projectId: string, targetParentId: string): Promise<void> {
+    if (projectId === targetParentId) {
+      throw new BadRequestError("A project cannot be its own parent");
+    }
+
+    let currentParentId: string | null = targetParentId;
+    const visited = new Set<string>([projectId]);
+
+    while (currentParentId) {
+      if (visited.has(currentParentId)) {
+        throw new BadRequestError("Circular hierarchy reference detected in project parent hierarchy");
+      }
+      visited.add(currentParentId);
+
+      const parent: { parentId: string | null } | null = await this.prisma.project.findUnique({
+        where: { id: currentParentId },
+        select: { parentId: true },
+      });
+      currentParentId = parent?.parentId || null;
+    }
   }
 
   /**
@@ -103,11 +152,38 @@ export class ProjectsService {
     const sanitized: any = {
       ...project,
       value: canViewFinancials ? (project.value !== null ? Number(project.value) : 0) : null,
+      amount: canViewFinancials
+        ? project.amount !== null && project.amount !== undefined
+          ? Number(project.amount)
+          : null
+        : null,
+      percentage: canViewFinancials
+        ? project.percentage !== null && project.percentage !== undefined
+          ? Number(project.percentage)
+          : null
+        : null,
       orderSheetUrl: canViewFinancials ? project.orderSheetUrl : null,
+      email: canViewClient ? project.email : null,
       clientId: canViewClient ? project.clientId : null,
       client: canViewClient ? project.client : null,
+      profileId: canViewClient ? project.profileId : null,
+      profile: canViewClient
+        ? project.profile
+        : project.profile
+          ? {
+              ...project.profile,
+              username: "Confidential Profile",
+              platform: project.profile.platform ? { name: project.profile.platform.name } : undefined,
+            }
+          : null,
       _capabilities: capabilities,
     };
+
+    if (Array.isArray(project.subProjects)) {
+      sanitized.subProjects = await Promise.all(
+        project.subProjects.map((sp: any) => this.sanitizeAndDecorateProject(sp, actor)),
+      );
+    }
 
     return sanitized as ProjectItem;
   }
@@ -127,7 +203,7 @@ export class ProjectsService {
 
     // Scoped query restriction for non-SuperAdmin users
     if (actor.systemRole !== "SuperAdmin") {
-      const userPerms = await getUserPermissions(actor, this.prisma);
+      const userPerms = await getUserPermissions(actor);
       const viewPerm = userPerms["project.view"];
       const isGlobal = viewPerm?.scope === "Global" || viewPerm?.scope === "Override";
 
@@ -246,6 +322,14 @@ export class ProjectsService {
       };
     }
 
+    if (query.parentId !== undefined) {
+      if (query.parentId === "root" || query.parentId === "null") {
+        where.parentId = null;
+      } else if (query.parentId !== "all") {
+        where.parentId = query.parentId;
+      }
+    }
+
     if (query.isTerminal !== undefined && query.isTerminal !== "all") {
       const isTerminalBool = query.isTerminal === true || query.isTerminal === "true";
       where.status = { isTerminal: isTerminalBool };
@@ -264,6 +348,14 @@ export class ProjectsService {
         take: limit,
         orderBy: [{ createdAt: "desc" }],
         include: {
+          parentProject: {
+            select: {
+              id: true,
+              orderId: true,
+              projectName: true,
+              status: true,
+            },
+          },
           status: true,
           profile: {
             include: {
@@ -318,6 +410,7 @@ export class ProjectsService {
               userAssignments: { where: { unassignedAt: null } },
               teamAssignments: { where: { unassignedAt: null } },
               issues: true,
+              subProjects: { where: { deletedAt: null } },
             },
           },
         },
@@ -351,6 +444,26 @@ export class ProjectsService {
     const project = await this.prisma.project.findFirst({
       where: { id, deletedAt: null },
       include: {
+        parentProject: {
+          include: {
+            status: true,
+          },
+        },
+        subProjects: {
+          where: { deletedAt: null },
+          include: {
+            status: true,
+            teamAssignments: {
+              where: { unassignedAt: null },
+              include: { team: true },
+            },
+            userAssignments: {
+              where: { unassignedAt: null },
+              include: { user: true, role: true },
+            },
+          },
+          orderBy: [{ createdAt: "asc" }],
+        },
         status: true,
         profile: {
           include: {
@@ -406,6 +519,7 @@ export class ProjectsService {
             userAssignments: { where: { unassignedAt: null } },
             teamAssignments: { where: { unassignedAt: null } },
             issues: true,
+            subProjects: { where: { deletedAt: null } },
           },
         },
       },
@@ -443,7 +557,7 @@ export class ProjectsService {
    * Get project KPI statistics with pipeline value authorization masking.
    */
   public async getProjectStats(actor: AuthenticatedUser): Promise<ProjectStats> {
-    const userPerms = await getUserPermissions(actor, this.prisma);
+    const userPerms = await getUserPermissions(actor);
     const viewPerm = userPerms["project.view"];
     const isGlobal = actor.systemRole === "SuperAdmin" || viewPerm?.scope === "Global" || viewPerm?.scope === "Override";
 
@@ -567,7 +681,7 @@ export class ProjectsService {
   public async getLookups(actor: AuthenticatedUser): Promise<ProjectLookups> {
     const canViewClient = await can(actor, "project.client.view", undefined);
 
-    const [statuses, platforms, profiles, serviceLines, assignmentRoles, teams, clients] = await Promise.all([
+    const [statuses, platforms, profiles, serviceLines, assignmentRoles, teams, clients, parentCandidates] = await Promise.all([
       this.prisma.projectStatus.findMany({
         where: { isActive: true },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -600,6 +714,22 @@ export class ProjectsService {
             orderBy: [{ name: "asc" }],
           })
         : Promise.resolve([]),
+      this.prisma.project.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          projectName: true,
+          orderId: true,
+          status: {
+            select: {
+              name: true,
+              color: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take: 100,
+      }),
     ]);
 
     return {
@@ -610,6 +740,7 @@ export class ProjectsService {
       assignmentRoles,
       teams,
       clients,
+      parentCandidates,
     };
   }
 
@@ -623,8 +754,12 @@ export class ProjectsService {
       throw new AuthorizationError("You don't have access to this resource");
     }
 
-    // 2. Check financial edit permission if custom value is provided
-    if (dto.value && dto.value > 0) {
+    // 2. Check financial edit permission if custom value, amount, or percentage is provided
+    if (
+      (dto.value && dto.value > 0) ||
+      (dto.amount && dto.amount > 0) ||
+      (dto.percentage && dto.percentage > 0)
+    ) {
       const hasFinancialEdit = await can(actor, "project.financial.edit", undefined);
       if (!hasFinancialEdit) {
         throw new AuthorizationError("You do not have permission to set project financial values");
@@ -648,17 +783,49 @@ export class ProjectsService {
     if (!client) throw new NotFoundError("Selected client does not exist");
     if (!profile) throw new NotFoundError("Selected profile does not exist");
 
-    // 5. Execute creation within a transaction
+    // 5. Parent Project & Parent Order validation
+    let parentOrderId = dto.parentOrderId || null;
+    if (dto.parentId) {
+      const parent = await this.prisma.project.findFirst({
+        where: { id: dto.parentId, deletedAt: null },
+        select: { id: true, orderId: true },
+      });
+      if (!parent) {
+        throw new NotFoundError("Parent project not found");
+      }
+      if (!parentOrderId) {
+        parentOrderId = parent.orderId;
+      }
+    }
+
+    // 6. Auto-generate project name/code if not provided or standardize
+    const generatedProjectName = dto.projectName?.trim() || (await this.generateProjectCode());
+
+    // 7. Execute creation within a transaction
     const newProject = await this.prisma.$transaction(async (tx) => {
       const project = await tx.project.create({
         data: {
-          projectName: dto.projectName,
+          parentId: dto.parentId || null,
+          parentOrderId,
+          projectName: generatedProjectName,
           orderId: dto.orderId,
+          service: dto.service?.trim() || null,
+          email: dto.email?.trim() || null,
+          orderLink: dto.orderLink?.trim() || null,
           clientId: dto.clientId,
           profileId: dto.profileId,
           serviceLineId: dto.serviceLineId || null,
           statusId: dto.statusId,
           value: new Prisma.Decimal(dto.value || 0),
+          amount:
+            dto.amount !== null && dto.amount !== undefined
+              ? new Prisma.Decimal(dto.amount)
+              : null,
+          percentage:
+            dto.percentage !== null && dto.percentage !== undefined
+              ? new Prisma.Decimal(dto.percentage)
+              : null,
+          remarks: dto.remarks?.trim() || null,
           orderSheetUrl: dto.orderSheetUrl || null,
           startDate: dto.startDate ? new Date(dto.startDate) : null,
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
@@ -707,7 +874,7 @@ export class ProjectsService {
       return project;
     });
 
-    // 6. Write Audit Log
+    // 8. Write Audit Log
     AuditLogService.log({
       module: "Projects",
       action: "CREATE",
@@ -721,8 +888,10 @@ export class ProjectsService {
         userAgent: actor.userAgent,
       },
       metadata: {
-        projectName: dto.projectName,
+        projectName: generatedProjectName,
         orderId: dto.orderId,
+        parentId: dto.parentId,
+        parentOrderId,
         clientId: dto.clientId,
         assignedTeams: dto.assignedTeamIds,
       },
@@ -757,8 +926,13 @@ export class ProjectsService {
       throw new AuthorizationError("You don't have access to this resource");
     }
 
-    // Check financial edit permission if updating value or orderSheetUrl
-    if (dto.value !== undefined || dto.orderSheetUrl !== undefined) {
+    // Check financial edit permission if updating value, amount, percentage, or orderSheetUrl
+    if (
+      dto.value !== undefined ||
+      dto.amount !== undefined ||
+      dto.percentage !== undefined ||
+      dto.orderSheetUrl !== undefined
+    ) {
       const hasFinancialEdit = await can(actor, "project.financial.edit", resourceContext);
       if (!hasFinancialEdit) {
         throw new AuthorizationError("You do not have permission to modify project financial values");
@@ -789,14 +963,50 @@ export class ProjectsService {
 
     if (dto.projectName !== undefined) updateData.projectName = dto.projectName;
     if (dto.orderId !== undefined) updateData.orderId = dto.orderId;
+    if (dto.service !== undefined) updateData.service = dto.service?.trim() || null;
+    if (dto.email !== undefined) updateData.email = dto.email?.trim() || null;
+    if (dto.orderLink !== undefined) updateData.orderLink = dto.orderLink?.trim() || null;
     if (dto.clientId !== undefined) updateData.clientId = dto.clientId;
     if (dto.profileId !== undefined) updateData.profileId = dto.profileId;
     if (dto.serviceLineId !== undefined) updateData.serviceLineId = dto.serviceLineId;
     if (dto.statusId !== undefined) updateData.statusId = dto.statusId;
     if (dto.value !== undefined) updateData.value = new Prisma.Decimal(dto.value);
+    if (dto.amount !== undefined)
+      updateData.amount =
+        dto.amount !== null && dto.amount !== undefined ? new Prisma.Decimal(dto.amount) : null;
+    if (dto.percentage !== undefined)
+      updateData.percentage =
+        dto.percentage !== null && dto.percentage !== undefined
+          ? new Prisma.Decimal(dto.percentage)
+          : null;
+    if (dto.remarks !== undefined) updateData.remarks = dto.remarks?.trim() || null;
     if (dto.orderSheetUrl !== undefined) updateData.orderSheetUrl = dto.orderSheetUrl || null;
     if (dto.startDate !== undefined) updateData.startDate = dto.startDate ? new Date(dto.startDate) : null;
     if (dto.deliveryDate !== undefined) updateData.deliveryDate = dto.deliveryDate ? new Date(dto.deliveryDate) : null;
+
+    if (dto.parentId !== undefined) {
+      if (dto.parentId) {
+        await this.validateHierarchyNoCycles(id, dto.parentId);
+        const parent = await this.prisma.project.findFirst({
+          where: { id: dto.parentId, deletedAt: null },
+          select: { id: true, orderId: true },
+        });
+        if (!parent) {
+          throw new NotFoundError("Parent project not found");
+        }
+        updateData.parentId = dto.parentId;
+        if (!dto.parentOrderId) {
+          updateData.parentOrderId = parent.orderId;
+        }
+      } else {
+        updateData.parentId = null;
+        updateData.parentOrderId = null;
+      }
+    }
+
+    if (dto.parentOrderId !== undefined && dto.parentId === undefined) {
+      updateData.parentOrderId = dto.parentOrderId || null;
+    }
 
     const updated = await this.prisma.project.update({
       where: { id },

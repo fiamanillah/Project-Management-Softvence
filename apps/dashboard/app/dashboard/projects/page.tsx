@@ -36,7 +36,7 @@ import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { ProjectStatsCards } from "./components/ProjectStatsCards";
 import { ProjectTable } from "./components/ProjectTable";
 import { ProjectCardGrid } from "./components/ProjectCardGrid";
-import { ProjectDetailSheet } from "./components/ProjectDetailSheet";
+import { ProjectDetailDialog } from "./components/detail/ProjectDetailDialog";
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { EditProjectModal } from "./components/EditProjectModal";
 import { ManageProjectMembersModal } from "./components/ManageProjectMembersModal";
@@ -78,12 +78,13 @@ function ProjectsContent() {
   const [totalPages, setTotalPages] = React.useState(1);
   const [totalCount, setTotalCount] = React.useState(0);
 
-  // Modals & Sheets
+  // Modals & Dialogs
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
+  const [createParentId, setCreateParentId] = React.useState<string | null>(null);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [membersModalOpen, setMembersModalOpen] = React.useState(false);
   const [componentsModalOpen, setComponentsModalOpen] = React.useState(false);
-  const [detailSheetOpen, setDetailSheetOpen] = React.useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
 
   const [selectedProject, setSelectedProject] = React.useState<ProjectItem | null>(null);
@@ -157,7 +158,17 @@ function ProjectsContent() {
   // Handlers
   const handleViewDetails = (project: ProjectItem) => {
     setSelectedProject(project);
-    setDetailSheetOpen(true);
+    setDetailDialogOpen(true);
+  };
+
+  const handleOpenCreateRoot = () => {
+    setCreateParentId(null);
+    setCreateModalOpen(true);
+  };
+
+  const handleAddSubProject = (parentProject: ProjectItem) => {
+    setCreateParentId(parentProject.id);
+    setCreateModalOpen(true);
   };
 
   const handleEdit = (project: ProjectItem) => {
@@ -219,7 +230,7 @@ function ProjectsContent() {
           <PermissionGate code="project.create">
             <Button
               size="sm"
-              onClick={() => setCreateModalOpen(true)}
+              onClick={handleOpenCreateRoot}
               className="text-xs h-9 gap-1.5 shadow-xs"
             >
               <Plus className="size-4" /> New Project
@@ -373,23 +384,57 @@ function ProjectsContent() {
         />
       )}
 
-      {/* 5. Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2 px-1 text-xs text-muted-foreground">
-          <span>
-            Showing {(currentPage - 1) * pageSize + 1} to{" "}
-            {Math.min(currentPage * pageSize, totalCount)} of {totalCount} projects
-          </span>
+      {/* 5. Comprehensive Pagination Controls */}
+      {totalCount > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 pb-1 px-1 text-xs text-muted-foreground border-t border-border/40">
+          {/* Left: Row Count & Page Size Selector */}
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+            <span className="font-medium">
+              Showing{" "}
+              <span className="font-semibold text-foreground">
+                {(currentPage - 1) * pageSize + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-foreground">
+                {Math.min(currentPage * pageSize, totalCount)}
+              </span>{" "}
+              of <span className="font-semibold text-foreground">{totalCount}</span> projects
+            </span>
 
-          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 ml-2">
+              <span className="hidden md:inline text-muted-foreground text-[11px]">Rows per page:</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(val: string | null) => {
+                  if (!val) return;
+                  setPageSize(Number(val));
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="h-8 w-16 text-xs font-semibold">
+                  <SelectValue placeholder="10" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10" className="text-xs font-medium">10</SelectItem>
+                  <SelectItem value="25" className="text-xs font-medium">25</SelectItem>
+                  <SelectItem value="50" className="text-xs font-medium">50</SelectItem>
+                  <SelectItem value="100" className="text-xs font-medium">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Right: Page Navigation & Numbered Pills */}
+          <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon"
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
               className="size-8"
+              title="First Page"
             >
-              <ChevronsLeft className="size-4" />
+              <ChevronsLeft className="size-3.5" />
             </Button>
             <Button
               variant="outline"
@@ -397,20 +442,64 @@ function ProjectsContent() {
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               className="size-8"
+              title="Previous Page"
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft className="size-3.5" />
             </Button>
-            <span className="px-2 font-medium text-foreground">
-              Page {currentPage} of {totalPages}
+
+            {/* Numbered Page Buttons */}
+            <div className="hidden sm:flex items-center gap-1 mx-1">
+              {(() => {
+                const pages: (number | string)[] = [];
+                if (totalPages <= 7) {
+                  for (let i = 1; i <= totalPages; i++) pages.push(i);
+                } else if (currentPage <= 4) {
+                  pages.push(1, 2, 3, 4, 5, "...", totalPages);
+                } else if (currentPage >= totalPages - 3) {
+                  pages.push(1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+                } else {
+                  pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages);
+                }
+
+                return pages.map((p, idx) => {
+                  if (typeof p === "string") {
+                    return (
+                      <span key={`ellipsis-${idx}`} className="px-1.5 text-xs text-muted-foreground">
+                        …
+                      </span>
+                    );
+                  }
+                  const isCurrent = p === currentPage;
+                  return (
+                    <Button
+                      key={p}
+                      variant={isCurrent ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(p)}
+                      className={`size-8 p-0 text-xs font-semibold ${
+                        isCurrent ? "pointer-events-none shadow-xs" : "hover:bg-muted"
+                      }`}
+                    >
+                      {p}
+                    </Button>
+                  );
+                });
+              })()}
+            </div>
+
+            <span className="sm:hidden px-2 font-semibold text-foreground text-xs">
+              {currentPage} / {totalPages}
             </span>
+
             <Button
               variant="outline"
               size="icon"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
               className="size-8"
+              title="Next Page"
             >
-              <ChevronRight className="size-4" />
+              <ChevronRight className="size-3.5" />
             </Button>
             <Button
               variant="outline"
@@ -418,18 +507,20 @@ function ProjectsContent() {
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
               className="size-8"
+              title="Last Page"
             >
-              <ChevronsRight className="size-4" />
+              <ChevronsRight className="size-3.5" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Modals & Sheets */}
+      {/* Modals & Dialogs */}
       <CreateProjectModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         lookups={lookups}
+        initialParentId={createParentId}
         onSuccess={handleSuccess}
         onRefreshLookups={fetchLookups}
       />
@@ -459,13 +550,14 @@ function ProjectsContent() {
         onSuccess={handleSuccess}
       />
 
-      <ProjectDetailSheet
+      <ProjectDetailDialog
         project={selectedProject}
-        open={detailSheetOpen}
-        onOpenChange={setDetailSheetOpen}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
         onEdit={handleEdit}
         onManageMembers={handleManageMembers}
         onManageComponents={handleManageComponents}
+        onAddSubProject={handleAddSubProject}
         onDelete={handleDelete}
         onRefresh={handleSuccess}
       />

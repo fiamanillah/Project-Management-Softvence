@@ -18,12 +18,23 @@ export const initialMemberInputSchema = z.object({
 export const createProjectSchema = z.object({
   projectName: z
     .string()
-    .min(2, "Project name must be at least 2 characters")
-    .max(150, "Project name cannot exceed 150 characters"),
+    .min(1)
+    .max(150)
+    .optional(),
+  service: z.string().max(200).optional().nullable(),
+  email: z.string().email("Invalid email format").optional().nullable().or(z.literal("")),
+  orderLink: z
+    .string()
+    .url("Order link must be a valid URL")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
   orderId: z
     .string()
     .min(1, "Order ID is required")
     .max(100, "Order ID cannot exceed 100 characters"),
+  parentId: z.string().uuid("Invalid parent project ID format").optional().nullable(),
+  parentOrderId: z.string().max(100).optional().nullable(),
   clientId: z.string().uuid("Invalid client ID format"),
   profileId: z.string().uuid("Invalid profile ID format"),
   serviceLineId: z.string().uuid("Invalid service line ID format").optional().nullable(),
@@ -34,6 +45,19 @@ export const createProjectSchema = z.object({
     .refine((val) => !isNaN(val) && val >= 0, "Project value must be a non-negative number")
     .optional()
     .default(0),
+  amount: z
+    .union([z.number(), z.string()])
+    .transform((val) => (val === "" || val === null || val === undefined ? null : Number(val)))
+    .refine((val) => val === null || (!isNaN(val) && val >= 0), "Amount must be a non-negative number")
+    .optional()
+    .nullable(),
+  percentage: z
+    .union([z.number(), z.string()])
+    .transform((val) => (val === "" || val === null || val === undefined ? null : Number(val)))
+    .refine((val) => val === null || (!isNaN(val) && val >= 0 && val <= 100), "Percentage must be between 0 and 100")
+    .optional()
+    .nullable(),
+  remarks: z.string().max(5000).optional().nullable(),
   orderSheetUrl: z
     .string()
     .url("Order sheet URL must be a valid URL")
@@ -48,8 +72,18 @@ export const createProjectSchema = z.object({
 });
 
 export const updateProjectSchema = z.object({
-  projectName: z.string().min(2).max(150).optional(),
+  projectName: z.string().min(1).max(150).optional(),
+  service: z.string().max(200).optional().nullable(),
+  email: z.string().email("Invalid email format").optional().nullable().or(z.literal("")),
+  orderLink: z
+    .string()
+    .url("Order link must be a valid URL")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
   orderId: z.string().min(1).max(100).optional(),
+  parentId: z.string().uuid("Invalid parent project ID format").optional().nullable(),
+  parentOrderId: z.string().max(100).optional().nullable(),
   clientId: z.string().uuid().optional(),
   profileId: z.string().uuid().optional(),
   serviceLineId: z.string().uuid().optional().nullable(),
@@ -59,6 +93,19 @@ export const updateProjectSchema = z.object({
     .transform((val) => Number(val))
     .refine((val) => !isNaN(val) && val >= 0, "Project value must be a non-negative number")
     .optional(),
+  amount: z
+    .union([z.number(), z.string()])
+    .transform((val) => (val === "" || val === null || val === undefined ? null : Number(val)))
+    .refine((val) => val === null || (!isNaN(val) && val >= 0), "Amount must be a non-negative number")
+    .optional()
+    .nullable(),
+  percentage: z
+    .union([z.number(), z.string()])
+    .transform((val) => (val === "" || val === null || val === undefined ? null : Number(val)))
+    .refine((val) => val === null || (!isNaN(val) && val >= 0 && val <= 100), "Percentage must be between 0 and 100")
+    .optional()
+    .nullable(),
+  remarks: z.string().max(5000).optional().nullable(),
   orderSheetUrl: z
     .string()
     .url("Order sheet URL must be a valid URL")
@@ -300,15 +347,37 @@ export interface ProjectComponentItem {
   userAssignments?: ComponentUserAssignmentItem[];
 }
 
-export interface ProjectItem {
+export interface ProjectParentSummary {
   id: string;
   orderId: string;
   projectName: string;
+  status?: {
+    id: string;
+    code: string;
+    name: string;
+    color?: string | null;
+    isTerminal?: boolean;
+    requiresAction?: boolean;
+  } | null;
+}
+
+export interface ProjectItem {
+  id: string;
+  parentId?: string | null;
+  parentOrderId?: string | null;
+  orderId: string;
+  projectName: string;
+  service?: string | null;
+  email?: string | null;
+  orderLink?: string | null;
   statusId: string;
   clientId: string | null;
-  profileId: string;
+  profileId: string | null;
   serviceLineId: string | null;
   value: number | string | null;
+  amount?: number | string | null;
+  percentage?: number | string | null;
+  remarks?: string | null;
   orderSheetUrl: string | null;
   startDate: string | Date | null;
   deliveryDate: string | Date | null;
@@ -317,8 +386,10 @@ export interface ProjectItem {
   deletedAt?: string | Date | null;
 
   // Relations
+  parentProject?: ProjectParentSummary | null;
+  subProjects?: ProjectItem[];
   status: ProjectStatusItem;
-  profile: ProfileItem;
+  profile?: ProfileItem | null;
   serviceLine?: ServiceLineItem | null;
   client?: ClientItem | null;
   teamAssignments: ProjectTeamAssignmentItem[];
@@ -330,6 +401,7 @@ export interface ProjectItem {
     userAssignments: number;
     teamAssignments: number;
     issues: number;
+    subProjects?: number;
   };
 
   _capabilities?: ProjectCapabilities;
@@ -340,6 +412,7 @@ export interface ProjectDetailItem extends ProjectItem {
   pastTeams: ProjectTeamAssignmentItem[];
   activeMembers: ProjectUserAssignmentItem[];
   pastMembers: ProjectUserAssignmentItem[];
+  subProjects?: ProjectItem[];
 }
 
 export interface ProjectStats {
@@ -351,12 +424,23 @@ export interface ProjectStats {
   totalPipelineValue: number | null; // null if unauthorized to view financials
 }
 
+export interface ProjectParentCandidate {
+  id: string;
+  projectName: string;
+  orderId: string;
+  status?: {
+    name: string;
+    color?: string | null;
+  } | null;
+}
+
 export interface ProjectLookups {
   statuses: ProjectStatusItem[];
   platforms: PlatformItem[];
   profiles: ProfileItem[];
   serviceLines: ServiceLineItem[];
   clients: ClientItem[];
+  parentCandidates?: ProjectParentCandidate[];
   assignmentRoles: {
     id: string;
     code: string;

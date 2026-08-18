@@ -37,4 +37,6 @@ export {
   type ProfileItem,
   type ClientItem,
   type ServiceLineItem,
+  type ProjectParentSummary,
+  type ProjectParentCandidate,
 } from "@workspace/shared";

@@ -105,7 +105,7 @@ export function ProjectCardGrid({
               <CardHeader className="p-4 pb-2.5 flex flex-row items-start justify-between gap-2 space-y-0">
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono text-[11px] text-muted-foreground font-medium">
+                    <span className="font-mono text-[11px] text-muted-foreground font-semibold px-1.5 py-0.5 bg-muted/60 rounded">
                       {project.orderId}
                     </span>
                     <Badge
@@ -120,9 +120,19 @@ export function ProjectCardGrid({
                       {project.status?.name || "Unknown"}
                     </Badge>
                   </div>
-                  <h4 className="font-semibold text-base text-foreground tracking-tight line-clamp-1 group-hover:text-primary transition-colors">
+                  <h4 className="font-mono font-bold text-sm text-foreground tracking-tight line-clamp-1 group-hover:text-primary transition-colors">
                     {project.projectName}
                   </h4>
+                  {project.parentProject && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono block">
+                      ↳ Sub-project of {project.parentProject.projectName}
+                    </span>
+                  )}
+                  {(project._count?.subProjects || 0) > 0 && (
+                    <Badge variant="secondary" className="text-[9px] px-1 py-0 font-normal">
+                      {project._count?.subProjects} sub-orders
+                    </Badge>
+                  )}
                 </div>
 
                 <div onClick={(e) => e.stopPropagation()}>
@@ -195,9 +205,16 @@ export function ProjectCardGrid({
                   <div>
                     <span className="text-[11px] text-muted-foreground block">Client</span>
                     {canViewClient && project.client ? (
-                      <span className="font-medium text-foreground truncate block">
-                        {project.client.name}
-                      </span>
+                      <div className="truncate">
+                        <span className="font-medium text-foreground truncate block">
+                          {project.client.name}
+                        </span>
+                        {project.email && (
+                          <span className="font-mono text-[10px] text-muted-foreground truncate block">
+                            {project.email}
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <Badge
                         variant="outline"
@@ -209,11 +226,19 @@ export function ProjectCardGrid({
                   </div>
 
                   <div>
-                    <span className="text-[11px] text-muted-foreground block">Value</span>
+                    <span className="text-[11px] text-muted-foreground block">Contract Value</span>
                     {canViewFinancials ? (
-                      <span className="font-mono font-semibold text-foreground">
-                        ${Number(project.value || 0).toLocaleString()}
-                      </span>
+                      <div>
+                        <span className="font-mono font-semibold text-foreground block">
+                          ${Number(project.value || 0).toLocaleString()}
+                        </span>
+                        {(project.amount !== null && project.amount !== undefined || project.percentage !== null && project.percentage !== undefined) && (
+                          <span className="font-mono text-[10px] text-muted-foreground block">
+                            {project.amount !== null && project.amount !== undefined ? `Net: $${Number(project.amount).toLocaleString()}` : ""}
+                            {project.percentage !== null && project.percentage !== undefined ? ` (${project.percentage}%)` : ""}
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <Badge
                         variant="outline"
@@ -227,7 +252,9 @@ export function ProjectCardGrid({
 
                 {/* Service Line & Components count */}
                 <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="truncate">{project.serviceLine?.name || "General Service"}</span>
+                  <span className="truncate max-w-[170px]" title={project.service || project.serviceLine?.name || "General Service"}>
+                    {project.service || project.serviceLine?.name || "General Service"}
+                  </span>
                   <Badge variant="secondary" className="text-[10px] font-normal gap-1 shrink-0">
                     <Layers className="size-3 text-primary" />
                     {componentsCount} {componentsCount === 1 ? "Component" : "Components"}

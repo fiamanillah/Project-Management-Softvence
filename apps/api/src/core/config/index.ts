@@ -54,6 +54,20 @@ export const config = {
     keyPrefix: env.REDIS_KEY_PREFIX,
     defaultTTLSeconds: env.REDIS_DEFAULT_TTL,
   },
+  storage: {
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    },
+    publicBucket: env.S3_PUBLIC_BUCKET,
+    privateBucket: env.S3_PRIVATE_BUCKET,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
+    sslEnabled: env.S3_SSL_ENABLED,
+    publicUrlPrefix: env.S3_PUBLIC_URL_PREFIX,
+  },
 };
+
 
 export default config;

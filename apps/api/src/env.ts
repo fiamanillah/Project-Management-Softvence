@@ -47,7 +47,21 @@ const envSchema = z.object({
   REDIS_DB: z.coerce.number().default(0),
   REDIS_KEY_PREFIX: z.string().default("ignitor:"),
   REDIS_DEFAULT_TTL: z.coerce.number().default(3600),
+  S3_ENDPOINT: z.string().default("http://127.0.0.1:9000"),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_ACCESS_KEY_ID: z.string().default("rustfsadmin"),
+  S3_SECRET_ACCESS_KEY: z.string().default("rustfsadmin"),
+  S3_PUBLIC_BUCKET: z.string().default("manage-project-public"),
+  S3_PRIVATE_BUCKET: z.string().default("manage-project-private"),
+  S3_FORCE_PATH_STYLE: z
+    .preprocess((val) => val === "true" || val === true || val === "1" || val === 1, z.boolean())
+    .default(true),
+  S3_SSL_ENABLED: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .default(false),
+  S3_PUBLIC_URL_PREFIX: z.string().optional(),
 });
+
 
 const parsed = envSchema.safeParse(process.env);
 

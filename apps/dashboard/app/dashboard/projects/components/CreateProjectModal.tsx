@@ -14,6 +14,7 @@ import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Badge } from "@workspace/ui/components/badge";
+import { Textarea } from "@workspace/ui/components/textarea";
 import {
   Select,
   SelectContent,
@@ -54,15 +55,20 @@ import {
   Globe,
   Clock,
   CheckCircle2,
-  RotateCw,
   AlertCircle,
   Hash,
+  GitFork,
+  Link,
+  Mail,
+  Percent,
+  FileText,
 } from "lucide-react";
 
 interface CreateProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lookups: ProjectLookups | null;
+  initialParentId?: string | null;
   onSuccess: () => void;
   onRefreshLookups?: () => Promise<void>;
 }
@@ -71,6 +77,7 @@ export function CreateProjectModal({
   open,
   onOpenChange,
   lookups,
+  initialParentId,
   onSuccess,
   onRefreshLookups,
 }: CreateProjectModalProps) {
@@ -83,14 +90,20 @@ export function CreateProjectModal({
   const [generalError, setGeneralError] = React.useState<string | null>(null);
 
   // Form State
-  const [projectName, setProjectName] = React.useState("");
   const [orderId, setOrderId] = React.useState("");
+  const [orderLink, setOrderLink] = React.useState("");
+  const [service, setService] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [parentId, setParentId] = React.useState<string>("");
   const [clientId, setClientId] = React.useState("");
   const [platformId, setPlatformId] = React.useState("");
   const [profileId, setProfileId] = React.useState("");
   const [serviceLineId, setServiceLineId] = React.useState("");
   const [statusId, setStatusId] = React.useState("");
   const [value, setValue] = React.useState<number | string>(0);
+  const [amount, setAmount] = React.useState<number | string>("");
+  const [percentage, setPercentage] = React.useState<number | string>("");
+  const [remarks, setRemarks] = React.useState("");
   const [orderSheetUrl, setOrderSheetUrl] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [deliveryDate, setDeliveryDate] = React.useState("");
@@ -107,35 +120,27 @@ export function CreateProjectModal({
   const [serviceLineModalOpen, setServiceLineModalOpen] = React.useState(false);
   const [statusModalOpen, setStatusModalOpen] = React.useState(false);
 
-  // Local lookup extensions (to immediately reflect newly created items before parent re-fetch)
+  // Local lookup extensions
   const [localLookups, setLocalLookups] = React.useState<ProjectLookups | null>(lookups);
 
   React.useEffect(() => {
     setLocalLookups(lookups);
   }, [lookups]);
 
-  // Generate random order ID
-  const generateRandomOrderId = () => {
-    const randomNum = Math.floor(100000 + Math.random() * 900000);
-    setOrderId(`ORD-${randomNum}`);
-    setFieldErrors((prev) => {
-      const next = { ...prev };
-      delete next.orderId;
-      return next;
-    });
-  };
-
   // Initialize defaults on open
   React.useEffect(() => {
     if (open && localLookups) {
-      setProjectName("");
-      generateRandomOrderId();
-      
+      setOrderId("");
+      setOrderLink("");
+      setService("");
+      setEmail("");
+      setParentId(initialParentId || "");
+
       const initialPlatform = localLookups.platforms[0]?.id || "";
       setPlatformId(initialPlatform);
 
-      // Find profile that belongs to initial platform or fallback to first profile
-      const matchingProfile = localLookups.profiles.find((p) => p.platformId === initialPlatform) || localLookups.profiles[0];
+      const matchingProfile =
+        localLookups.profiles.find((p) => p.platformId === initialPlatform) || localLookups.profiles[0];
       setProfileId(matchingProfile?.id || "");
       if (matchingProfile?.platformId) {
         setPlatformId(matchingProfile.platformId);
@@ -145,6 +150,9 @@ export function CreateProjectModal({
       setServiceLineId(localLookups.serviceLines[0]?.id || "");
       setStatusId(localLookups.statuses[0]?.id || "");
       setValue(0);
+      setAmount("");
+      setPercentage("");
+      setRemarks("");
       setOrderSheetUrl("");
       setStartDate(new Date().toISOString().split("T")[0] || "");
       setDeliveryDate(new Date(Date.now() + 14 * 86400 * 1000).toISOString().split("T")[0] || "");
@@ -154,56 +162,37 @@ export function CreateProjectModal({
       setFieldErrors({});
       setGeneralError(null);
     }
-  }, [open, localLookups]);
+  }, [open, localLookups, initialParentId]);
 
-  // Filter profiles based on selected platform (with fallback to all if none match)
+  // Filter profiles based on selected platform
   const filteredProfiles = React.useMemo(() => {
     if (!localLookups?.profiles) return [];
     if (!platformId) return localLookups.profiles;
-    const matching = localLookups.profiles.filter((p) => p.platformId === platformId);
-    return matching.length > 0 ? matching : localLookups.profiles;
+    const matched = localLookups.profiles.filter((p) => p.platformId === platformId);
+    return matched.length > 0 ? matched : localLookups.profiles;
   }, [localLookups?.profiles, platformId]);
 
-  // Calculate timeline duration in days
-  const timelineDays = React.useMemo(() => {
-    if (!startDate || !deliveryDate) return null;
-    const start = new Date(startDate).getTime();
-    const end = new Date(deliveryDate).getTime();
-    if (isNaN(start) || isNaN(end) || end < start) return null;
-    return Math.round((end - start) / (1000 * 60 * 60 * 24));
-  }, [startDate, deliveryDate]);
-
-  // Handle Platform Change
+  // Handle platform change
   const handlePlatformChange = (newPlatformId: string | null) => {
-    if (!newPlatformId) return;
-    setPlatformId(newPlatformId);
-    setFieldErrors((prev) => {
-      const next = { ...prev };
-      delete next.platformId;
-      return next;
-    });
-
-    // Auto-select first profile of this platform if current profile doesn't match
-    const matchingProfiles = localLookups?.profiles.filter((p) => p.platformId === newPlatformId);
-    if (matchingProfiles && matchingProfiles.length > 0) {
-      if (!matchingProfiles.some((p) => p.id === profileId)) {
-        setProfileId(matchingProfiles[0]?.id || "");
-      }
+    const val = newPlatformId || "";
+    setPlatformId(val);
+    const firstMatchingProfile = localLookups?.profiles.find((p) => p.platformId === val);
+    if (firstMatchingProfile) {
+      setProfileId(firstMatchingProfile.id);
     }
   };
 
-  // Handle Profile Change
+  // Handle profile change
   const handleProfileChange = (newProfileId: string | null) => {
-    if (!newProfileId) return;
-    setProfileId(newProfileId);
+    const val = newProfileId || "";
+    setProfileId(val);
     setFieldErrors((prev) => {
       const next = { ...prev };
       delete next.profileId;
       return next;
     });
 
-    // Auto-sync platform to match selected profile
-    const selected = localLookups?.profiles.find((p) => p.id === newProfileId);
+    const selected = localLookups?.profiles.find((p) => p.id === val);
     if (selected && selected.platformId && selected.platformId !== platformId) {
       setPlatformId(selected.platformId);
     }
@@ -269,10 +258,8 @@ export function CreateProjectModal({
     setFieldErrors({});
     setGeneralError(null);
 
-    // Client-side required field check
     const errors: Record<string, string> = {};
-    if (!projectName.trim()) errors.projectName = "Project name is required";
-    if (!orderId.trim()) errors.orderId = "Order ID is required";
+    if (!orderId.trim()) errors.orderId = "Platform Order ID is required";
     if (!profileId) errors.profileId = "Account profile is required";
     if (!statusId) errors.statusId = "Status is required";
 
@@ -285,13 +272,19 @@ export function CreateProjectModal({
 
     try {
       const payload: CreateProjectDTO = {
-        projectName: projectName.trim(),
         orderId: orderId.trim(),
+        orderLink: orderLink.trim() || undefined,
+        service: service.trim() || undefined,
+        email: canViewClient && email.trim() ? email.trim() : undefined,
+        parentId: parentId && parentId !== "none" ? parentId : undefined,
         clientId: clientId || localLookups?.clients[0]?.id || "",
         profileId: profileId || localLookups?.profiles[0]?.id || "",
         serviceLineId: serviceLineId || undefined,
         statusId: statusId || localLookups?.statuses[0]?.id || "",
         value: canEditFinancials ? Number(value) : 0,
+        amount: canEditFinancials && amount !== "" ? Number(amount) : undefined,
+        percentage: canEditFinancials && percentage !== "" ? Number(percentage) : undefined,
+        remarks: remarks.trim() || undefined,
         orderSheetUrl: canEditFinancials && orderSheetUrl.trim() ? orderSheetUrl.trim() : undefined,
         startDate: startDate ? new Date(startDate).toISOString() : undefined,
         deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : undefined,
@@ -300,7 +293,7 @@ export function CreateProjectModal({
       };
 
       await api.post("/projects", payload);
-      toast.success("Project created successfully");
+      toast.success("Project created successfully with auto-generated project code");
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
@@ -321,7 +314,7 @@ export function CreateProjectModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[92vw] sm:max-w-3xl md:min-w-[680px] lg:min-w-[760px] max-h-[92vh] p-0 gap-0 border shadow-2xl rounded-2xl overflow-hidden bg-background flex flex-col">
+        <DialogContent className="w-[94vw] sm:max-w-3xl md:min-w-[700px] lg:min-w-[820px] max-h-[92vh] p-0 gap-0 border shadow-2xl rounded-2xl overflow-hidden bg-background flex flex-col">
           {/* MODAL HEADER */}
           <DialogHeader className="p-5 pb-4 border-b bg-muted/20 shrink-0">
             <div className="flex items-center justify-between">
@@ -331,16 +324,16 @@ export function CreateProjectModal({
                 </div>
                 <div>
                   <DialogTitle className="text-lg font-bold text-foreground">
-                    Create New Project
+                    Create New Project / Order
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground">
-                    Set up project identity, client link, milestones, and deliverables
+                    Project code will be auto-generated. Link to platform order, financial parameters, and roster
                   </DialogDescription>
                 </div>
               </div>
               <Badge variant="outline" className="hidden sm:flex text-[11px] font-mono gap-1 py-1">
                 <Hash className="size-3 text-muted-foreground" />
-                {orderId || "NO-KEY"}
+                {orderId || "ORDER-KEY"}
               </Badge>
             </div>
           </DialogHeader>
@@ -355,58 +348,35 @@ export function CreateProjectModal({
 
           {/* SCROLLABLE FORM BODY */}
           <form onSubmit={handleSubmit} id="create-project-form" className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-[62vh] max-h-[calc(90vh-140px)]">
+            <ScrollArea className="h-[64vh] max-h-[calc(90vh-140px)]">
               <div className="p-5 sm:p-6 space-y-5">
-                {/* SECTION 1: CORE IDENTITY */}
-                <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Sparkles className="size-3.5 text-primary" /> Core Project Identity
-                    </h4>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={generateRandomOrderId}
-                      className="h-6 text-[11px] px-2 text-muted-foreground hover:text-primary gap-1"
-                    >
-                      <RotateCw className="size-3" /> Auto Key
-                    </Button>
+                {/* AUTO-GENERATED CODE INFO BANNER */}
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-primary shrink-0" />
+                    <div>
+                      <p className="font-semibold text-foreground">Auto-Generated Project Code</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Standard unique code (e.g. <span className="font-mono text-primary font-bold">PRJ-202608-XXXX</span>) will be assigned automatically upon save.
+                      </p>
+                    </div>
                   </div>
+                  <Badge variant="secondary" className="font-mono text-[10px] shrink-0">
+                    Auto-Assign Pattern
+                  </Badge>
+                </div>
+
+                {/* SECTION 1: ORDER ID, ORDER LINK & HIERARCHY */}
+                <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Hash className="size-3.5 text-primary" /> Platform Order & Service Domain
+                  </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
-                    {/* Project Name */}
-                    <div className="sm:col-span-7 space-y-1.5 min-w-0">
-                      <Label htmlFor="projectName" className="text-xs font-semibold">
-                        Project Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="projectName"
-                        value={projectName}
-                        onChange={(e) => {
-                          setProjectName(e.target.value);
-                          if (fieldErrors.projectName) {
-                            setFieldErrors((prev) => {
-                              const next = { ...prev };
-                              delete next.projectName;
-                              return next;
-                            });
-                          }
-                        }}
-                        placeholder="e.g. NextGen FinTech Platform"
-                        required
-                        className={fieldErrors.projectName ? "border-destructive text-xs h-9" : "text-xs h-9"}
-                        autoFocus
-                      />
-                      {fieldErrors.projectName && (
-                        <p className="text-[11px] text-destructive">{fieldErrors.projectName}</p>
-                      )}
-                    </div>
-
-                    {/* Order ID */}
-                    <div className="sm:col-span-5 space-y-1.5 min-w-0">
+                    {/* Platform Order ID */}
+                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
                       <Label htmlFor="orderId" className="text-xs font-semibold">
-                        Order ID / Key <span className="text-destructive">*</span>
+                        Platform Order ID <span className="text-destructive">*</span>
                       </Label>
                       <Input
                         id="orderId"
@@ -421,13 +391,76 @@ export function CreateProjectModal({
                             });
                           }
                         }}
-                        placeholder="ORD-100293"
+                        placeholder="e.g. #FO918234, 38491024, or ORD-8832"
                         required
                         className={fieldErrors.orderId ? "border-destructive font-mono text-xs h-9" : "font-mono text-xs h-9"}
+                        autoFocus
                       />
                       {fieldErrors.orderId && (
                         <p className="text-[11px] text-destructive">{fieldErrors.orderId}</p>
                       )}
+                    </div>
+
+                    {/* Platform Order Link */}
+                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
+                      <Label htmlFor="orderLink" className="text-xs font-semibold flex items-center gap-1">
+                        <Link className="size-3 text-muted-foreground" /> Platform Order URL Link
+                      </Label>
+                      <Input
+                        id="orderLink"
+                        type="url"
+                        value={orderLink}
+                        onChange={(e) => setOrderLink(e.target.value)}
+                        placeholder="https://www.fiverr.com/orders/FO918234"
+                        className="text-xs h-9"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 pt-1">
+                    {/* Service Description */}
+                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
+                      <Label htmlFor="service" className="text-xs font-semibold">
+                        Service Title / Package
+                      </Label>
+                      <Input
+                        id="service"
+                        value={service}
+                        onChange={(e) => setService(e.target.value)}
+                        placeholder="e.g. Full-Stack Web Development, Figma UI/UX..."
+                        className="text-xs h-9"
+                      />
+                    </div>
+
+                    {/* Parent Project (Optional) */}
+                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
+                      <Label htmlFor="parentId" className="text-xs font-semibold flex items-center gap-1">
+                        <GitFork className="size-3 text-blue-500" /> Parent Project / Umbrella Order
+                      </Label>
+                      <Select
+                        value={parentId || "none"}
+                        onValueChange={(val: string | null) => setParentId(val === "none" ? "" : (val || ""))}
+                      >
+                        <SelectTrigger className="w-full h-9 text-xs">
+                          <SelectValue placeholder="Standalone Project (No Parent)">
+                            {(() => {
+                              if (!parentId || parentId === "none") return "Standalone (No Parent)";
+                              const matched = localLookups?.parentCandidates?.find((p) => p.id === parentId);
+                              return matched ? `${matched.projectName} (${matched.orderId})` : "Standalone (No Parent)";
+                            })()}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" className="text-xs">
+                            Standalone Project (No Parent)
+                          </SelectItem>
+                          {localLookups?.parentCandidates?.map((cand) => (
+                            <SelectItem key={cand.id} value={cand.id} className="text-xs font-mono">
+                              {cand.projectName} — Order: {cand.orderId}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -513,25 +546,17 @@ export function CreateProjectModal({
                   </div>
                 </div>
 
-                {/* SECTION 2: PLATFORM & CLIENT LINKAGE */}
+                {/* SECTION 2: CLIENT & PLATFORM SELLER ACCOUNT */}
                 <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Building2 className="size-3.5 text-blue-500" /> Platform & Client Linkage
-                    </h4>
-                    {!canViewClient && (
-                      <Badge variant="outline" className="text-[10px] text-amber-600 bg-amber-500/10 border-amber-500/20 font-mono gap-1">
-                        <Lock className="size-2.5" /> Confidentiality Guard
-                      </Badge>
-                    )}
-                  </div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Building2 className="size-3.5 text-blue-500" /> Platform Account & Client
+                  </h4>
 
-                  {/* 2-Column Row for Platform & Profile */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                     {/* Platform */}
                     <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Origin Platform</Label>
+                        <Label className="text-xs font-semibold">Platform</Label>
                         <button
                           type="button"
                           onClick={() => setPlatformModalOpen(true)}
@@ -542,14 +567,14 @@ export function CreateProjectModal({
                       </div>
                       <Select value={platformId} onValueChange={handlePlatformChange}>
                         <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                          <SelectValue placeholder="Select Platform">
-                            {localLookups?.platforms.find((pl) => pl.id === platformId)?.name}
+                          <SelectValue placeholder="Platform">
+                            {localLookups?.platforms.find((p) => p.id === platformId)?.name}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {localLookups?.platforms.map((pl) => (
-                            <SelectItem key={pl.id} value={pl.id} className="text-xs">
-                              {pl.name}
+                          {localLookups?.platforms.map((p) => (
+                            <SelectItem key={p.id} value={p.id} className="text-xs">
+                              {p.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -560,7 +585,7 @@ export function CreateProjectModal({
                     <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold">
-                          Account Profile <span className="text-destructive">*</span>
+                          Profile <span className="text-destructive">*</span>
                         </Label>
                         <button
                           type="button"
@@ -571,30 +596,18 @@ export function CreateProjectModal({
                         </button>
                       </div>
                       <Select value={profileId} onValueChange={handleProfileChange}>
-                        <SelectTrigger className={fieldErrors.profileId ? "border-destructive w-full h-9 text-xs overflow-hidden" : "w-full h-9 text-xs overflow-hidden"}>
+                        <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
                           <SelectValue placeholder="Select Profile">
-                            {(() => {
-                              const prof = localLookups?.profiles.find((p) => p.id === profileId);
-                              if (!prof) return undefined;
-                              return (
-                                <span className="truncate block font-medium">
-                                  {prof.username} {prof.platform ? `(${prof.platform.name})` : ""}
-                                </span>
-                              );
-                            })()}
+                            {localLookups?.profiles.find((p) => p.id === profileId)?.username}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {filteredProfiles.map((pr) => (
-                            <SelectItem key={pr.id} value={pr.id} className="text-xs">
-                              <div className="flex items-center justify-between gap-3 w-full">
-                                <span className="truncate">{pr.username}</span>
-                                {pr.platform && (
-                                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                                    {pr.platform.name}
-                                  </span>
-                                )}
-                              </div>
+                          {filteredProfiles.map((prof) => (
+                            <SelectItem key={prof.id} value={prof.id} className="text-xs">
+                              <span className="font-mono">{prof.username}</span>
+                              <span className="text-[10px] text-muted-foreground ml-1.5">
+                                ({prof.platform?.name || "Platform"})
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -603,111 +616,164 @@ export function CreateProjectModal({
                         <p className="text-[11px] text-destructive">{fieldErrors.profileId}</p>
                       )}
                     </div>
-                  </div>
 
-                  {/* Full Width Row for Client Identity */}
-                  <div className="space-y-1.5 min-w-0 pt-1">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold">Client Identity</Label>
-                      {canViewClient && (
-                        <button
-                          type="button"
-                          onClick={() => setClientModalOpen(true)}
-                          className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                        >
-                          <Plus className="size-3" /> New Client
-                        </button>
+                    {/* Client */}
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Client Identity</Label>
+                        {canViewClient && (
+                          <button
+                            type="button"
+                            onClick={() => setClientModalOpen(true)}
+                            className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
+                          >
+                            <Plus className="size-3" /> New
+                          </button>
+                        )}
+                      </div>
+                      {canViewClient ? (
+                        <Select value={clientId} onValueChange={(val: string | null) => setClientId(val || "")}>
+                          <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
+                            <SelectValue placeholder="Select Client">
+                              {localLookups?.clients.find((c) => c.id === clientId)?.name}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {localLookups?.clients.map((cl) => (
+                              <SelectItem key={cl.id} value={cl.id} className="text-xs">
+                                {cl.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
+                          <Lock className="size-3 text-muted-foreground" /> Client Masked
+                        </div>
                       )}
                     </div>
-                    {canViewClient ? (
-                      <Select value={clientId} onValueChange={(val: string | null) => setClientId(val || "")}>
-                        <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                          <SelectValue placeholder="Select Client Account">
-                            {(() => {
-                              const cl = localLookups?.clients.find((c) => c.id === clientId);
-                              if (!cl) return undefined;
-                              return (
-                                <div className="flex items-center gap-2 truncate font-medium">
-                                  <span className="truncate">{cl.name}</span>
-                                  {cl.platform && (
-                                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                                      {cl.platform.name}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {localLookups?.clients.map((cl) => (
-                            <SelectItem key={cl.id} value={cl.id} className="text-xs">
-                              <div className="flex items-center justify-between gap-3 w-full">
-                                <span className="truncate">{cl.name}</span>
-                                {cl.platform && (
-                                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                                    {cl.platform.name}
-                                  </span>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="h-9 bg-muted/40 rounded-md border flex items-center px-3 text-xs text-muted-foreground font-mono">
-                        <Lock className="size-3 mr-1.5 text-amber-500 shrink-0" /> Client identity protected by permissions
-                      </div>
-                    )}
+
+                    {/* Client Email */}
+                    <div className="space-y-1.5 min-w-0">
+                      <Label htmlFor="email" className="text-xs font-semibold flex items-center gap-1">
+                        <Mail className="size-3 text-muted-foreground" /> Client Email
+                      </Label>
+                      {canViewClient ? (
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="client@company.com"
+                          className="text-xs h-9"
+                        />
+                      ) : (
+                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
+                          <Lock className="size-3 text-muted-foreground" /> Email Masked
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* SECTION 3: FINANCIALS & TIMELINE */}
+                {/* SECTION 3: FINANCIALS, PERCENTAGE & DEADLINES */}
                 <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <DollarSign className="size-3.5 text-emerald-500" /> Financials & Timeline
-                    </h4>
-                    {timelineDays !== null && (
-                      <Badge variant="secondary" className="text-[11px] font-mono gap-1">
-                        <Clock className="size-3 text-primary" /> {timelineDays} days duration
-                      </Badge>
-                    )}
-                  </div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <DollarSign className="size-3.5 text-emerald-500" /> Financials, Margins & Deadlines
+                  </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                     {/* Contract Value */}
                     <div className="space-y-1.5 min-w-0">
                       <Label htmlFor="value" className="text-xs font-semibold">
-                        Contract Value ($ USD)
+                        Contract Value ($)
                       </Label>
                       {canEditFinancials ? (
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2.5 text-xs text-muted-foreground font-mono">$</span>
+                          <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
+                            $
+                          </span>
                           <Input
                             id="value"
                             type="number"
                             min="0"
-                            step="0.01"
+                            step="any"
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             placeholder="0.00"
-                            className="pl-6 font-mono text-xs h-9"
+                            className="pl-7 text-xs h-9 font-mono"
                           />
                         </div>
                       ) : (
-                        <Input
-                          disabled
-                          value="Restricted by Permissions"
-                          className="bg-muted text-muted-foreground font-mono text-xs h-9"
-                        />
+                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
+                          <Lock className="size-3 text-muted-foreground" /> Value Restricted
+                        </div>
                       )}
                     </div>
 
-                    {/* Order Sheet URL */}
+                    {/* Net Amount */}
                     <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="orderSheetUrl" className="text-xs font-semibold">
-                        Order / Spec Sheet URL
+                      <Label htmlFor="amount" className="text-xs font-semibold">
+                        Net Amount ($)
+                      </Label>
+                      {canEditFinancials ? (
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
+                            $
+                          </span>
+                          <Input
+                            id="amount"
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            placeholder="Net payout / amount"
+                            className="pl-7 text-xs h-9 font-mono"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
+                          <Lock className="size-3 text-muted-foreground" /> Amount Restricted
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Margin / Percentage */}
+                    <div className="space-y-1.5 min-w-0">
+                      <Label htmlFor="percentage" className="text-xs font-semibold flex items-center gap-1">
+                        <Percent className="size-3 text-muted-foreground" /> Share / Margin (%)
+                      </Label>
+                      {canEditFinancials ? (
+                        <div className="relative">
+                          <Input
+                            id="percentage"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="any"
+                            value={percentage}
+                            onChange={(e) => setPercentage(e.target.value)}
+                            placeholder="e.g. 20"
+                            className="text-xs h-9 font-mono pr-7"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs text-muted-foreground font-semibold">
+                            %
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
+                          <Lock className="size-3 text-muted-foreground" /> Percentage Restricted
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1">
+                    {/* Order Sheet URL */}
+                    <div className="space-y-1.5 min-w-0 sm:col-span-3">
+                      <Label htmlFor="orderSheetUrl" className="text-xs font-semibold flex items-center gap-1">
+                        <FileText className="size-3 text-muted-foreground" /> Order Sheet / Google Doc URL
                       </Label>
                       {canEditFinancials ? (
                         <Input
@@ -719,19 +785,18 @@ export function CreateProjectModal({
                           className="text-xs h-9"
                         />
                       ) : (
-                        <Input
-                          disabled
-                          value="Restricted"
-                          className="bg-muted text-muted-foreground text-xs h-9"
-                        />
+                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
+                          <Lock className="size-3 text-muted-foreground" /> Restricted
+                        </div>
                       )}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                    {/* Start Date */}
                     <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="startDate" className="text-xs font-semibold">
-                        Start Date
+                      <Label htmlFor="startDate" className="text-xs font-semibold flex items-center gap-1">
+                        <Calendar className="size-3 text-muted-foreground" /> Order / Start Date
                       </Label>
                       <Input
                         id="startDate"
@@ -742,9 +807,10 @@ export function CreateProjectModal({
                       />
                     </div>
 
+                    {/* Delivery Date */}
                     <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="deliveryDate" className="text-xs font-semibold">
-                        Target Delivery Date
+                      <Label htmlFor="deliveryDate" className="text-xs font-semibold flex items-center gap-1">
+                        <Clock className="size-3 text-muted-foreground" /> Promised Delivery Deadline
                       </Label>
                       <Input
                         id="deliveryDate"
@@ -755,57 +821,60 @@ export function CreateProjectModal({
                       />
                     </div>
                   </div>
+
+                  {/* Remarks */}
+                  <div className="space-y-1.5 pt-1">
+                    <Label htmlFor="remarks" className="text-xs font-semibold">
+                      Remarks / Operational Notes
+                    </Label>
+                    <Textarea
+                      id="remarks"
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      placeholder="Special instructions, milestones, client preferences..."
+                      rows={2}
+                      className="text-xs resize-none"
+                    />
+                  </div>
                 </div>
 
-                {/* SECTION 4: TEAM ALLOCATION & DELIVERABLES */}
+                {/* SECTION 4: INITIAL ALLOCATIONS & DELIVERABLES */}
                 <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Layers className="size-3.5 text-purple-500" /> Team Allocation & Deliverables
-                    </h4>
-                    <Badge variant="outline" className="text-[10px]">
-                      {components.length} Sub-deliverables
-                    </Badge>
-                  </div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Layers className="size-3.5 text-primary" /> Primary Team & Deliverables
+                  </h4>
 
-                  {/* Primary Allocated Team */}
+                  {/* Primary Team */}
                   <div className="space-y-1.5 min-w-0">
                     <Label className="text-xs font-semibold">Primary Allocated Team</Label>
                     <Select value={assignedTeamId} onValueChange={(val: string | null) => setAssignedTeamId(val || "")}>
-                      <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                        <SelectValue placeholder="Select Primary Team">
-                          {(() => {
-                            const tm = localLookups?.teams.find((t) => t.id === assignedTeamId);
-                            if (!tm) return undefined;
-                            return (
-                              <span className="truncate block font-medium">
-                                {tm.name} {tm.department ? `(${tm.department.name})` : ""}
-                              </span>
-                            );
-                          })()}
+                      <SelectTrigger className="w-full h-9 text-xs">
+                        <SelectValue placeholder="Select Team">
+                          {localLookups?.teams.find((t) => t.id === assignedTeamId)?.name}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {localLookups?.teams.map((t) => (
-                          <SelectItem key={t.id} value={t.id} className="text-xs">
-                            <span className="truncate">{t.name} ({t.department?.name})</span>
+                        {localLookups?.teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id} className="text-xs">
+                            <span className="font-semibold">{team.name}</span>
+                            <span className="text-[10px] text-muted-foreground ml-1.5">
+                              ({team.department?.name || "General"})
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Deliverables List Builder */}
-                  <div className="space-y-2 pt-2 border-t">
-                    <Label className="text-xs font-semibold text-muted-foreground">
-                      Initial Deliverable Components (Optional)
-                    </Label>
+                  {/* Components / Sub-deliverables */}
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <Label className="text-xs font-semibold">Initial Deliverable Components</Label>
                     <div className="flex gap-2">
                       <Input
                         value={newComponentName}
                         onChange={(e) => setNewComponentName(e.target.value)}
-                        placeholder="e.g. Authentication Subsystem"
-                        className="text-xs h-8"
+                        placeholder="e.g. Backend API Architecture, Figma Design..."
+                        className="text-xs h-8 flex-1"
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
@@ -815,34 +884,32 @@ export function CreateProjectModal({
                       />
                       <Button
                         type="button"
-                        variant="secondary"
                         size="sm"
+                        variant="secondary"
                         onClick={handleAddDraftComponent}
-                        className="text-xs h-8 shrink-0 gap-1"
+                        className="text-xs h-8"
                       >
                         <Plus className="size-3.5" /> Add
                       </Button>
                     </div>
 
                     {components.length > 0 && (
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto p-1 bg-muted/20 rounded-lg border">
+                      <div className="flex flex-wrap gap-1.5 pt-1.5">
                         {components.map((comp, idx) => (
-                          <div
+                          <Badge
                             key={idx}
-                            className="flex items-center justify-between p-1.5 px-2.5 bg-card rounded text-xs border"
+                            variant="secondary"
+                            className="text-xs gap-1.5 py-1 px-2.5 bg-muted/60"
                           >
-                            <div className="flex items-center gap-1.5 truncate">
-                              <CheckCircle2 className="size-3.5 text-primary shrink-0" />
-                              <span className="truncate">{comp.name}</span>
-                            </div>
+                            <span>{comp.name}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveDraftComponent(idx)}
-                              className="text-muted-foreground hover:text-destructive p-0.5"
+                              className="text-muted-foreground hover:text-destructive transition-colors"
                             >
-                              <Trash2 className="size-3.5" />
+                              <Trash2 className="size-3" />
                             </button>
-                          </div>
+                          </Badge>
                         ))}
                       </div>
                     )}
@@ -852,72 +919,64 @@ export function CreateProjectModal({
             </ScrollArea>
 
             {/* MODAL FOOTER */}
-            <DialogFooter className="p-4 px-6 border-t bg-muted/10 shrink-0 flex flex-row items-center justify-between w-full">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={loading}
-                className="text-xs h-9"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading || !projectName.trim() || !orderId.trim() || !profileId}
-                className="text-xs h-9 gap-1.5 shadow-sm px-5"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" /> Creating...
-                  </>
-                ) : (
-                  "Create Project"
-                )}
-              </Button>
+            <DialogFooter className="p-4 border-t bg-muted/20 flex flex-col-reverse sm:flex-row items-center justify-between gap-2 shrink-0">
+              <span className="text-[11px] text-muted-foreground">
+                All fields marked <span className="text-destructive">*</span> are required
+              </span>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                  disabled={loading}
+                  className="text-xs h-9 w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={loading}
+                  className="text-xs h-9 gap-1.5 w-full sm:w-auto shadow-xs"
+                >
+                  {loading && <Loader2 className="size-3.5 animate-spin" />}
+                  Create Project
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* QUICK-CREATE NESTED DIALOGS */}
-      {localLookups && (
-        <>
-          <QuickCreateClientDialog
-            open={clientModalOpen}
-            onOpenChange={setClientModalOpen}
-            platforms={localLookups.platforms}
-            defaultPlatformId={platformId}
-            onSuccess={handleClientCreated}
-          />
-
-          <QuickCreateProfileDialog
-            open={profileModalOpen}
-            onOpenChange={setProfileModalOpen}
-            platforms={localLookups.platforms}
-            defaultPlatformId={platformId}
-            onSuccess={handleProfileCreated}
-          />
-
-          <QuickCreatePlatformDialog
-            open={platformModalOpen}
-            onOpenChange={setPlatformModalOpen}
-            onSuccess={handlePlatformCreated}
-          />
-
-          <QuickCreateServiceLineDialog
-            open={serviceLineModalOpen}
-            onOpenChange={setServiceLineModalOpen}
-            onSuccess={handleServiceLineCreated}
-          />
-
-          <QuickCreateStatusDialog
-            open={statusModalOpen}
-            onOpenChange={setStatusModalOpen}
-            onSuccess={handleStatusCreated}
-          />
-        </>
-      )}
+      {/* QUICK CREATE MODALS */}
+      <QuickCreateClientDialog
+        open={clientModalOpen}
+        onOpenChange={setClientModalOpen}
+        platforms={localLookups?.platforms || []}
+        onSuccess={handleClientCreated}
+      />
+      <QuickCreateProfileDialog
+        open={profileModalOpen}
+        onOpenChange={setProfileModalOpen}
+        platforms={localLookups?.platforms || []}
+        onSuccess={handleProfileCreated}
+      />
+      <QuickCreatePlatformDialog
+        open={platformModalOpen}
+        onOpenChange={setPlatformModalOpen}
+        onSuccess={handlePlatformCreated}
+      />
+      <QuickCreateServiceLineDialog
+        open={serviceLineModalOpen}
+        onOpenChange={setServiceLineModalOpen}
+        onSuccess={handleServiceLineCreated}
+      />
+      <QuickCreateStatusDialog
+        open={statusModalOpen}
+        onOpenChange={setStatusModalOpen}
+        onSuccess={handleStatusCreated}
+      />
     </>
   );
 }

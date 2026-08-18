@@ -111,7 +111,7 @@ export function ProjectTable({
         <TableHeader className="bg-muted/30">
           <TableRow>
             <TableHead className="font-semibold text-xs text-foreground min-w-[240px]">
-              Project / Order ID
+              Project Code / Order
             </TableHead>
             <TableHead className="font-semibold text-xs text-foreground">Status</TableHead>
             <TableHead className="font-semibold text-xs text-foreground">Client</TableHead>
@@ -139,19 +139,42 @@ export function ProjectTable({
                 className="hover:bg-muted/30 transition-colors group cursor-pointer"
                 onClick={() => onViewDetails(project)}
               >
-                {/* 1. Project Name & Order ID */}
+                {/* 1. Project Code & Order ID with Hierarchy Tag */}
                 <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-col gap-0.5">
                     <button
                       type="button"
                       onClick={() => onViewDetails(project)}
-                      className="text-left font-semibold text-sm text-foreground hover:text-primary transition-colors hover:underline flex items-center gap-1.5"
+                      className="text-left font-mono font-bold text-sm text-foreground hover:text-primary transition-colors hover:underline flex items-center gap-1.5"
                     >
                       {project.projectName}
                     </button>
-                    <span className="font-mono text-[11px] text-muted-foreground font-normal">
-                      {project.orderId}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-[11px] text-muted-foreground font-semibold px-1.5 py-0.2 bg-muted/60 rounded">
+                        {project.orderId}
+                      </span>
+                      {project.orderLink && (
+                        <a
+                          href={project.orderLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-primary inline-flex items-center"
+                          title="Open platform order"
+                        >
+                          <ExternalLink className="size-3" />
+                        </a>
+                      )}
+                      {project.parentProject && (
+                        <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono flex items-center gap-0.5" title={`Parent Order: ${project.parentProject.orderId}`}>
+                          ↳ {project.parentProject.projectName}
+                        </span>
+                      )}
+                      {(project._count?.subProjects || 0) > 0 && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 font-normal">
+                          {project._count?.subProjects} sub-orders
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
 
@@ -173,10 +196,15 @@ export function ProjectTable({
                 {/* 3. Client (Sensitive Field) */}
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   {canViewClient && project.client ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-foreground">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-semibold text-foreground">
                         {project.client.name}
                       </span>
+                      {project.email && (
+                        <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[140px]" title={project.email}>
+                          {project.email}
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <Tooltip>
@@ -201,12 +229,18 @@ export function ProjectTable({
                 {/* 4. Service Line & Profile */}
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-col gap-0.5 text-xs">
-                    <span className="font-medium text-foreground">
-                      {project.serviceLine?.name || "General"}
+                    <span className="font-medium text-foreground truncate max-w-[160px]" title={project.service || project.serviceLine?.name || "General"}>
+                      {project.service || project.serviceLine?.name || "General"}
                     </span>
-                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      {project.profile?.platform?.name}: {project.profile?.username}
-                    </span>
+                    {canViewClient && project.profile?.username ? (
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        {project.profile?.platform?.name}: <span className="font-mono">{project.profile?.username}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+                        <Lock className="size-2.5" /> Protected Profile
+                      </span>
+                    )}
                   </div>
                 </TableCell>
 
@@ -262,9 +296,17 @@ export function ProjectTable({
                 {/* 6. Value (Sensitive Field) */}
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   {canViewFinancials ? (
-                    <span className="font-mono text-xs font-semibold text-foreground">
-                      ${Number(project.value || 0).toLocaleString()}
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        ${Number(project.value || 0).toLocaleString()}
+                      </span>
+                      {(project.amount !== null && project.amount !== undefined || project.percentage !== null && project.percentage !== undefined) && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {project.amount !== null && project.amount !== undefined ? `Net: $${Number(project.amount).toLocaleString()}` : ""}
+                          {project.percentage !== null && project.percentage !== undefined ? ` (${project.percentage}%)` : ""}
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <Tooltip>
                       <TooltipTrigger

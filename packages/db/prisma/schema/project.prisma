@@ -4,19 +4,30 @@
 
 model Project {
   id            String    @id @default(uuid()) @db.Uuid
+  parentId      String?   @map("parent_id") @db.Uuid
+  parentOrderId String?   @map("parent_order_id")
   clientId      String    @map("client_id") @db.Uuid
   profileId     String    @map("profile_id") @db.Uuid
   serviceLineId String?   @map("service_line_id") @db.Uuid
   statusId      String    @map("status_id") @db.Uuid
   orderId       String    @unique @map("order_id")
   projectName   String    @map("project_name")
-  value         Decimal   @db.Decimal
+  service       String?
+  email         String?
+  orderLink     String?   @map("order_link")
   orderSheetUrl String?   @map("order_sheet_url")
+  value         Decimal   @db.Decimal
+  amount        Decimal?  @db.Decimal
+  percentage    Decimal?  @db.Decimal
+  remarks       String?   @db.Text
   startDate     DateTime? @map("start_date")
   deliveryDate  DateTime? @map("delivery_date")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime? @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
+
+  parentProject Project?  @relation("ProjectHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  subProjects   Project[] @relation("ProjectHierarchy")
 
   client      Client        @relation(fields: [clientId], references: [id])
   profile     Profile       @relation(fields: [profileId], references: [id])
@@ -34,6 +45,8 @@ model Project {
   scopeTargets           RolePermissionScopeTarget[]
   permissionOverrides    UserPermissionOverride[]
 
+  @@index([parentId])
+  @@index([parentOrderId])
   @@index([profileId])
   @@index([clientId])
   @@index([serviceLineId])

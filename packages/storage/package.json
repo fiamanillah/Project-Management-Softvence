@@ -1,0 +1,30 @@
+{
+  "name": "@workspace/storage",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/lib-storage": "^3.758.0",
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
+    "@workspace/logger": "workspace:*",
+    "@workspace/shared": "workspace:*",
+    "mime-types": "^2.1.35",
+    "zod": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^25.0.3",
+    "typescript": "~6"
+  }
+}

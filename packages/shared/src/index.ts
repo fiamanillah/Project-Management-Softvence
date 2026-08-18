@@ -5,3 +5,4 @@ export * from "./schemas/organization";
 export * from "./schemas/role";
 export * from "./schemas/team";
 export * from "./schemas/project";
+export * from "./schemas/storage";

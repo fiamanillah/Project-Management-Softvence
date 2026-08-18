@@ -8,7 +8,9 @@ import { config } from "./core/config";
 import { PrismaProvider } from "./providers/PrismaProvider";
 import { RedisProvider } from "./providers/RedisProvider";
 import { MessageBrokerProvider } from "./providers/MessageBrokerProvider";
+import { StorageProvider } from "./providers/StorageProvider";
 import { CacheManager } from "@workspace/cache";
+import { StorageManager } from "@workspace/storage";
 import { prisma } from "./lib/prisma";
 import { AuthModule } from "./Modules/Auth/AuthModule";
 import { AuditLogModule } from "./Modules/AuditLog/AuditLogModule";
@@ -17,6 +19,7 @@ import { UsersModule } from "./Modules/Users/UsersModule";
 import { TeamsModule } from "./Modules/Teams/TeamsModule";
 import { ProjectsModule } from "./Modules/Projects/ProjectsModule";
 import { PermissionsModule } from "./Modules/Permissions/PermissionsModule";
+import { StorageModule } from "./Modules/Storage/StorageModule";
 
 import { PermissionRegistry } from "./core/permissions/PermissionRegistry";
 
@@ -39,6 +42,9 @@ async function bootstrap() {
     app.getContext().registerProvider("redis", new RedisProvider(cacheManager));
     app.getContext().registerProvider("messageBroker", new MessageBrokerProvider(config.rabbitmq.url));
 
+    const storageManager = new StorageManager(config.storage);
+    app.getContext().registerProvider("storage", new StorageProvider(storageManager));
+
     // 3. Register Application Modules
     logger.info("⚙ Registering modules...");
     app.registerModule(new AuthModule());
@@ -48,7 +54,9 @@ async function bootstrap() {
     app.registerModule(new TeamsModule());
     app.registerModule(new ProjectsModule());
     app.registerModule(new PermissionsModule());
+    app.registerModule(new StorageModule());
     logger.info("✔ All modules registered successfully");
+
 
     // 4. Permission Registry Sync Step
     logger.info("🔐 Syncing permission registry...");
