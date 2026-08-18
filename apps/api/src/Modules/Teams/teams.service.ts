@@ -173,6 +173,8 @@ export class TeamsService {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrevious: page > 1,
       },
     };
   }

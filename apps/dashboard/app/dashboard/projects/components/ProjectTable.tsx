@@ -19,7 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import {
   MoreHorizontal,
@@ -36,6 +35,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { ProjectItem } from "@workspace/shared";
+import { ProjectTeamsAndAssignees } from "./ProjectTeamsAndAssignees";
 
 interface ProjectTableProps {
   projects: ProjectItem[];
@@ -251,45 +251,12 @@ export function ProjectTable({
 
                 {/* 5. Teams & Assignees */}
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-2">
-                    {activeTeams.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {activeTeams.map((ta) => (
-                          <Badge
-                            key={ta.id}
-                            variant="secondary"
-                            className="text-[10px] font-medium py-0 px-1.5 bg-muted/60 text-foreground"
-                          >
-                            {ta.team?.name || "Team"}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground italic">Unassigned</span>
-                    )}
-
-                    {activeUsers.length > 0 && (
-                      <div className="flex -space-x-1.5 overflow-hidden ml-1">
-                        {activeUsers.slice(0, 3).map((ua) => (
-                          <Tooltip key={ua.id}>
-                            <TooltipTrigger
-                              render={
-                                <Avatar className="size-5 border border-background">
-                                  <AvatarFallback className="text-[9px] bg-primary/20 text-primary font-bold">
-                                    {ua.user?.firstName?.[0]}
-                                    {ua.user?.lastName?.[0]}
-                                  </AvatarFallback>
-                                </Avatar>
-                              }
-                            />
-                            <TooltipContent side="top" className="text-xs">
-                              {ua.user?.firstName} {ua.user?.lastName} ({ua.role?.name})
-                            </TooltipContent>
-                          </Tooltip>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <ProjectTeamsAndAssignees
+                    teamAssignments={project.teamAssignments}
+                    userAssignments={project.userAssignments}
+                    maxVisibleTeams={2}
+                    maxVisibleUsers={3}
+                  />
                 </TableCell>
 
                 {/* 6. Value (Sensitive Field) */}

@@ -20,12 +20,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@workspace/ui/components/tooltip";
 import type { TeamItem } from "@workspace/shared";
+import { TeamMembersAndLeads } from "./TeamMembersAndLeads";
 import {
   MoreHorizontal,
   Users,
@@ -34,7 +30,6 @@ import {
   Trash2,
   Building2,
   Clock,
-  Crown,
   UserPlus,
 } from "lucide-react";
 
@@ -53,10 +48,6 @@ export function TeamTable({
   onEdit,
   onDelete,
 }: TeamTableProps) {
-  const getInitials = (first?: string, last?: string) => {
-    return `${(first?.[0] || "").toUpperCase()}${(last?.[0] || "").toUpperCase()}` || "U";
-  };
-
   if (teams.length === 0) {
     return (
       <div className="py-16 text-center border rounded-xl bg-card space-y-2">
@@ -85,11 +76,6 @@ export function TeamTable({
         </TableHeader>
         <TableBody>
           {teams.map((team) => {
-            const activeMembers = team.members || [];
-            const leads = team.leads || activeMembers.filter((m) => m.role?.qualifiesForTeamScope);
-            const displayMembers = activeMembers.slice(0, 4);
-            const remainingCount = activeMembers.length - 4;
-
             return (
               <TableRow
                 key={team.id}
@@ -146,62 +132,12 @@ export function TeamTable({
 
                 {/* Members & Avatar Stack */}
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-2">
-                    {/* Avatar Group */}
-                    {activeMembers.length === 0 ? (
-                      <span className="text-xs text-muted-foreground italic">No members</span>
-                    ) : (
-                      <div className="flex items-center -space-x-2">
-                        {displayMembers.map((member) => (
-                          <Tooltip key={member.id}>
-                            <TooltipTrigger>
-                              <Avatar className="size-7 border-2 border-background ring-1 ring-border shadow-2xs cursor-pointer">
-                                {member.user.avatarUrl && (
-                                  <AvatarImage
-                                    src={member.user.avatarUrl}
-                                    alt={`${member.user.firstName || ""} ${member.user.lastName || ""}`.trim()}
-                                  />
-                                )}
-                                <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
-                                  {getInitials(member.user.firstName, member.user.lastName)}
-                                </AvatarFallback>
-                              </Avatar>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs space-y-0.5">
-                              <p className="font-semibold flex items-center gap-1">
-                                {member.user.firstName} {member.user.lastName}
-                                {member.role.qualifiesForTeamScope && (
-                                  <Crown className="size-2.5 text-amber-500" />
-                                )}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                Role: {member.role.name}
-                              </p>
-                              {member.user.designation?.name && (
-                                <p className="text-[10px] text-muted-foreground">
-                                  Title: {member.user.designation.name}
-                                </p>
-                              )}
-                            </TooltipContent>
-                          </Tooltip>
-                        ))}
-
-                        {remainingCount > 0 && (
-                          <div className="flex items-center justify-center size-7 rounded-full bg-muted border-2 border-background ring-1 ring-border text-[10px] font-semibold text-muted-foreground">
-                            +{remainingCount}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Leads tag */}
-                    {leads[0] && (
-                      <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 gap-1 ml-1">
-                        <Crown className="size-2.5" />
-                        <span>{leads[0]?.user?.firstName}</span>
-                      </Badge>
-                    )}
-                  </div>
+                  <TeamMembersAndLeads
+                    members={team.members}
+                    leads={team.leads}
+                    maxVisible={4}
+                    showLeadBadge={true}
+                  />
                 </TableCell>
 
                 {/* Projects Count */}

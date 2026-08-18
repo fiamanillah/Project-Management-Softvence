@@ -20,12 +20,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@workspace/ui/components/tooltip";
 import type { TeamItem } from "@workspace/shared";
+import { TeamMembersAndLeads } from "./TeamMembersAndLeads";
 import {
   MoreHorizontal,
   Users,
@@ -54,10 +50,6 @@ export function TeamCardGrid({
   onEdit,
   onDelete,
 }: TeamCardGridProps) {
-  const getInitials = (first?: string, last?: string) => {
-    return `${(first?.[0] || "").toUpperCase()}${(last?.[0] || "").toUpperCase()}` || "U";
-  };
-
   if (teams.length === 0) {
     return (
       <div className="py-16 text-center border rounded-xl bg-card space-y-2">
@@ -75,8 +67,6 @@ export function TeamCardGrid({
       {teams.map((team) => {
         const activeMembers = team.members || [];
         const leads = team.leads || activeMembers.filter((m) => m.role?.qualifiesForTeamScope);
-        const displayMembers = activeMembers.slice(0, 5);
-        const remainingCount = activeMembers.length - 5;
         const projectCount = team._count?.projectAssignments || 0;
 
         return (
@@ -204,42 +194,14 @@ export function TeamCardGrid({
 
               {/* Members Avatar Row & Projects Count */}
               <div className="flex items-center justify-between pt-1 text-xs">
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {activeMembers.length === 0 ? (
-                    <span className="text-[11px] text-muted-foreground italic">0 Members</span>
-                  ) : (
-                    <div className="flex items-center -space-x-2">
-                      {displayMembers.map((member) => (
-                        <Tooltip key={member.id}>
-                          <TooltipTrigger>
-                            <Avatar className="size-7 border-2 border-background ring-1 ring-border shadow-2xs cursor-pointer">
-                              {member.user.avatarUrl && (
-                                <AvatarImage
-                                  src={member.user.avatarUrl}
-                                  alt={`${member.user.firstName || ""} ${member.user.lastName || ""}`.trim()}
-                                />
-                              )}
-                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
-                                {getInitials(member.user.firstName, member.user.lastName)}
-                              </AvatarFallback>
-                            </Avatar>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">
-                            <p className="font-semibold">
-                              {member.user.firstName} {member.user.lastName}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">{member.role.name}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
-
-                      {remainingCount > 0 && (
-                        <div className="flex items-center justify-center size-7 rounded-full bg-muted border-2 border-background ring-1 ring-border text-[10px] font-semibold text-muted-foreground">
-                          +{remainingCount}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <TeamMembersAndLeads
+                    members={team.members}
+                    leads={team.leads}
+                    maxVisible={4}
+                    showLeadBadge={false}
+                    compact={true}
+                  />
                 </div>
 
                 <div className="flex items-center gap-1.5 text-muted-foreground text-xs">

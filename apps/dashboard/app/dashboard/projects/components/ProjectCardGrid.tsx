@@ -4,7 +4,6 @@ import * as React from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import {
   DropdownMenu,
@@ -30,6 +29,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import type { ProjectItem } from "@workspace/shared";
+import { ProjectTeamsAndAssignees } from "./ProjectTeamsAndAssignees";
 
 interface ProjectCardGridProps {
   projects: ProjectItem[];
@@ -271,31 +271,14 @@ export function ProjectCardGrid({
             {/* Footer */}
             <CardFooter className="p-4 pt-2 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
               {/* Teams & User Avatars */}
-              <div className="flex items-center gap-1.5 min-w-0">
-                {activeTeams.length > 0 ? (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] font-medium bg-muted/60 text-foreground px-1.5 py-0 truncate max-w-[120px]"
-                  >
-                    <UsersRound className="size-2.5 mr-1 text-primary shrink-0" />
-                    {activeTeams[0]?.team?.name}
-                  </Badge>
-                ) : (
-                  <span className="text-[11px] italic">No team</span>
-                )}
-
-                {activeUsers.length > 0 && (
-                  <div className="flex -space-x-1.5 overflow-hidden">
-                    {activeUsers.slice(0, 3).map((ua) => (
-                      <Avatar key={ua.id} className="size-5 border border-background">
-                        <AvatarFallback className="text-[9px] bg-primary/20 text-primary font-bold">
-                          {ua.user?.firstName?.[0]}
-                          {ua.user?.lastName?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                    ))}
-                  </div>
-                )}
+              <div onClick={(e) => e.stopPropagation()} className="min-w-0 max-w-[65%]">
+                <ProjectTeamsAndAssignees
+                  teamAssignments={project.teamAssignments}
+                  userAssignments={project.userAssignments}
+                  maxVisibleTeams={1}
+                  maxVisibleUsers={2}
+                  compact={true}
+                />
               </div>
 
               {/* Deadline */}
