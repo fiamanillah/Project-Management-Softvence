@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { UserSearchSelect, type UserItem } from "@/components/user-search-select";
+import { AvatarUpload } from "@/components/AvatarUpload";
 import { api, handleFormApiError } from "@/lib/api";
 import { toast } from "sonner";
 import type { DepartmentItem, AssignmentRoleItem } from "@workspace/shared";
@@ -76,6 +77,8 @@ export function CreateTeamModal({
   const [shift, setShift] = React.useState<string>("Day");
   const [isActive, setIsActive] = React.useState(true);
   const [isCustomSlug, setIsCustomSlug] = React.useState(false);
+  const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
 
@@ -94,6 +97,8 @@ export function CreateTeamModal({
       setShift("Day");
       setIsActive(true);
       setIsCustomSlug(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
       setFieldErrors({});
       setInitialMembers([]);
       setDraftUserId("");
@@ -166,7 +171,7 @@ export function CreateTeamModal({
 
     setLoading(true);
     try {
-      await api.post("/teams", {
+      const created = await api.post("/teams", {
         name: name.trim(),
         slug: slug.trim() || undefined,
         departmentId,
@@ -181,6 +186,16 @@ export function CreateTeamModal({
               }))
             : undefined,
       });
+
+      if (avatarFile && created?.id) {
+        try {
+          const formData = new FormData();
+          formData.append("avatar", avatarFile);
+          await api.upload(`/teams/${created.id}/avatar`, formData);
+        } catch (uploadErr) {
+          console.warn("Failed to upload initial team avatar:", uploadErr);
+        }
+      }
 
       toast.success(`Team "${name.trim()}" created successfully.`);
       onOpenChange(false);
@@ -225,6 +240,32 @@ export function CreateTeamModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Team Avatar Draft */}
+          <div className="p-3.5 rounded-xl border bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="space-y-0.5 text-center sm:text-left">
+              <h4 className="text-xs font-semibold text-foreground">Team Logo & Avatar</h4>
+              <p className="text-[11px] text-muted-foreground">
+                Set an optional logo for this new team.
+              </p>
+            </div>
+            <AvatarUpload
+              currentAvatarUrl={avatarPreview}
+              fallbackName={name || "New Team"}
+              size="md"
+              onUpload={async (file) => {
+                setAvatarFile(file);
+                const url = URL.createObjectURL(file);
+                setAvatarPreview(url);
+                return url;
+              }}
+              onRemove={async () => {
+                setAvatarFile(null);
+                setAvatarPreview(null);
+              }}
+              showHelpText={false}
+            />
+          </div>
+
           {/* Top Row: Name and Slug */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Team Name */}

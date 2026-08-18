@@ -15,6 +15,7 @@ import {
   AvatarImage,
 } from "@workspace/ui/components/avatar";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { cn } from "@workspace/ui/lib/utils";
 import {
   Search,
@@ -500,12 +501,12 @@ export function SearchableSelect<T = unknown>({
           align="start"
           sideOffset={6}
           className={cn(
-            "w-[var(--anchor-width)] min-w-[320px] max-w-[420px] p-0 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg z-50",
+            "w-[var(--anchor-width)] min-w-[320px] max-w-[440px] p-0 gap-0 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl z-50",
             popoverContentClassName
           )}
         >
           {/* Search Header */}
-          <div className="p-2.5 pb-2 border-b bg-muted/20 space-y-2">
+          <div className="p-2.5 pb-2 border-b bg-muted/20 space-y-2 shrink-0">
             <div className="relative flex items-center">
               <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -560,8 +561,12 @@ export function SearchableSelect<T = unknown>({
             )}
           </div>
 
-          {/* List Content */}
-          <div className="max-h-60 overflow-y-auto p-1.5 space-y-1">
+          {/* List Content - Bounded height with guaranteed native smooth scroll */}
+          <div
+            key={`page-${activePage}`}
+            className="h-[240px] max-h-[240px] overflow-y-auto p-1.5 space-y-1 overscroll-contain select-none focus:outline-hidden"
+            style={{ scrollbarWidth: "thin" }}
+          >
             {isLoading && currentItems.length === 0 ? (
               <div className="p-2 space-y-2">
                 {[1, 2, 3].map((n) => (
@@ -659,38 +664,83 @@ export function SearchableSelect<T = unknown>({
             )}
           </div>
 
-          {/* Pagination Footer */}
-          {(totalPages > 1 || (totalItemsCount !== undefined && totalItemsCount > pageSize)) && (
-            <div className="flex items-center justify-between p-2 border-t bg-muted/20 text-xs text-muted-foreground">
-              <div className="text-[11px] font-medium">
-                Page <span className="text-foreground font-semibold">{activePage}</span> of{" "}
-                <span className="text-foreground font-semibold">{totalPages}</span>
-                {totalItemsCount !== undefined && (
-                  <span className="ml-1 opacity-70">({totalItemsCount} items)</span>
-                )}
+          {/* Pagination Footer - Fixed & anchored at bottom */}
+          {(currentItems.length > 0 || (totalItemsCount !== undefined && totalItemsCount > 0) || totalPages > 0) && (
+            <div className="flex items-center justify-between px-3 py-2 border-t bg-muted/30 text-xs text-muted-foreground gap-2 select-none shrink-0 z-10">
+              {/* Range / Count indicator */}
+              <div className="text-[11px] font-medium truncate">
+                {(() => {
+                  if (totalItemsCount !== undefined && totalItemsCount > 0) {
+                    const start = (activePage - 1) * pageSize + 1;
+                    const end = Math.min(totalItemsCount, activePage * pageSize);
+                    return (
+                      <span>
+                        <span className="font-semibold text-foreground">{start}–{end}</span> of{" "}
+                        <span className="font-semibold text-foreground">{totalItemsCount}</span>
+                      </span>
+                    );
+                  }
+                  return (
+                    <span>
+                      Page <span className="font-semibold text-foreground">{activePage}</span> of{" "}
+                      <span className="font-semibold text-foreground">{totalPages}</span>
+                    </span>
+                  );
+                })()}
               </div>
 
-              <div className="flex items-center gap-1">
+              {/* Numbered Page Buttons & Navigation */}
+              <div className="flex items-center gap-1 shrink-0">
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon-xs"
+                  size="icon"
                   disabled={activePage <= 1 || isLoading}
                   onClick={() => handlePageChange(activePage - 1)}
                   aria-label="Previous page"
-                  className="size-6 rounded"
+                  className="size-6 rounded text-xs hover:bg-muted"
                 >
                   <ChevronLeft className="size-3.5" />
                 </Button>
 
+                {/* Numbered Page Pills */}
+                {getPagePills(activePage, totalPages).map((p, idx) => {
+                  if (p === "...") {
+                    return (
+                      <span key={`dots-${idx}`} className="text-[10px] text-muted-foreground px-0.5">
+                        ...
+                      </span>
+                    );
+                  }
+                  const isCurrent = p === activePage;
+                  return (
+                    <Button
+                      key={p}
+                      type="button"
+                      variant={isCurrent ? "default" : "outline"}
+                      size="icon"
+                      disabled={isLoading}
+                      onClick={() => handlePageChange(p as number)}
+                      className={cn(
+                        "size-6 rounded text-[11px] font-semibold transition-all",
+                        isCurrent
+                          ? "bg-primary text-primary-foreground shadow-xs pointer-events-none"
+                          : "hover:bg-muted text-foreground"
+                      )}
+                    >
+                      {p}
+                    </Button>
+                  );
+                })}
+
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon-xs"
+                  size="icon"
                   disabled={activePage >= totalPages || isLoading}
                   onClick={() => handlePageChange(activePage + 1)}
                   aria-label="Next page"
-                  className="size-6 rounded"
+                  className="size-6 rounded text-xs hover:bg-muted"
                 >
                   <ChevronRight className="size-3.5" />
                 </Button>
@@ -788,4 +838,27 @@ function TriggerBadge({ info }: { info: SearchableSelectBadgeInfo | null }) {
       {info.text}
     </Badge>
   );
+}
+
+function getPagePills(activePage: number, totalPages: number): (number | "...")[] {
+  if (totalPages <= 5) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const pills: (number | "...")[] = [];
+  pills.push(1);
+  if (activePage > 3) {
+    pills.push("...");
+  }
+  const start = Math.max(2, activePage - 1);
+  const end = Math.min(totalPages - 1, activePage + 1);
+  for (let i = start; i <= end; i++) {
+    if (!pills.includes(i)) pills.push(i);
+  }
+  if (activePage < totalPages - 2) {
+    pills.push("...");
+  }
+  if (!pills.includes(totalPages)) {
+    pills.push(totalPages);
+  }
+  return pills;
 }

@@ -169,6 +169,11 @@ export function ProjectTable({
                           ↳ {project.parentProject.projectName}
                         </span>
                       )}
+                      {project.orderSource && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-normal bg-muted/40 text-muted-foreground">
+                          {project.orderSource.name}
+                        </Badge>
+                      )}
                       {(project._count?.subProjects || 0) > 0 && (
                         <Badge variant="secondary" className="text-[9px] px-1 py-0 font-normal">
                           {project._count?.subProjects} sub-orders
@@ -200,9 +205,9 @@ export function ProjectTable({
                       <span className="text-xs font-semibold text-foreground">
                         {project.client.name}
                       </span>
-                      {project.email && (
-                        <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[140px]" title={project.email}>
-                          {project.email}
+                      {(project.client.email || project.email) && (
+                        <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[140px]" title={project.client.email || project.email || undefined}>
+                          {project.client.email || project.email}
                         </span>
                       )}
                     </div>
@@ -249,24 +254,18 @@ export function ProjectTable({
                   <div className="flex items-center gap-2">
                     {activeTeams.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
-                        {activeTeams.slice(0, 2).map((ta) => (
+                        {activeTeams.map((ta) => (
                           <Badge
                             key={ta.id}
                             variant="secondary"
-                            className="text-[10px] font-medium bg-muted/80 text-foreground px-1.5 py-0"
+                            className="text-[10px] font-medium py-0 px-1.5 bg-muted/60 text-foreground"
                           >
-                            <UsersRound className="size-2.5 mr-1 text-primary" />
-                            {ta.team?.name}
+                            {ta.team?.name || "Team"}
                           </Badge>
                         ))}
-                        {activeTeams.length > 2 && (
-                          <span className="text-[10px] text-muted-foreground self-center">
-                            +{activeTeams.length - 2}
-                          </span>
-                        )}
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                      <span className="text-[11px] text-muted-foreground italic">Unassigned</span>
                     )}
 
                     {activeUsers.length > 0 && (
@@ -298,12 +297,12 @@ export function ProjectTable({
                   {canViewFinancials ? (
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs font-bold text-foreground">
-                        ${Number(project.value || 0).toLocaleString()}
+                        ${Number(project.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
-                      {(project.amount !== null && project.amount !== undefined || project.percentage !== null && project.percentage !== undefined) && (
+                      {project.amount !== null && project.amount !== undefined && (
                         <span className="font-mono text-[10px] text-muted-foreground">
-                          {project.amount !== null && project.amount !== undefined ? `Net: $${Number(project.amount).toLocaleString()}` : ""}
-                          {project.percentage !== null && project.percentage !== undefined ? ` (${project.percentage}%)` : ""}
+                          Amt: ${Number(project.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {project.percentage !== null && project.percentage !== undefined ? ` (-${project.percentage}%)` : ""}
                         </span>
                       )}
                     </div>

@@ -15,6 +15,7 @@ function getActor(req: Request) {
   return {
     id: req.user.sub,
     systemRole: req.user.systemRole,
+    roleId: req.user.roleId,
     designationId: req.user.designationId,
     email: (req.user as any).email,
   };
@@ -75,6 +76,21 @@ export class TeamsController extends BaseController {
     const teamId = req.params.id as string;
     const result = await this.teamsService.deleteTeam(teamId, actor, req);
     return this.sendResponse(req, res, result.message, 200, result);
+  }
+
+  public async uploadTeamAvatar(req: Request, res: Response) {
+    const actor = getActor(req);
+    const teamId = req.params.id as string;
+    const file = req.file as Express.Multer.File;
+    const result = await this.teamsService.uploadAvatar(teamId, file, actor, req);
+    return this.sendResponse(req, res, result.message, 200, result);
+  }
+
+  public async removeTeamAvatar(req: Request, res: Response) {
+    const actor = getActor(req);
+    const teamId = req.params.id as string;
+    const result = await this.teamsService.removeAvatar(teamId, actor, req);
+    return this.sendResponse(req, res, result.message, 200, result.team);
   }
 
   public async getTeamMembers(req: Request, res: Response) {

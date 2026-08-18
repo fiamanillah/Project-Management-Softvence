@@ -10,6 +10,7 @@ model Project {
   profileId     String    @map("profile_id") @db.Uuid
   serviceLineId String?   @map("service_line_id") @db.Uuid
   statusId      String    @map("status_id") @db.Uuid
+  orderSourceId String?   @map("order_source_id") @db.Uuid
   orderId       String    @unique @map("order_id")
   projectName   String    @map("project_name")
   service       String?
@@ -33,6 +34,7 @@ model Project {
   profile     Profile       @relation(fields: [profileId], references: [id])
   serviceLine ServiceLine?  @relation(fields: [serviceLineId], references: [id])
   status      ProjectStatus @relation(fields: [statusId], references: [id])
+  orderSource OrderSource?  @relation(fields: [orderSourceId], references: [id])
 
   components             ProjectComponent[]
   teamAssignments        ProjectTeamAssignment[]
@@ -50,6 +52,7 @@ model Project {
   @@index([profileId])
   @@index([clientId])
   @@index([serviceLineId])
+  @@index([orderSourceId])
   @@index([statusId])
   @@index([statusId, deletedAt])
   @@map("projects")

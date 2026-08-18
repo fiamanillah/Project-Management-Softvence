@@ -1,12 +1,12 @@
-// src/Modules/Users/users.controller.ts
-
 import { Request, Response } from "express";
 import { BaseController } from "@/core/BaseController";
 import { UsersService } from "./users.service";
+import { AuthenticationError, BadRequestError } from "@/core/errors/AppError";
 import type {
   CreateAdminUserDTO,
   ResendInviteDTO,
   UpdateAdminUserDTO,
+  UpdateProfileDTO,
   CreateOverrideDTO,
   CreateDelegationDTO,
 } from "./UserDTO";
@@ -16,12 +16,66 @@ export class UsersController extends BaseController {
     super();
   }
 
+  // Current User Profile & Avatar
+  public async getProfile(req: Request, res: Response) {
+    const userId = req.user?.sub || (req.user as any)?.id;
+    if (!userId) throw new AuthenticationError("User not authenticated");
+
+    const profile = await this.usersService.getProfile(userId);
+    return this.sendResponse(req, res, "User profile retrieved successfully", 200, profile);
+  }
+
+  public async updateProfile(req: Request, res: Response) {
+    const userId = req.user?.sub || (req.user as any)?.id;
+    if (!userId) throw new AuthenticationError("User not authenticated");
+
+    const dto = req.validatedBody as UpdateProfileDTO;
+    const updated = await this.usersService.updateProfile(userId, dto, req);
+    return this.sendResponse(req, res, "Profile updated successfully", 200, updated);
+  }
+
+  public async uploadMyAvatar(req: Request, res: Response) {
+    const userId = req.user?.sub || (req.user as any)?.id;
+    if (!userId) throw new AuthenticationError("User not authenticated");
+
+    const file = req.file;
+    if (!file) throw new BadRequestError("Please provide an image file in the 'avatar' or 'file' field");
+
+    const result = await this.usersService.uploadAvatar(userId, file, req);
+    return this.sendResponse(req, res, "Profile picture uploaded successfully", 200, result);
+  }
+
+  public async removeMyAvatar(req: Request, res: Response) {
+    const userId = req.user?.sub || (req.user as any)?.id;
+    if (!userId) throw new AuthenticationError("User not authenticated");
+
+    const result = await this.usersService.removeAvatar(userId, req);
+    return this.sendResponse(req, res, result.message, 200, result.user);
+  }
+
+  // Admin User Avatar Management
+  public async uploadUserAvatar(req: Request, res: Response) {
+    const userId = req.params.id as string;
+    const file = req.file;
+    if (!file) throw new BadRequestError("Please provide an image file in the 'avatar' or 'file' field");
+
+    const result = await this.usersService.uploadAvatar(userId, file, req);
+    return this.sendResponse(req, res, "User avatar uploaded successfully", 200, result);
+  }
+
+  public async removeUserAvatar(req: Request, res: Response) {
+    const userId = req.params.id as string;
+    const result = await this.usersService.removeAvatar(userId, req);
+    return this.sendResponse(req, res, result.message, 200, result.user);
+  }
+
   // Users
   public async getUsers(req: Request, res: Response) {
     const actor = req.user
       ? {
           id: req.user.sub,
           systemRole: req.user.systemRole,
+          roleId: req.user.roleId,
           designationId: req.user.designationId,
           email: (req.user as any).email,
         }

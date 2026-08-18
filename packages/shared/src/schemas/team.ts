@@ -10,6 +10,7 @@ export const createTeamSchema = z.object({
     .optional(),
   departmentId: z.string().uuid("Invalid department ID format"),
   shift: z.string().max(50, "Shift description is too long").optional().nullable(),
+  avatarUrl: z.string().nullable().optional(),
   isActive: z.boolean().optional().default(true),
   initialMembers: z
     .array(
@@ -32,6 +33,7 @@ export const updateTeamSchema = z.object({
     .optional(),
   departmentId: z.string().uuid("Invalid department ID format").optional(),
   shift: z.string().max(50).optional().nullable(),
+  avatarUrl: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -75,6 +77,7 @@ export interface TeamMemberItem {
     lastName: string;
     email: string;
     systemRole: string;
+    avatarUrl?: string | null;
     isActive: boolean;
     designation?: {
       id: string;
@@ -108,6 +111,7 @@ export interface TeamItem {
   name: string;
   slug: string;
   shift: string | null;
+  avatarUrl?: string | null;
   isActive: boolean;
   createdAt: string | Date;
   updatedAt?: string | Date | null;

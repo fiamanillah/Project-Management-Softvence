@@ -6,6 +6,7 @@ import {
   type SearchableSelectCriteria,
 } from "@workspace/ui/components/searchable-select";
 import { Badge } from "@workspace/ui/components/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import { api } from "@/lib/api";
 import {
   User,
@@ -13,6 +14,7 @@ import {
   Shield,
   Briefcase,
   Layers,
+  Hash,
 } from "lucide-react";
 
 export interface UserItem {
@@ -61,6 +63,7 @@ const USER_CRITERIA: SearchableSelectCriteria[] = [
   { value: "all", label: "All", icon: Layers },
   { value: "name", label: "Name", icon: User },
   { value: "email", label: "Email", icon: Mail },
+  { value: "employeeId", label: "Employee ID", icon: Hash },
   { value: "role", label: "Role", icon: Shield },
   { value: "designation", label: "Designation", icon: Briefcase },
 ];
@@ -113,38 +116,30 @@ export function UserSearchSelect({
 
       const res = await api.get(`/users?${searchParams.toString()}`, { signal });
 
-      // Response format: { data: UserItem[], meta: { page, limit, total, totalPages } }
       const userList: UserItem[] = Array.isArray(res)
         ? res
         : Array.isArray(res?.data)
           ? res.data
-          : res?.items || [];
+          : Array.isArray(res?.items)
+            ? res.items
+            : [];
 
-      const meta = res?.meta || {};
+      const pagination =
+        (res as any)?.pagination ||
+        (res as any)?.meta?.pagination ||
+        res?.meta ||
+        (res as any)?.data?.meta;
 
-      // Filter client-side if specific criteria like email, name, designation is active
-      let filtered = userList;
-      if (query.trim()) {
-        const q = query.toLowerCase().trim();
-        if (criteria === "name") {
-          filtered = userList.filter((u) =>
-            `${u.firstName || ""} ${u.lastName || ""}`.toLowerCase().includes(q)
-          );
-        } else if (criteria === "email") {
-          filtered = userList.filter((u) => u.email?.toLowerCase().includes(q));
-        } else if (criteria === "designation") {
-          filtered = userList.filter(
-            (u) =>
-              u.designation?.name?.toLowerCase().includes(q) ||
-              u.designation?.code?.toLowerCase().includes(q)
-          );
-        }
-      }
+      const total = typeof pagination?.total === "number" ? pagination.total : userList.length;
+      const totalPages =
+        typeof pagination?.totalPages === "number"
+          ? pagination.totalPages
+          : Math.max(1, Math.ceil(total / limit));
 
       return {
-        items: filtered,
-        totalPages: meta.totalPages || Math.ceil((meta.total || filtered.length) / limit) || 1,
-        totalItems: meta.total ?? filtered.length,
+        items: userList,
+        totalPages,
+        totalItems: total,
       };
     },
     [roleFilter, designationId]
@@ -220,9 +215,12 @@ export function UserSearchSelect({
 
         return (
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="size-5 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[9px] shrink-0">
-              {fallback}
-            </div>
+            <Avatar className="size-5 shrink-0">
+              {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt={displayName} />}
+              <AvatarFallback className="bg-primary/10 text-primary font-bold text-[9px]">
+                {fallback}
+              </AvatarFallback>
+            </Avatar>
             <span className="font-medium truncate text-foreground text-xs">{displayName}</span>
             <span className="text-[11px] text-muted-foreground truncate hidden sm:inline">
               ({u.email})
@@ -244,9 +242,12 @@ export function UserSearchSelect({
 
         return (
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-xs shrink-0">
-              {fallback}
-            </div>
+            <Avatar className="size-7 shrink-0">
+              {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt={displayName} />}
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
+                {fallback}
+              </AvatarFallback>
+            </Avatar>
 
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5">

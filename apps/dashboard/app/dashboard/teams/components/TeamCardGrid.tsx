@@ -11,7 +11,7 @@ import {
 } from "@workspace/ui/components/card";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,21 +87,35 @@ export function TeamCardGrid({
           >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <CardTitle className="text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                      {team.name}
-                    </CardTitle>
-                    <Badge
-                      variant={team.isActive ? "default" : "secondary"}
-                      className="text-[10px] py-0"
-                    >
-                      {team.isActive ? "Active" : "Inactive"}
-                    </Badge>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="size-10 rounded-xl border border-primary/20 shrink-0 shadow-2xs">
+                    {team.avatarUrl && (
+                      <AvatarImage
+                        src={team.avatarUrl}
+                        alt={team.name}
+                        className="rounded-xl object-cover"
+                      />
+                    )}
+                    <AvatarFallback className="rounded-xl bg-primary/10 text-primary font-bold text-xs">
+                      {team.name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CardTitle className="text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                        {team.name}
+                      </CardTitle>
+                      <Badge
+                        variant={team.isActive ? "default" : "secondary"}
+                        className="text-[10px] py-0"
+                      >
+                        {team.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-xs font-mono text-muted-foreground truncate">
+                      {team.slug}
+                    </CardDescription>
                   </div>
-                  <CardDescription className="text-xs font-mono text-muted-foreground truncate">
-                    {team.slug}
-                  </CardDescription>
                 </div>
 
                 <div onClick={(e) => e.stopPropagation()}>
@@ -199,6 +213,12 @@ export function TeamCardGrid({
                         <Tooltip key={member.id}>
                           <TooltipTrigger>
                             <Avatar className="size-7 border-2 border-background ring-1 ring-border shadow-2xs cursor-pointer">
+                              {member.user.avatarUrl && (
+                                <AvatarImage
+                                  src={member.user.avatarUrl}
+                                  alt={`${member.user.firstName || ""} ${member.user.lastName || ""}`.trim()}
+                                />
+                              )}
                               <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
                                 {getInitials(member.user.firstName, member.user.lastName)}
                               </AvatarFallback>

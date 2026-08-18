@@ -22,6 +22,7 @@ import {
 } from "@workspace/ui/components/select";
 import { api, handleFormApiError } from "@/lib/api";
 import { toast } from "sonner";
+import { AvatarUpload } from "@/components/AvatarUpload";
 import type { TeamItem, DepartmentItem } from "@workspace/shared";
 import { Settings, Loader2, Building2, Clock } from "lucide-react";
 
@@ -128,6 +129,27 @@ export function EditTeamModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Team Avatar */}
+          <div className="p-3.5 rounded-xl border bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="space-y-0.5 text-center sm:text-left">
+              <h4 className="text-xs font-semibold text-foreground">Team Logo & Avatar</h4>
+              <p className="text-[11px] text-muted-foreground">
+                Upload a distinctive avatar or logo for this team.
+              </p>
+            </div>
+            <AvatarUpload
+              currentAvatarUrl={team.avatarUrl}
+              fallbackName={team.name}
+              size="md"
+              uploadEndpoint={`/teams/${team.id}/avatar`}
+              removeEndpoint={`/teams/${team.id}/avatar`}
+              onAvatarChange={() => {
+                onSuccess();
+              }}
+              showHelpText={false}
+            />
+          </div>
+
           {/* Top Row: Name and Slug */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Team Name */}

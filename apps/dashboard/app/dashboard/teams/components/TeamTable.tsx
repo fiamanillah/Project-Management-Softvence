@@ -11,7 +11,7 @@ import {
 } from "@workspace/ui/components/table";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -98,13 +98,27 @@ export function TeamTable({
               >
                 {/* Team Info */}
                 <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-1.5">
-                      {team.name}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground font-mono">
-                      {team.slug}
-                    </span>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="size-9 rounded-lg border border-primary/20 shrink-0 shadow-2xs">
+                      {team.avatarUrl && (
+                        <AvatarImage
+                          src={team.avatarUrl}
+                          alt={team.name}
+                          className="rounded-lg object-cover"
+                        />
+                      )}
+                      <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                        {team.name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate">
+                        {team.name}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-mono truncate">
+                        {team.slug}
+                      </span>
+                    </div>
                   </div>
                 </TableCell>
 
@@ -142,6 +156,12 @@ export function TeamTable({
                           <Tooltip key={member.id}>
                             <TooltipTrigger>
                               <Avatar className="size-7 border-2 border-background ring-1 ring-border shadow-2xs cursor-pointer">
+                                {member.user.avatarUrl && (
+                                  <AvatarImage
+                                    src={member.user.avatarUrl}
+                                    alt={`${member.user.firstName || ""} ${member.user.lastName || ""}`.trim()}
+                                  />
+                                )}
                                 <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
                                   {getInitials(member.user.firstName, member.user.lastName)}
                                 </AvatarFallback>

@@ -1,17 +1,40 @@
-// src/Modules/Users/UsersModule.ts
-
+import multer from "multer";
 import { BaseModule } from "@/core/BaseModule";
 import { UsersService } from "./users.service";
 import { UsersController } from "./users.controller";
 import { validateRequest } from "@/middleware/validation";
 import { authenticate } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/requirePermission";
+import type { PrismaClient } from "@workspace/db";
+import type { StorageManager } from "@workspace/storage";
 import {
   createAdminUserSchema,
   updateAdminUserSchema,
+  updateProfileSchema,
   createOverrideSchema,
   createDelegationSchema,
 } from "./UserDTO";
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/svg+xml",
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files (JPEG, PNG, WEBP, GIF, SVG) are allowed"));
+    }
+  },
+});
 
 export class UsersModule extends BaseModule {
   public name: string = "UsersModule";
@@ -21,8 +44,14 @@ export class UsersModule extends BaseModule {
   public dependencies?: string[] = [];
 
   protected async setupUseCases(): Promise<void> {
-    const prisma = this.context.getService("prisma");
-    this.registerService("UsersService", new UsersService(prisma));
+    const prisma = this.context.getService("prisma") as PrismaClient;
+    let storageManager: StorageManager | undefined;
+    try {
+      storageManager = this.context.getService("storage") as StorageManager;
+    } catch {
+      // Storage service optional in isolated test environments
+    }
+    this.registerService("UsersService", new UsersService(prisma, storageManager));
   }
 
   protected async setupControllers(): Promise<void> {
@@ -35,28 +64,24 @@ export class UsersModule extends BaseModule {
 
     this.router.use(authenticate);
 
-    // Users
+    // Current User Profile & Avatar (Must precede parameterized /:id routes)
     this.router.get(
-      "/",
-      requirePermission("auth.user.view"),
-      controller.getUsers.bind(controller),
-    );
-    this.router.post(
-      "/",
-      requirePermission("auth.user.create"),
-      validateRequest({ body: createAdminUserSchema }),
-      controller.createUser.bind(controller),
+      "/me",
+      controller.getProfile.bind(controller),
     );
     this.router.patch(
-      "/:id",
-      requirePermission("auth.user.manage"),
-      validateRequest({ body: updateAdminUserSchema }),
-      controller.updateUser.bind(controller),
+      "/me",
+      validateRequest({ body: updateProfileSchema }),
+      controller.updateProfile.bind(controller),
     );
     this.router.post(
-      "/:id/resend-invite",
-      requirePermission("auth.user.manage"),
-      controller.resendInvite.bind(controller),
+      "/me/avatar",
+      avatarUpload.single("avatar"),
+      controller.uploadMyAvatar.bind(controller),
+    );
+    this.router.delete(
+      "/me/avatar",
+      controller.removeMyAvatar.bind(controller),
     );
 
     // Overrides
@@ -93,6 +118,41 @@ export class UsersModule extends BaseModule {
       "/delegations/:id",
       requirePermission("auth.user.manage"),
       controller.revokeDelegation.bind(controller),
+    );
+
+    // User Directory & Admin Management
+    this.router.get(
+      "/",
+      requirePermission("auth.user.view"),
+      controller.getUsers.bind(controller),
+    );
+    this.router.post(
+      "/",
+      requirePermission("auth.user.create"),
+      validateRequest({ body: createAdminUserSchema }),
+      controller.createUser.bind(controller),
+    );
+    this.router.patch(
+      "/:id",
+      requirePermission("auth.user.manage"),
+      validateRequest({ body: updateAdminUserSchema }),
+      controller.updateUser.bind(controller),
+    );
+    this.router.post(
+      "/:id/resend-invite",
+      requirePermission("auth.user.manage"),
+      controller.resendInvite.bind(controller),
+    );
+    this.router.post(
+      "/:id/avatar",
+      requirePermission("auth.user.manage"),
+      avatarUpload.single("avatar"),
+      controller.uploadUserAvatar.bind(controller),
+    );
+    this.router.delete(
+      "/:id/avatar",
+      requirePermission("auth.user.manage"),
+      controller.removeUserAvatar.bind(controller),
     );
   }
 }

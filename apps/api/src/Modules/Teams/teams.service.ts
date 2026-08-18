@@ -1,6 +1,7 @@
 // src/Modules/Teams/teams.service.ts
 
 import type { PrismaClient } from "@workspace/db";
+import { StorageManager } from "@workspace/storage";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
@@ -38,7 +39,10 @@ export interface GetTeamsQuery {
 export class TeamsService {
   private logger = new AppLogger("TeamsService");
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly storage?: StorageManager,
+  ) {}
 
   /**
    * List teams with filters, pagination, member summaries, and computed _capabilities
@@ -367,6 +371,7 @@ export class TeamsService {
           slug,
           departmentId: data.departmentId,
           shift: data.shift || null,
+          avatarUrl: data.avatarUrl || null,
           isActive: data.isActive ?? true,
         },
       });
@@ -482,6 +487,7 @@ export class TeamsService {
         slug: nextSlug ?? existing.slug,
         departmentId: data.departmentId ?? existing.departmentId,
         shift: data.shift !== undefined ? data.shift : existing.shift,
+        avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : existing.avatarUrl,
         isActive: data.isActive !== undefined ? data.isActive : existing.isActive,
         updatedAt: new Date(),
       },
@@ -915,5 +921,151 @@ export class TeamsService {
       where: { isActive: true },
       orderBy: { name: "asc" },
     });
+  }
+
+  /**
+   * Upload and set a public team avatar
+   */
+  public async uploadAvatar(
+    teamId: string,
+    file: Express.Multer.File,
+    actor?: AuthenticatedUser,
+    req?: Request,
+  ) {
+    const ALLOWED_MIMETYPES = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/svg+xml",
+    ];
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+    });
+
+    if (!team) {
+      throw new NotFoundError("Team");
+    }
+
+    if (!file) {
+      throw new BadRequestError("No image file provided");
+    }
+
+    if (!ALLOWED_MIMETYPES.includes(file.mimetype)) {
+      throw new BadRequestError(
+        "Invalid file type. Only JPEG, PNG, WEBP, GIF, and SVG images are allowed.",
+      );
+    }
+
+    if (file.size > MAX_SIZE) {
+      throw new BadRequestError("Image file size exceeds the 5MB limit");
+    }
+
+    let avatarUrl: string;
+
+    if (this.storage) {
+      const uploadResult = await this.storage.uploadFile({
+        body: file.buffer,
+        fileName: file.originalname || `avatar-${teamId}.png`,
+        contentType: file.mimetype,
+        entityType: "team_avatar",
+        entityId: teamId,
+        isPublic: true,
+      });
+      avatarUrl = uploadResult.publicUrl || uploadResult.url;
+    } else {
+      avatarUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+    }
+
+    const updated = await this.prisma.team.update({
+      where: { id: teamId },
+      data: {
+        avatarUrl,
+        updatedAt: new Date(),
+      },
+    });
+
+    this.logger.info(`Team avatar updated: ${updated.name} (${updated.id})`);
+
+    AuditLogService.log({
+      module: "Teams",
+      action: "TEAM_AVATAR_UPDATED",
+      entityTable: "teams",
+      entityId: teamId,
+      actor: actor
+        ? {
+            id: actor.id,
+            email: actor.email || "unknown",
+            role: actor.systemRole,
+          }
+        : undefined,
+      req,
+      metadata: {
+        teamId,
+        avatarUrl,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      },
+      status: "SUCCESS",
+    });
+
+    return {
+      message: "Team avatar uploaded successfully",
+      avatarUrl,
+      team: updated,
+    };
+  }
+
+  /**
+   * Remove team avatar
+   */
+  public async removeAvatar(
+    teamId: string,
+    actor?: AuthenticatedUser,
+    req?: Request,
+  ) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+    });
+
+    if (!team) {
+      throw new NotFoundError("Team");
+    }
+
+    const updated = await this.prisma.team.update({
+      where: { id: teamId },
+      data: {
+        avatarUrl: null,
+        updatedAt: new Date(),
+      },
+    });
+
+    this.logger.info(`Team avatar removed: ${updated.name} (${updated.id})`);
+
+    AuditLogService.log({
+      module: "Teams",
+      action: "TEAM_AVATAR_REMOVED",
+      entityTable: "teams",
+      entityId: teamId,
+      actor: actor
+        ? {
+            id: actor.id,
+            email: actor.email || "unknown",
+            role: actor.systemRole,
+          }
+        : undefined,
+      req,
+      metadata: {
+        teamId,
+      },
+      status: "SUCCESS",
+    });
+
+    return {
+      message: "Team avatar removed successfully",
+      team: updated,
+    };
   }
 }

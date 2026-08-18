@@ -66,6 +66,7 @@ function ProjectsContent() {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [selectedStatusId, setSelectedStatusId] = React.useState<string>("all");
   const [selectedServiceLineId, setSelectedServiceLineId] = React.useState<string>("all");
   const [selectedTeamId, setSelectedTeamId] = React.useState<string>("all");
@@ -77,6 +78,19 @@ function ProjectsContent() {
   const [pageSize, setPageSize] = React.useState(10);
   const [totalPages, setTotalPages] = React.useState(1);
   const [totalCount, setTotalCount] = React.useState(0);
+
+  // Debounce search input by 300ms
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Reset to page 1 whenever filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedStatusId, selectedServiceLineId, selectedTeamId, selectedPlatformId]);
 
   // Modals & Dialogs
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
@@ -106,8 +120,9 @@ function ProjectsContent() {
       const params = new URLSearchParams();
       params.set("page", String(currentPage));
       params.set("limit", String(pageSize));
+      params.set("_t", String(Date.now()));
 
-      if (searchQuery.trim()) params.set("search", searchQuery.trim());
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
       if (selectedStatusId !== "all") params.set("statusId", selectedStatusId);
       if (selectedServiceLineId !== "all") params.set("serviceLineId", selectedServiceLineId);
       if (selectedTeamId !== "all") params.set("teamId", selectedTeamId);
@@ -118,16 +133,19 @@ function ProjectsContent() {
         api.get("/projects/stats"),
       ]);
 
-      const items = projectsRes?.data || (Array.isArray(projectsRes) ? projectsRes : []);
+      const items = Array.isArray(projectsRes) ? projectsRes : projectsRes?.data || [];
       setProjects(items);
 
-      if (projectsRes?.pagination) {
-        setTotalPages(projectsRes.pagination.totalPages || 1);
-        setTotalCount(projectsRes.pagination.total || 0);
-      } else {
-        setTotalCount(items.length);
-        setTotalPages(Math.ceil(items.length / pageSize) || 1);
-      }
+      const pagination =
+        (projectsRes as any)?.pagination ||
+        (projectsRes as any)?.meta?.pagination ||
+        (projectsRes as any)?.meta;
+
+      const total = typeof pagination?.total === "number" ? pagination.total : items.length;
+      const pages = typeof pagination?.totalPages === "number" ? pagination.totalPages : Math.max(1, Math.ceil(total / pageSize));
+
+      setTotalCount(total);
+      setTotalPages(pages);
 
       if (statsRes) {
         setStats(statsRes?.data || statsRes);
@@ -140,7 +158,7 @@ function ProjectsContent() {
   }, [
     currentPage,
     pageSize,
-    searchQuery,
+    debouncedSearch,
     selectedStatusId,
     selectedServiceLineId,
     selectedTeamId,
@@ -252,10 +270,7 @@ function ProjectsContent() {
               <Input
                 placeholder="Search projects by name, order ID, or service line..."
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 h-9 text-xs"
               />
             </div>

@@ -54,6 +54,7 @@ import {
 import { toast } from "sonner";
 import { api, handleFormApiError } from "@/lib/api";
 import { HelpTooltip } from "@/components/HelpTooltip";
+import { AvatarUpload } from "@/components/AvatarUpload";
 import type { AdminUser, UserStatus } from "./UserTable";
 
 const editUserFormSchema = z.object({
@@ -259,6 +260,27 @@ export function EditUserModal({
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
             <ScrollArea className="max-h-[60vh] h-[460px] w-full px-6 py-2">
               <div className="space-y-5 pr-2">
+                {/* Avatar & Profile Picture */}
+                <div className="p-3.5 rounded-lg border bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="space-y-0.5 text-center sm:text-left">
+                    <h4 className="text-xs font-semibold text-foreground">User Avatar</h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      Upload or change profile picture for this account.
+                    </p>
+                  </div>
+                  <AvatarUpload
+                    currentAvatarUrl={user.avatarUrl}
+                    fallbackName={`${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email}
+                    size="md"
+                    uploadEndpoint={`/users/${user.id}/avatar`}
+                    removeEndpoint={`/users/${user.id}/avatar`}
+                    onAvatarChange={() => {
+                      if (onSuccess) onSuccess();
+                    }}
+                    showHelpText={false}
+                  />
+                </div>
+
                 {/* Personal Details */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">

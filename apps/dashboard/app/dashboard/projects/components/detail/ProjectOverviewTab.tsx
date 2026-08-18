@@ -29,6 +29,7 @@ import {
   Check,
   Hash,
   GitFork,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ProjectDetailItem, ProjectItem } from "@workspace/shared";
@@ -132,6 +133,11 @@ export function ProjectOverviewTab({
             {p.parentProject && (
               <Badge variant="outline" className="text-xs gap-1 font-mono text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20 py-1">
                 <GitFork className="size-3.5" /> Child of {p.parentProject.projectName}
+              </Badge>
+            )}
+            {p.orderSource && (
+              <Badge variant="outline" className="text-xs gap-1 font-medium bg-muted/50 border-border/80 py-1">
+                <Tag className="size-3 text-muted-foreground" /> {p.orderSource.name}
               </Badge>
             )}
             <Badge
@@ -318,21 +324,45 @@ export function ProjectOverviewTab({
               )}
             </div>
 
-            {/* Client Identity & Email */}
+            {/* Order Source */}
+            {p.orderSource && (
+              <div className="flex justify-between items-center py-1.5 border-b border-border/40">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Tag className="size-3" /> Order Source
+                </span>
+                <Badge variant="outline" className="text-[11px] font-medium bg-muted/40 text-foreground">
+                  {p.orderSource.name}
+                </Badge>
+              </div>
+            )}
+
+            {/* Client Identity & Details */}
             {canViewClient ? (
               <>
                 <div className="flex justify-between items-center py-1.5 border-b border-border/40">
                   <span className="text-muted-foreground">Client Name</span>
                   <span className="font-semibold text-foreground">{p.client?.name || "Direct Client"}</span>
                 </div>
-                {p.email && (
+                {(p.client?.email || p.email) && (
                   <div className="flex justify-between items-center py-1.5 border-b border-border/40">
                     <span className="text-muted-foreground flex items-center gap-1">
                       <Mail className="size-3" /> Client Email
                     </span>
-                    <a href={`mailto:${p.email}`} className="text-primary hover:underline font-mono">
-                      {p.email}
+                    <a href={`mailto:${p.client?.email || p.email}`} className="text-primary hover:underline font-mono">
+                      {p.client?.email || p.email}
                     </a>
+                  </div>
+                )}
+                {p.client?.company && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-border/40">
+                    <span className="text-muted-foreground">Company</span>
+                    <span className="font-medium text-foreground">{p.client.company}</span>
+                  </div>
+                )}
+                {p.client?.country && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-border/40">
+                    <span className="text-muted-foreground">Country / Location</span>
+                    <span className="font-medium text-foreground">{p.client.country}</span>
                   </div>
                 )}
                 {p.client?.contactNotes && (
@@ -347,19 +377,19 @@ export function ProjectOverviewTab({
                 <ShieldAlert className="size-4 text-muted-foreground mx-auto" />
                 <p className="text-xs font-medium text-foreground">Client Identity Protected</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Client identities and direct emails are restricted to authorized account managers.
+                  Client identities and direct contacts are restricted to authorized account managers.
                 </p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* RIGHT CARD: FINANCIALS, REVENUE SHARE & ORDER SHEET */}
+        {/* RIGHT CARD: FINANCIALS, PLATFORM CHARGE & VALUE */}
         <Card className="border bg-card/60 shadow-2xs">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-xs font-semibold text-foreground flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <DollarSign className="size-4 text-emerald-500" /> Financials & Profit Margins
+                <DollarSign className="size-4 text-emerald-500" /> Financials & Margin
               </span>
               {canViewFinancials ? (
                 <Badge variant="outline" className="text-[10px] text-emerald-600 bg-emerald-500/10 border-emerald-500/20 font-mono">
@@ -376,31 +406,38 @@ export function ProjectOverviewTab({
           <CardContent className="p-4 pt-1 space-y-2.5 text-xs">
             {canViewFinancials ? (
               <>
-                {/* Gross Contract Value */}
+                {/* Gross Amount */}
                 <div className="flex justify-between items-baseline py-1.5 border-b border-border/40">
-                  <span className="text-muted-foreground">Contract Value (Gross)</span>
-                  <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                    ${Number(p.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                {/* Net Payout Amount */}
-                <div className="flex justify-between items-baseline py-1.5 border-b border-border/40">
-                  <span className="text-muted-foreground">Net Payout Amount</span>
+                  <span className="text-muted-foreground">Amount (Gross)</span>
                   <span className="font-semibold font-mono text-foreground">
                     {p.amount !== null && p.amount !== undefined
                       ? `$${Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : "—"}
+                      : `$${Number(p.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </span>
                 </div>
 
-                {/* Share / Profit Margin */}
+                {/* Platform Charge (%) */}
                 <div className="flex justify-between items-center py-1.5 border-b border-border/40">
                   <span className="text-muted-foreground flex items-center gap-1">
-                    <Percent className="size-3" /> Profit Margin / Share
+                    <Percent className="size-3" /> Platform Charge
                   </span>
-                  <span className="font-semibold font-mono text-foreground">
-                    {p.percentage !== null && p.percentage !== undefined ? `${Number(p.percentage)}%` : "—"}
+                  <div className="text-right">
+                    <span className="font-semibold font-mono text-foreground">
+                      {p.percentage !== null && p.percentage !== undefined ? `${Number(p.percentage)}%` : "0%"}
+                    </span>
+                    {p.amount !== null && p.amount !== undefined && p.percentage !== null && p.percentage !== undefined && Number(p.percentage) > 0 && (
+                      <span className="text-[10px] text-muted-foreground ml-1.5">
+                        (-${((Number(p.amount) * Number(p.percentage)) / 100).toFixed(2)})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Net Value */}
+                <div className="flex justify-between items-baseline py-1.5 border-b border-border/40">
+                  <span className="text-muted-foreground font-semibold">Value (Net)</span>
+                  <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                    ${Number(p.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -428,7 +465,7 @@ export function ProjectOverviewTab({
                 <Lock className="size-4 text-muted-foreground mx-auto" />
                 <p className="text-xs font-medium text-foreground">Financial Figures Protected</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Contract values, net payouts, margins, and billing sheets are hidden based on your assigned permission scope.
+                  Amount, platform charge %, net value, and billing sheets are hidden based on your assigned permission scope.
                 </p>
               </div>
             )}

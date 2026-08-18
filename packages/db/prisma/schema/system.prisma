@@ -89,6 +89,20 @@ model MessageType {
   @@map("message_types")
 }
 
+model OrderSource {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @map("updated_at")
+
+  projects Project[]
+
+  @@map("order_sources")
+}
+
 model IssueType {
   id        String   @id @default(uuid()) @db.Uuid
   code      String   @unique

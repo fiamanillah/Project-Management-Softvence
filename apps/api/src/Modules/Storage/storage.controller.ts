@@ -71,7 +71,7 @@ export class StorageController extends BaseController {
    * Stream a private or public file through the API server
    */
   public async streamFile(req: Request, res: Response): Promise<void> {
-    const key = (req.params.key || req.query.key) as string;
+    const key = (req.params.key || (req.params as any)["0"] || (req.params as any)["*"] || req.query.key) as string;
     if (!key) {
       throw new AppError({
         statusCode: HTTPStatusCode.BAD_REQUEST,
@@ -104,7 +104,8 @@ export class StorageController extends BaseController {
    * Delete a file and its attachment records
    */
   public async deleteFile(req: Request, res: Response): Promise<void> {
-    const key = (req.params.key || req.body.key || req.query.key) as string;
+    const key = (req.params.key || (req.params as any)["0"] || (req.params as any)["*"] || req.body.key || req.query.key) as string;
+
     if (!key) {
       throw new AppError({
         statusCode: HTTPStatusCode.BAD_REQUEST,

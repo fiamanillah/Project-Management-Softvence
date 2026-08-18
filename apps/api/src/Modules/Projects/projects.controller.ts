@@ -122,7 +122,13 @@ export class ProjectsController extends BaseController {
     return this.sendResponse(req, res, "Component deleted successfully", 200, updated);
   }
 
-  // Quick-create Lookup Handlers
+  // Lookup Handlers
+  public async getClients(req: Request, res: Response) {
+    const actor = getActor(req);
+    const result = await this.projectsService.getClients(req.query as any, actor);
+    return this.sendResponse(req, res, "Clients retrieved successfully", 200, result);
+  }
+
   public async createClient(req: Request, res: Response) {
     const actor = getActor(req);
     const dto = req.validatedBody;
@@ -156,5 +162,12 @@ export class ProjectsController extends BaseController {
     const dto = req.validatedBody;
     const created = await this.projectsService.createStatus(dto, actor);
     return this.sendCreatedResponse(req, res, created, "Project Status created successfully");
+  }
+
+  public async createOrderSource(req: Request, res: Response) {
+    const actor = getActor(req);
+    const dto = req.validatedBody;
+    const created = await this.projectsService.createOrderSource(dto, actor);
+    return this.sendCreatedResponse(req, res, created, "Order Source created successfully");
   }
 }

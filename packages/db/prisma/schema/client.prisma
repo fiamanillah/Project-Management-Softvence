@@ -6,6 +6,11 @@ model Client {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
   platformId   String   @map("platform_id") @db.Uuid
+  email        String?
+  company      String?
+  phone        String?
+  country      String?
+  website      String?
   contactNotes String?  @map("contact_notes") @db.Text
   createdAt    DateTime @default(now()) @map("created_at")
 

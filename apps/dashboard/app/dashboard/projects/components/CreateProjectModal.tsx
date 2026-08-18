@@ -11,9 +11,8 @@ import {
 } from "@workspace/ui/components/dialog";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import { Label } from "@workspace/ui/components/label";
 import { Badge } from "@workspace/ui/components/badge";
+import { Label } from "@workspace/ui/components/label";
 import { Textarea } from "@workspace/ui/components/textarea";
 import {
   Select,
@@ -24,7 +23,6 @@ import {
 } from "@workspace/ui/components/select";
 import { api, handleFormApiError, extractFieldErrors } from "@/lib/api";
 import { toast } from "sonner";
-import { usePermissions, hasPermission } from "@/lib/permissions/PermissionContext";
 import type {
   ProjectLookups,
   CreateProjectDTO,
@@ -33,6 +31,7 @@ import type {
   ProfileItem,
   ServiceLineItem,
   ClientItem,
+  OrderSourceItem,
 } from "@workspace/shared";
 import {
   QuickCreateClientDialog,
@@ -40,28 +39,22 @@ import {
   QuickCreatePlatformDialog,
   QuickCreateServiceLineDialog,
   QuickCreateStatusDialog,
-} from "./QuickCreateDialogs";
+  QuickCreateOrderSourceDialog,
+} from "./quick-create";
+import {
+  ProjectClassificationFields,
+  ProjectAccountClientFields,
+  ProjectFinancialsFields,
+  ProjectScheduleFields,
+  ProjectDraftComponentsList,
+} from "./forms";
 import {
   Briefcase,
-  DollarSign,
-  Building2,
-  Calendar,
-  Layers,
   Loader2,
-  Lock,
-  Plus,
-  Trash2,
   Sparkles,
-  Globe,
-  Clock,
-  CheckCircle2,
   AlertCircle,
   Hash,
-  GitFork,
-  Link,
-  Mail,
-  Percent,
-  FileText,
+  Layers,
 } from "lucide-react";
 
 interface CreateProjectModalProps {
@@ -71,6 +64,7 @@ interface CreateProjectModalProps {
   initialParentId?: string | null;
   onSuccess: () => void;
   onRefreshLookups?: () => Promise<void>;
+  userPermissions?: Record<string, any>;
 }
 
 export function CreateProjectModal({
@@ -80,27 +74,33 @@ export function CreateProjectModal({
   initialParentId,
   onSuccess,
   onRefreshLookups,
+  userPermissions,
 }: CreateProjectModalProps) {
-  const permissions = usePermissions();
-  const canViewClient = hasPermission(permissions, "project.client.view");
-  const canEditFinancials = hasPermission(permissions, "project.financial.edit");
-
   const [loading, setLoading] = React.useState(false);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [generalError, setGeneralError] = React.useState<string | null>(null);
+
+  // Financial & Sensitive permission checks
+  const canEditFinancials =
+    userPermissions?.["project.financial.edit"] !== undefined
+      ? Boolean(userPermissions["project.financial.edit"])
+      : true;
+  const canViewClient =
+    userPermissions?.["project.client.view"] !== undefined
+      ? Boolean(userPermissions["project.client.view"])
+      : true;
 
   // Form State
   const [orderId, setOrderId] = React.useState("");
   const [orderLink, setOrderLink] = React.useState("");
   const [service, setService] = React.useState("");
-  const [email, setEmail] = React.useState("");
   const [parentId, setParentId] = React.useState<string>("");
-  const [clientId, setClientId] = React.useState("");
   const [platformId, setPlatformId] = React.useState("");
   const [profileId, setProfileId] = React.useState("");
+  const [clientId, setClientId] = React.useState("");
   const [serviceLineId, setServiceLineId] = React.useState("");
   const [statusId, setStatusId] = React.useState("");
-  const [value, setValue] = React.useState<number | string>(0);
+  const [orderSourceId, setOrderSourceId] = React.useState("");
   const [amount, setAmount] = React.useState<number | string>("");
   const [percentage, setPercentage] = React.useState<number | string>("");
   const [remarks, setRemarks] = React.useState("");
@@ -119,6 +119,7 @@ export function CreateProjectModal({
   const [platformModalOpen, setPlatformModalOpen] = React.useState(false);
   const [serviceLineModalOpen, setServiceLineModalOpen] = React.useState(false);
   const [statusModalOpen, setStatusModalOpen] = React.useState(false);
+  const [orderSourceModalOpen, setOrderSourceModalOpen] = React.useState(false);
 
   // Local lookup extensions
   const [localLookups, setLocalLookups] = React.useState<ProjectLookups | null>(lookups);
@@ -127,13 +128,21 @@ export function CreateProjectModal({
     setLocalLookups(lookups);
   }, [lookups]);
 
+  // Financial calculations
+  const grossAmountNum = amount !== "" ? Number(amount) : 0;
+  const platformChargePct = percentage !== "" ? Number(percentage) : 0;
+  const calculatedNetValue = React.useMemo(() => {
+    if (!grossAmountNum) return 0;
+    const fee = (grossAmountNum * platformChargePct) / 100;
+    return Math.max(0, grossAmountNum - fee);
+  }, [grossAmountNum, platformChargePct]);
+
   // Initialize defaults on open
   React.useEffect(() => {
     if (open && localLookups) {
       setOrderId("");
       setOrderLink("");
       setService("");
-      setEmail("");
       setParentId(initialParentId || "");
 
       const initialPlatform = localLookups.platforms[0]?.id || "";
@@ -149,7 +158,7 @@ export function CreateProjectModal({
       setClientId(localLookups.clients[0]?.id || "");
       setServiceLineId(localLookups.serviceLines[0]?.id || "");
       setStatusId(localLookups.statuses[0]?.id || "");
-      setValue(0);
+      setOrderSourceId(localLookups.orderSources?.[0]?.id || "");
       setAmount("");
       setPercentage("");
       setRemarks("");
@@ -252,36 +261,44 @@ export function CreateProjectModal({
     onRefreshLookups?.();
   };
 
+  const handleOrderSourceCreated = (newSource: OrderSourceItem) => {
+    setLocalLookups((prev) =>
+      prev ? { ...prev, orderSources: [newSource, ...(prev.orderSources || [])] } : prev,
+    );
+    setOrderSourceId(newSource.id);
+    onRefreshLookups?.();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setFieldErrors({});
     setGeneralError(null);
 
-    const errors: Record<string, string> = {};
-    if (!orderId.trim()) errors.orderId = "Platform Order ID is required";
-    if (!profileId) errors.profileId = "Account profile is required";
-    if (!statusId) errors.statusId = "Status is required";
-
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      setLoading(false);
-      toast.error("Please fill in all required fields marked in red");
-      return;
-    }
-
     try {
+      if (!orderId.trim()) {
+        setFieldErrors({ orderId: "Platform Order ID is required" });
+        setLoading(false);
+        return;
+      }
+
+      if (!profileId) {
+        setFieldErrors({ profileId: "Profile is required" });
+        setLoading(false);
+        return;
+      }
+
       const payload: CreateProjectDTO = {
         orderId: orderId.trim(),
         orderLink: orderLink.trim() || undefined,
         service: service.trim() || undefined,
-        email: canViewClient && email.trim() ? email.trim() : undefined,
         parentId: parentId && parentId !== "none" ? parentId : undefined,
         clientId: clientId || localLookups?.clients[0]?.id || "",
-        profileId: profileId || localLookups?.profiles[0]?.id || "",
-        serviceLineId: serviceLineId || undefined,
+        profileId,
+        serviceLineId: serviceLineId || null,
+        orderSourceId: orderSourceId || null,
         statusId: statusId || localLookups?.statuses[0]?.id || "",
-        value: canEditFinancials ? Number(value) : 0,
+        value: canEditFinancials ? calculatedNetValue : 0,
         amount: canEditFinancials && amount !== "" ? Number(amount) : undefined,
         percentage: canEditFinancials && percentage !== "" ? Number(percentage) : undefined,
         remarks: remarks.trim() || undefined,
@@ -366,487 +383,105 @@ export function CreateProjectModal({
                   </Badge>
                 </div>
 
-                {/* SECTION 1: ORDER ID, ORDER LINK & HIERARCHY */}
-                <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Hash className="size-3.5 text-primary" /> Platform Order & Service Domain
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
-                    {/* Platform Order ID */}
-                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
-                      <Label htmlFor="orderId" className="text-xs font-semibold">
-                        Platform Order ID <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="orderId"
-                        value={orderId}
-                        onChange={(e) => {
-                          setOrderId(e.target.value);
-                          if (fieldErrors.orderId) {
-                            setFieldErrors((prev) => {
-                              const next = { ...prev };
-                              delete next.orderId;
-                              return next;
-                            });
-                          }
-                        }}
-                        placeholder="e.g. #FO918234, 38491024, or ORD-8832"
-                        required
-                        className={fieldErrors.orderId ? "border-destructive font-mono text-xs h-9" : "font-mono text-xs h-9"}
-                        autoFocus
-                      />
-                      {fieldErrors.orderId && (
-                        <p className="text-[11px] text-destructive">{fieldErrors.orderId}</p>
-                      )}
-                    </div>
-
-                    {/* Platform Order Link */}
-                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
-                      <Label htmlFor="orderLink" className="text-xs font-semibold flex items-center gap-1">
-                        <Link className="size-3 text-muted-foreground" /> Platform Order URL Link
-                      </Label>
-                      <Input
-                        id="orderLink"
-                        type="url"
-                        value={orderLink}
-                        onChange={(e) => setOrderLink(e.target.value)}
-                        placeholder="https://www.fiverr.com/orders/FO918234"
-                        className="text-xs h-9"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 pt-1">
-                    {/* Service Description */}
-                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
-                      <Label htmlFor="service" className="text-xs font-semibold">
-                        Service Title / Package
-                      </Label>
-                      <Input
-                        id="service"
-                        value={service}
-                        onChange={(e) => setService(e.target.value)}
-                        placeholder="e.g. Full-Stack Web Development, Figma UI/UX..."
-                        className="text-xs h-9"
-                      />
-                    </div>
-
-                    {/* Parent Project (Optional) */}
-                    <div className="sm:col-span-6 space-y-1.5 min-w-0">
-                      <Label htmlFor="parentId" className="text-xs font-semibold flex items-center gap-1">
-                        <GitFork className="size-3 text-blue-500" /> Parent Project / Umbrella Order
-                      </Label>
-                      <Select
-                        value={parentId || "none"}
-                        onValueChange={(val: string | null) => setParentId(val === "none" ? "" : (val || ""))}
-                      >
-                        <SelectTrigger className="w-full h-9 text-xs">
-                          <SelectValue placeholder="Standalone Project (No Parent)">
-                            {(() => {
-                              if (!parentId || parentId === "none") return "Standalone (No Parent)";
-                              const matched = localLookups?.parentCandidates?.find((p) => p.id === parentId);
-                              return matched ? `${matched.projectName} (${matched.orderId})` : "Standalone (No Parent)";
-                            })()}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none" className="text-xs">
-                            Standalone Project (No Parent)
-                          </SelectItem>
-                          {localLookups?.parentCandidates?.map((cand) => (
-                            <SelectItem key={cand.id} value={cand.id} className="text-xs font-mono">
-                              {cand.projectName} — Order: {cand.orderId}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                    {/* Initial Status */}
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">
-                          Initial Status <span className="text-destructive">*</span>
-                        </Label>
-                        <button
-                          type="button"
-                          onClick={() => setStatusModalOpen(true)}
-                          className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                        >
-                          <Plus className="size-3" /> New Status
-                        </button>
-                      </div>
-                      <Select value={statusId} onValueChange={(val: string | null) => setStatusId(val || "")}>
-                        <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                          <SelectValue placeholder="Select Status">
-                            {(() => {
-                              const st = localLookups?.statuses.find((s) => s.id === statusId);
-                              if (!st) return undefined;
-                              return (
-                                <div className="flex items-center gap-2 truncate">
-                                  <span
-                                    className="size-2 rounded-full shrink-0"
-                                    style={{ backgroundColor: st.color || "#3b82f6" }}
-                                  />
-                                  <span className="truncate">{st.name}</span>
-                                </div>
-                              );
-                            })()}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {localLookups?.statuses.map((st) => (
-                            <SelectItem key={st.id} value={st.id} className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="size-2 rounded-full shrink-0"
-                                  style={{ backgroundColor: st.color || "#3b82f6" }}
-                                />
-                                <span>{st.name}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {fieldErrors.statusId && (
-                        <p className="text-[11px] text-destructive">{fieldErrors.statusId}</p>
-                      )}
-                    </div>
-
-                    {/* Service Line */}
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Service Line Domain</Label>
-                        <button
-                          type="button"
-                          onClick={() => setServiceLineModalOpen(true)}
-                          className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                        >
-                          <Plus className="size-3" /> New Service
-                        </button>
-                      </div>
-                      <Select value={serviceLineId} onValueChange={(val: string | null) => setServiceLineId(val || "")}>
-                        <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                          <SelectValue placeholder="Select Service Line">
-                            {localLookups?.serviceLines.find((sl) => sl.id === serviceLineId)?.name}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {localLookups?.serviceLines.map((sl) => (
-                            <SelectItem key={sl.id} value={sl.id} className="text-xs">
-                              {sl.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
+                {/* SECTION 1: ORDER ID, ORDER LINK, SERVICE, HIERARCHY, STATUS, SOURCE & SERVICE LINE */}
+                <ProjectClassificationFields
+                  orderId={orderId}
+                  setOrderId={(val) => {
+                    setOrderId(val);
+                    if (fieldErrors.orderId) {
+                      setFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.orderId;
+                        return next;
+                      });
+                    }
+                  }}
+                  orderLink={orderLink}
+                  setOrderLink={setOrderLink}
+                  service={service}
+                  setService={setService}
+                  parentId={parentId}
+                  setParentId={setParentId}
+                  statusId={statusId}
+                  setStatusId={setStatusId}
+                  orderSourceId={orderSourceId}
+                  setOrderSourceId={setOrderSourceId}
+                  serviceLineId={serviceLineId}
+                  setServiceLineId={setServiceLineId}
+                  lookups={localLookups}
+                  fieldErrors={fieldErrors}
+                  onNewStatusClick={() => setStatusModalOpen(true)}
+                  onNewOrderSourceClick={() => setOrderSourceModalOpen(true)}
+                  onNewServiceLineClick={() => setServiceLineModalOpen(true)}
+                />
 
                 {/* SECTION 2: CLIENT & PLATFORM SELLER ACCOUNT */}
-                <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Building2 className="size-3.5 text-blue-500" /> Platform Account & Client
-                  </h4>
+                <ProjectAccountClientFields
+                  platformId={platformId}
+                  onPlatformChange={handlePlatformChange}
+                  profileId={profileId}
+                  onProfileChange={handleProfileChange}
+                  clientId={clientId}
+                  onClientChange={(val, clientItem) => {
+                    setClientId(val || "");
+                    if (clientItem?.platformId && (!platformId || platformId !== clientItem.platformId)) {
+                      handlePlatformChange(clientItem.platformId);
+                    }
+                  }}
+                  lookups={localLookups}
+                  filteredProfiles={filteredProfiles}
+                  canViewClient={canViewClient}
+                  fieldErrors={fieldErrors}
+                  showPlatformSelect={true}
+                  onNewPlatformClick={() => setPlatformModalOpen(true)}
+                  onNewProfileClick={() => setProfileModalOpen(true)}
+                  onNewClientClick={() => setClientModalOpen(true)}
+                />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                    {/* Platform */}
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Platform</Label>
-                        <button
-                          type="button"
-                          onClick={() => setPlatformModalOpen(true)}
-                          className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                        >
-                          <Plus className="size-3" /> New
-                        </button>
-                      </div>
-                      <Select value={platformId} onValueChange={handlePlatformChange}>
-                        <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                          <SelectValue placeholder="Platform">
-                            {localLookups?.platforms.find((p) => p.id === platformId)?.name}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {localLookups?.platforms.map((p) => (
-                            <SelectItem key={p.id} value={p.id} className="text-xs">
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                {/* SECTION 3: FINANCIALS, PLATFORM CHARGE & NET VALUE */}
+                <ProjectFinancialsFields
+                  amount={amount}
+                  setAmount={setAmount}
+                  percentage={percentage}
+                  setPercentage={setPercentage}
+                  calculatedNetValue={calculatedNetValue}
+                  orderSheetUrl={orderSheetUrl}
+                  setOrderSheetUrl={setOrderSheetUrl}
+                  canEditFinancials={canEditFinancials}
+                  fieldErrors={fieldErrors}
+                />
 
-                    {/* Profile */}
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">
-                          Profile <span className="text-destructive">*</span>
-                        </Label>
-                        <button
-                          type="button"
-                          onClick={() => setProfileModalOpen(true)}
-                          className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                        >
-                          <Plus className="size-3" /> New
-                        </button>
-                      </div>
-                      <Select value={profileId} onValueChange={handleProfileChange}>
-                        <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                          <SelectValue placeholder="Select Profile">
-                            {localLookups?.profiles.find((p) => p.id === profileId)?.username}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {filteredProfiles.map((prof) => (
-                            <SelectItem key={prof.id} value={prof.id} className="text-xs">
-                              <span className="font-mono">{prof.username}</span>
-                              <span className="text-[10px] text-muted-foreground ml-1.5">
-                                ({prof.platform?.name || "Platform"})
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {fieldErrors.profileId && (
-                        <p className="text-[11px] text-destructive">{fieldErrors.profileId}</p>
-                      )}
-                    </div>
+                {/* SECTION 4: SCHEDULE & DATES */}
+                <ProjectScheduleFields
+                  startDate={startDate}
+                  setStartDate={setStartDate}
+                  deliveryDate={deliveryDate}
+                  setDeliveryDate={setDeliveryDate}
+                  fieldErrors={fieldErrors}
+                />
 
-                    {/* Client */}
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Client Identity</Label>
-                        {canViewClient && (
-                          <button
-                            type="button"
-                            onClick={() => setClientModalOpen(true)}
-                            className="text-[11px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                          >
-                            <Plus className="size-3" /> New
-                          </button>
-                        )}
-                      </div>
-                      {canViewClient ? (
-                        <Select value={clientId} onValueChange={(val: string | null) => setClientId(val || "")}>
-                          <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
-                            <SelectValue placeholder="Select Client">
-                              {localLookups?.clients.find((c) => c.id === clientId)?.name}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {localLookups?.clients.map((cl) => (
-                              <SelectItem key={cl.id} value={cl.id} className="text-xs">
-                                {cl.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
-                          <Lock className="size-3 text-muted-foreground" /> Client Masked
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Client Email */}
-                    <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="email" className="text-xs font-semibold flex items-center gap-1">
-                        <Mail className="size-3 text-muted-foreground" /> Client Email
-                      </Label>
-                      {canViewClient ? (
-                        <Input
-                          id="email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="client@company.com"
-                          className="text-xs h-9"
-                        />
-                      ) : (
-                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
-                          <Lock className="size-3 text-muted-foreground" /> Email Masked
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                {/* SECTION 5: REMARKS */}
+                <div className="rounded-xl border bg-card/60 p-4 space-y-2 shadow-2xs">
+                  <Label htmlFor="remarks" className="text-xs font-semibold">
+                    Remarks / Operational Notes (Optional)
+                  </Label>
+                  <Textarea
+                    id="remarks"
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Special instructions, milestones, client preferences..."
+                    rows={2}
+                    className="text-xs resize-none"
+                  />
                 </div>
 
-                {/* SECTION 3: FINANCIALS, PERCENTAGE & DEADLINES */}
-                <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
+                {/* SECTION 6: PRIMARY TEAM ALLOCATION */}
+                <div className="rounded-xl border bg-card/60 p-4 space-y-3 shadow-2xs">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <DollarSign className="size-3.5 text-emerald-500" /> Financials, Margins & Deadlines
+                    <Layers className="size-3.5 text-primary" /> Primary Team Allocation
                   </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                    {/* Contract Value */}
-                    <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="value" className="text-xs font-semibold">
-                        Contract Value ($)
-                      </Label>
-                      {canEditFinancials ? (
-                        <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
-                            $
-                          </span>
-                          <Input
-                            id="value"
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={value}
-                            onChange={(e) => setValue(e.target.value)}
-                            placeholder="0.00"
-                            className="pl-7 text-xs h-9 font-mono"
-                          />
-                        </div>
-                      ) : (
-                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
-                          <Lock className="size-3 text-muted-foreground" /> Value Restricted
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Net Amount */}
-                    <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="amount" className="text-xs font-semibold">
-                        Net Amount ($)
-                      </Label>
-                      {canEditFinancials ? (
-                        <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
-                            $
-                          </span>
-                          <Input
-                            id="amount"
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            placeholder="Net payout / amount"
-                            className="pl-7 text-xs h-9 font-mono"
-                          />
-                        </div>
-                      ) : (
-                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
-                          <Lock className="size-3 text-muted-foreground" /> Amount Restricted
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Margin / Percentage */}
-                    <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="percentage" className="text-xs font-semibold flex items-center gap-1">
-                        <Percent className="size-3 text-muted-foreground" /> Share / Margin (%)
-                      </Label>
-                      {canEditFinancials ? (
-                        <div className="relative">
-                          <Input
-                            id="percentage"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="any"
-                            value={percentage}
-                            onChange={(e) => setPercentage(e.target.value)}
-                            placeholder="e.g. 20"
-                            className="text-xs h-9 font-mono pr-7"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs text-muted-foreground font-semibold">
-                            %
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
-                          <Lock className="size-3 text-muted-foreground" /> Percentage Restricted
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1">
-                    {/* Order Sheet URL */}
-                    <div className="space-y-1.5 min-w-0 sm:col-span-3">
-                      <Label htmlFor="orderSheetUrl" className="text-xs font-semibold flex items-center gap-1">
-                        <FileText className="size-3 text-muted-foreground" /> Order Sheet / Google Doc URL
-                      </Label>
-                      {canEditFinancials ? (
-                        <Input
-                          id="orderSheetUrl"
-                          type="url"
-                          value={orderSheetUrl}
-                          onChange={(e) => setOrderSheetUrl(e.target.value)}
-                          placeholder="https://docs.google.com/spreadsheets/..."
-                          className="text-xs h-9"
-                        />
-                      ) : (
-                        <div className="h-9 rounded-md border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground gap-1.5">
-                          <Lock className="size-3 text-muted-foreground" /> Restricted
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                    {/* Start Date */}
-                    <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="startDate" className="text-xs font-semibold flex items-center gap-1">
-                        <Calendar className="size-3 text-muted-foreground" /> Order / Start Date
-                      </Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="text-xs h-9"
-                      />
-                    </div>
-
-                    {/* Delivery Date */}
-                    <div className="space-y-1.5 min-w-0">
-                      <Label htmlFor="deliveryDate" className="text-xs font-semibold flex items-center gap-1">
-                        <Clock className="size-3 text-muted-foreground" /> Promised Delivery Deadline
-                      </Label>
-                      <Input
-                        id="deliveryDate"
-                        type="date"
-                        value={deliveryDate}
-                        onChange={(e) => setDeliveryDate(e.target.value)}
-                        className="text-xs h-9"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Remarks */}
-                  <div className="space-y-1.5 pt-1">
-                    <Label htmlFor="remarks" className="text-xs font-semibold">
-                      Remarks / Operational Notes
-                    </Label>
-                    <Textarea
-                      id="remarks"
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      placeholder="Special instructions, milestones, client preferences..."
-                      rows={2}
-                      className="text-xs resize-none"
-                    />
-                  </div>
-                </div>
-
-                {/* SECTION 4: INITIAL ALLOCATIONS & DELIVERABLES */}
-                <div className="rounded-xl border bg-card/60 p-4 space-y-3.5 shadow-2xs">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Layers className="size-3.5 text-primary" /> Primary Team & Deliverables
-                  </h4>
-
-                  {/* Primary Team */}
                   <div className="space-y-1.5 min-w-0">
-                    <Label className="text-xs font-semibold">Primary Allocated Team</Label>
+                    <Label className="text-xs font-semibold">Allocated Team</Label>
                     <Select value={assignedTeamId} onValueChange={(val: string | null) => setAssignedTeamId(val || "")}>
                       <SelectTrigger className="w-full h-9 text-xs">
                         <SelectValue placeholder="Select Team">
@@ -865,65 +500,30 @@ export function CreateProjectModal({
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {/* Components / Sub-deliverables */}
-                  <div className="space-y-2 pt-2 border-t border-border/40">
-                    <Label className="text-xs font-semibold">Initial Deliverable Components</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={newComponentName}
-                        onChange={(e) => setNewComponentName(e.target.value)}
-                        placeholder="e.g. Backend API Architecture, Figma Design..."
-                        className="text-xs h-8 flex-1"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddDraftComponent();
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleAddDraftComponent}
-                        className="text-xs h-8"
-                      >
-                        <Plus className="size-3.5" /> Add
-                      </Button>
-                    </div>
-
-                    {components.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1.5">
-                        {components.map((comp, idx) => (
-                          <Badge
-                            key={idx}
-                            variant="secondary"
-                            className="text-xs gap-1.5 py-1 px-2.5 bg-muted/60"
-                          >
-                            <span>{comp.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveDraftComponent(idx)}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="size-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
+
+                {/* SECTION 7: DRAFT SUB-DELIVERABLE COMPONENTS */}
+                <ProjectDraftComponentsList
+                  components={components}
+                  newComponentName={newComponentName}
+                  setNewComponentName={setNewComponentName}
+                  onAdd={handleAddDraftComponent}
+                  onRemove={handleRemoveDraftComponent}
+                  statuses={localLookups?.statuses || []}
+                />
               </div>
             </ScrollArea>
 
             {/* MODAL FOOTER */}
-            <DialogFooter className="p-4 border-t bg-muted/20 flex flex-col-reverse sm:flex-row items-center justify-between gap-2 shrink-0">
-              <span className="text-[11px] text-muted-foreground">
-                All fields marked <span className="text-destructive">*</span> are required
-              </span>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+            <DialogFooter className="p-4 border-t bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <div className="text-xs text-muted-foreground flex items-center gap-2">
+                <span>Total Deliverables:</span>
+                <Badge variant="outline" className="font-mono text-[11px] font-bold">
+                  {components.length}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <Button
                   type="button"
                   variant="outline"
@@ -976,6 +576,11 @@ export function CreateProjectModal({
         open={statusModalOpen}
         onOpenChange={setStatusModalOpen}
         onSuccess={handleStatusCreated}
+      />
+      <QuickCreateOrderSourceDialog
+        open={orderSourceModalOpen}
+        onOpenChange={setOrderSourceModalOpen}
+        onSuccess={handleOrderSourceCreated}
       />
     </>
   );

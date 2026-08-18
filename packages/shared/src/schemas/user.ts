@@ -34,7 +34,7 @@ export const userSchema = z.object({
   status: userStatusEnum.default("INVITED"),
   emailVerifiedAt: z.date().nullable().optional(),
   bio: z.string().nullable().optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
   isActive: z.boolean().default(true),
   mustChangePassword: z.boolean().default(true),
   lastLoginAt: z.date().nullable().optional(),
@@ -57,6 +57,7 @@ export const createAdminUserSchema = z.object({
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).default("Staff"),
   roleId: z.string().uuid("Invalid role ID"),
   designationId: z.string().uuid("Invalid designation ID").optional().nullable(),
+  avatarUrl: z.string().nullable().optional(),
   sendInviteEmail: z.boolean().default(true).optional(),
 });
 
@@ -71,8 +72,15 @@ export const updateAdminUserSchema = z.object({
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).optional(),
   roleId: z.string().uuid("Invalid role ID").optional(),
   designationId: z.string().uuid("Invalid designation ID").optional().nullable(),
+  avatarUrl: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   status: userStatusEnum.optional(),
+});
+
+export const updateProfileSchema = z.object({
+  firstName: z.string().min(1, "First name is required").optional(),
+  lastName: z.string().min(1, "Last name is required").optional(),
+  avatarUrl: z.string().nullable().optional(),
 });
 
 export const createOverrideSchema = z.object({
@@ -113,6 +121,7 @@ export const createDelegationSchema = z
 export type CreateAdminUserDTO = z.infer<typeof createAdminUserSchema>;
 export type ResendInviteDTO = z.infer<typeof resendInviteSchema>;
 export type UpdateAdminUserDTO = z.infer<typeof updateAdminUserSchema>;
+export type UpdateProfileDTO = z.infer<typeof updateProfileSchema>;
 export type CreateOverrideDTO = z.infer<typeof createOverrideSchema>;
 export type CreateDelegationDTO = z.infer<typeof createDelegationSchema>;
 
@@ -122,6 +131,7 @@ export interface UserItem {
   email: string;
   firstName: string;
   lastName: string;
+  avatarUrl?: string | null;
   systemRole: "SuperAdmin" | "Admin" | "Staff";
   status: UserStatus;
   roleId?: string;

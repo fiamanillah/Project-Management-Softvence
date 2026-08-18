@@ -8,6 +8,7 @@ import {
   Settings,
   Shield,
   KeyRound,
+  User as UserIcon,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -59,6 +60,7 @@ export function NavUser({
 
   const displayEmail = user?.email || defaultUser?.email || 'admin@example.com'
   const displayRole = user?.systemRole || 'SuperAdmin'
+  const avatarSource = user?.avatarUrl || defaultUser?.avatar
 
   const initials = displayName
     .split(' ')
@@ -88,7 +90,7 @@ export function NavUser({
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground w-full"
               >
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={defaultUser?.avatar} alt={displayName} />
+                  {avatarSource && <AvatarImage src={avatarSource} alt={displayName} />}
                   <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold">
                     {initials}
                   </AvatarFallback>
@@ -116,6 +118,7 @@ export function NavUser({
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="h-8 w-8 rounded-lg">
+                    {avatarSource && <AvatarImage src={avatarSource} alt={displayName} />}
                     <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold">
                       {initials}
                     </AvatarFallback>
@@ -129,6 +132,12 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <Link href="/dashboard/profile">
+                <DropdownMenuItem className="cursor-pointer">
+                  <UserIcon className="mr-2 size-4" />
+                  My Profile
+                </DropdownMenuItem>
+              </Link>
               <PermissionGate code="auth.user.view">
                 <Link href="/dashboard/users">
                   <DropdownMenuItem className="cursor-pointer">

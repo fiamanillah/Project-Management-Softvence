@@ -19,6 +19,11 @@ import {
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@workspace/ui/components/avatar";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -83,6 +88,7 @@ export interface AdminUser {
   employeeId?: string;
   firstName?: string;
   lastName?: string;
+  avatarUrl?: string | null;
   systemRole: "SuperAdmin" | "Admin" | "Staff";
   status?: UserStatus;
   isActive: boolean;
@@ -288,17 +294,29 @@ export function UserTable({
           ),
           cell: ({ row }) => {
             const user = row.original;
+            const displayName =
+              user.firstName || user.lastName
+                ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+                : "System User";
+            const initials = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U";
+
             return (
               <div className="flex items-center gap-3">
-                <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20 shrink-0">
-                  {user.firstName ? user.firstName[0]?.toUpperCase() : "U"}
-                  {user.lastName ? user.lastName[0]?.toUpperCase() : ""}
-                </div>
+                <Avatar className="size-9 rounded-lg border border-primary/20 shrink-0 shadow-2xs">
+                  {user.avatarUrl && (
+                    <AvatarImage
+                      src={user.avatarUrl}
+                      alt={displayName}
+                      className="rounded-lg object-cover"
+                    />
+                  )}
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex flex-col min-w-0">
                   <span className="font-semibold text-sm text-foreground truncate">
-                    {user.firstName || user.lastName
-                      ? `${user.firstName || ""} ${user.lastName || ""}`
-                      : "System User"}
+                    {displayName}
                   </span>
                   <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5">
                     <span className="flex items-center gap-1 truncate">

@@ -27,7 +27,8 @@ export class StorageModule extends BaseModule {
   public version: string = "1.0.0";
   public apiVersion: string = "v1";
   public basePath: string = "/storage";
-  public dependencies?: string[] = ["prisma", "storage"];
+  public dependencies?: string[] = [];
+
 
   protected async setupUseCases(): Promise<void> {
     const prisma = this.context.getService("prisma") as PrismaClient;
@@ -87,17 +88,24 @@ export class StorageModule extends BaseModule {
 
     // Stream file directly through API server
     this.router.get(
-      "/stream/:key(*)",
+      "/stream",
+      requirePermission("storage.view"),
+      controller.streamFile.bind(controller),
+    );
+
+    this.router.get(
+      "/stream/{*key}",
       requirePermission("storage.view"),
       controller.streamFile.bind(controller),
     );
 
     // Delete file
     this.router.delete(
-      "/files/:key(*)",
+      "/files/{*key}",
       requirePermission("storage.delete"),
       controller.deleteFile.bind(controller),
     );
+
 
     this.router.post(
       "/delete",

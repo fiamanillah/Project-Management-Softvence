@@ -268,8 +268,9 @@ export async function apiRequest<T = any>(
   options: RequestInit = {},
 ): Promise<T> {
   const token = getAccessToken();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(!isFormData && { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string>),
   };
 
@@ -377,16 +378,31 @@ export async function apiRequest<T = any>(
 
 function extractResponseData<T>(body: any): T {
   if (body.data !== undefined) {
-    if (typeof body.data === "object" && body.data !== null && body.meta !== undefined) {
-      try {
-        Object.defineProperty(body.data, "meta", {
-          value: body.meta,
-          writable: true,
-          enumerable: false,
-          configurable: true,
-        });
-      } catch {
-        // ignore if non-extensible
+    if (typeof body.data === "object" && body.data !== null) {
+      if (body.meta !== undefined) {
+        try {
+          Object.defineProperty(body.data, "meta", {
+            value: body.meta,
+            writable: true,
+            enumerable: false,
+            configurable: true,
+          });
+        } catch {
+          // ignore if non-extensible
+        }
+      }
+      const pagination = body.meta?.pagination || body.pagination;
+      if (pagination !== undefined) {
+        try {
+          Object.defineProperty(body.data, "pagination", {
+            value: pagination,
+            writable: true,
+            enumerable: false,
+            configurable: true,
+          });
+        } catch {
+          // ignore if non-extensible
+        }
       }
     }
     return body.data;
@@ -400,19 +416,25 @@ export const api = {
   post: <T = any>(endpoint: string, body?: any, options?: RequestInit) =>
     apiRequest<T>(endpoint, {
       method: "POST",
-      body: JSON.stringify(body),
+      body: typeof FormData !== "undefined" && body instanceof FormData ? body : JSON.stringify(body),
+      ...options,
+    }),
+  upload: <T = any>(endpoint: string, formData: FormData, options?: RequestInit) =>
+    apiRequest<T>(endpoint, {
+      method: "POST",
+      body: formData,
       ...options,
     }),
   patch: <T = any>(endpoint: string, body?: any, options?: RequestInit) =>
     apiRequest<T>(endpoint, {
       method: "PATCH",
-      body: JSON.stringify(body),
+      body: typeof FormData !== "undefined" && body instanceof FormData ? body : JSON.stringify(body),
       ...options,
     }),
   put: <T = any>(endpoint: string, body?: any, options?: RequestInit) =>
     apiRequest<T>(endpoint, {
       method: "PUT",
-      body: JSON.stringify(body),
+      body: typeof FormData !== "undefined" && body instanceof FormData ? body : JSON.stringify(body),
       ...options,
     }),
   delete: <T = any>(endpoint: string, options?: RequestInit) =>

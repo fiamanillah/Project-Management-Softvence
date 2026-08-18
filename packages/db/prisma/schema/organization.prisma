@@ -45,6 +45,7 @@ model Team {
   name         String
   slug         String    @unique
   shift        String?
+  avatarUrl    String?   @map("avatar_url")
   isActive     Boolean   @default(true) @map("is_active")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime? @map("updated_at")

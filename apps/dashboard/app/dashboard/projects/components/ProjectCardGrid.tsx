@@ -119,6 +119,11 @@ export function ProjectCardGrid({
                     >
                       {project.status?.name || "Unknown"}
                     </Badge>
+                    {project.orderSource && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 font-normal bg-muted/40 text-muted-foreground">
+                        {project.orderSource.name}
+                      </Badge>
+                    )}
                   </div>
                   <h4 className="font-mono font-bold text-sm text-foreground tracking-tight line-clamp-1 group-hover:text-primary transition-colors">
                     {project.projectName}
@@ -209,9 +214,9 @@ export function ProjectCardGrid({
                         <span className="font-medium text-foreground truncate block">
                           {project.client.name}
                         </span>
-                        {project.email && (
-                          <span className="font-mono text-[10px] text-muted-foreground truncate block">
-                            {project.email}
+                        {(project.client.email || project.email) && (
+                          <span className="font-mono text-[10px] text-muted-foreground truncate block" title={project.client.email || project.email || undefined}>
+                            {project.client.email || project.email}
                           </span>
                         )}
                       </div>
@@ -226,16 +231,16 @@ export function ProjectCardGrid({
                   </div>
 
                   <div>
-                    <span className="text-[11px] text-muted-foreground block">Contract Value</span>
+                    <span className="text-[11px] text-muted-foreground block">Value (Net)</span>
                     {canViewFinancials ? (
                       <div>
                         <span className="font-mono font-semibold text-foreground block">
-                          ${Number(project.value || 0).toLocaleString()}
+                          ${Number(project.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
-                        {(project.amount !== null && project.amount !== undefined || project.percentage !== null && project.percentage !== undefined) && (
+                        {project.amount !== null && project.amount !== undefined && (
                           <span className="font-mono text-[10px] text-muted-foreground block">
-                            {project.amount !== null && project.amount !== undefined ? `Net: $${Number(project.amount).toLocaleString()}` : ""}
-                            {project.percentage !== null && project.percentage !== undefined ? ` (${project.percentage}%)` : ""}
+                            Amt: ${Number(project.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {project.percentage !== null && project.percentage !== undefined ? ` (-${project.percentage}%)` : ""}
                           </span>
                         )}
                       </div>

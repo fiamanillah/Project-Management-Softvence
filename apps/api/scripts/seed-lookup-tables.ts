@@ -270,6 +270,49 @@ async function main() {
     }
   }
 
+  // Seed OrderSource lookup records
+  console.log("⚡ Seeding OrderSource lookup records...");
+  const ORDER_SOURCES = [
+    { code: "BID_PROPOSAL_ORDER", name: "Bid/Proposal Order" },
+    { code: "BRIEF_INVITATION", name: "Brief/Invitation" },
+    { code: "CONVERSION_QUERY", name: "Conversion/Query" },
+    { code: "FIXED_CLIENT", name: "Fixed Client" },
+    { code: "ORDER_SOURCE", name: "Order Source" },
+    { code: "PLATFORM_STATUS", name: "Platform Status" },
+    { code: "REPEAT_ORDER", name: "Repeat Order" },
+    { code: "SPECIAL_ORDER", name: "Special_Order" },
+    { code: "SVA_A_OLD_ORDER", name: "SVA_A Old Order" },
+    { code: "SVA_A_OTHERS", name: "SVA_A Others" },
+    { code: "SVA_A_PROFILE", name: "SVA_A Profile" },
+    { code: "SVA_A_SPECIAL", name: "SVA_A Special" },
+    { code: "SVA_DIRECT_PROJECT", name: "SVA_Direct Project" },
+    { code: "TIP", name: "Tip" },
+    { code: "B2B", name: "B2B" },
+    { code: "CONSULTATION", name: "Consultation" },
+    { code: "COMPENSATION", name: "Compensation" },
+  ];
+
+  for (const os of ORDER_SOURCES) {
+    const existing = await prisma.orderSource.findUnique({
+      where: { code: os.code },
+    });
+    if (existing) {
+      await prisma.orderSource.update({
+        where: { code: os.code },
+        data: { name: os.name, isActive: true },
+      });
+    } else {
+      await prisma.orderSource.create({
+        data: {
+          code: os.code,
+          name: os.name,
+          isActive: true,
+        },
+      });
+      console.log(`  + Created order source: ${os.name}`);
+    }
+  }
+
   console.log("✔ All project lookups seeded successfully!");
 }
 

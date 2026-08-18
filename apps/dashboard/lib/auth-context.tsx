@@ -9,6 +9,7 @@ export interface User {
   email: string;
   firstName?: string;
   lastName?: string;
+  avatarUrl?: string | null;
   systemRole: "SuperAdmin" | "Admin" | "Staff";
   status?: "INVITED" | "ACTIVE" | "INACTIVE" | "SUSPENDED" | "LOCKED" | "ARCHIVED";
   isActive?: boolean;
@@ -26,6 +27,8 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshPermissions: () => Promise<void>;
+  updateUser: (data: Partial<User>) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
@@ -174,6 +177,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await fetchPermissions();
   };
 
+  const updateUser = React.useCallback((updatedData: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const next = { ...prev, ...updatedData };
+      try {
+        localStorage.setItem("user", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const refreshUser = React.useCallback(async () => {
+    try {
+      const res = await api.get<User>("/users/me");
+      if (res && res.id) {
+        setUser(res);
+        try {
+          localStorage.setItem("user", JSON.stringify(res));
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to refresh user profile:", err);
+    }
+  }, []);
+
   const can = (permissionCode: string): boolean => {
     if (user?.systemRole === "SuperAdmin") return true;
     return permissions[permissionCode] === true;
@@ -191,6 +223,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         changePassword,
         logout,
         refreshPermissions,
+        updateUser,
+        refreshUser,
       }}
     >
       <PermissionProvider permissions={permissions}>

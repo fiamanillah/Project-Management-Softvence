@@ -247,7 +247,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Client
     const client = await projectsService.createClient(
-      { name: `Apex Dynamics ${timestamp}`, platformId: platform.id, contactNotes: "Lead via Direct", isActive: true },
+      { name: `Apex Dynamics ${timestamp}`, platformId: platform.id, contactNotes: "Lead via Direct" },
       superAdminUser,
     );
     expect(client.name).toBe(`Apex Dynamics ${timestamp}`);
@@ -255,7 +255,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Service Line
     const serviceLine = await projectsService.createServiceLine(
-      { name: `Data Science ${timestamp}`, slug: `data-science-${timestamp}`, isActive: true },
+      { name: `Data Science ${timestamp}`, slug: `data-science-${timestamp}` },
       superAdminUser,
     );
     expect(serviceLine.name).toBe(`Data Science ${timestamp}`);
@@ -263,7 +263,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
 
     // Quick Status
     const status = await projectsService.createStatus(
-      { name: `Under QA ${timestamp}`, code: `QA_${timestamp}`, color: "#8b5cf6", requiresAction: true, isActive: true },
+      { name: `Under QA ${timestamp}`, code: `QA_${timestamp}`, color: "#8b5cf6", requiresAction: true },
       superAdminUser,
     );
     expect(status.name).toBe(`Under QA ${timestamp}`);
@@ -484,7 +484,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     expect(cycleError.statusCode).toBe(400);
   });
 
-  it("10. Supports operational spreadsheet fields (Amount, Percentage, Email, Order Link, Remarks, Service) and masks accordingly", async () => {
+  it("10. Supports operational spreadsheet fields (Amount, Percentage, Order Link, Remarks, Service) and calculates Value after platform fee deduction", async () => {
     const timestamp = Date.now();
     const orderId = `ORD-OPS-${timestamp}`;
 
@@ -500,8 +500,7 @@ describe("Projects Module & Sensitive Field Permissions", () => {
         serviceLineId: sampleServiceLineId,
         statusId: sampleStatusId,
         assignedTeamIds: [sampleTeamId],
-        value: 1200,
-        amount: 960,
+        amount: 1000,
         percentage: 20,
       },
       superAdminUser,
@@ -511,9 +510,10 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     expect(project.email).toBe(`contact_${timestamp}@example.com`);
     expect(project.orderLink).toBe("https://www.fiverr.com/orders/FO918234");
     expect(project.remarks).toBe("Urgent milestone delivery for European client");
-    expect(project.value).toBe(1200);
-    expect(project.amount).toBe(960);
+    expect(project.amount).toBe(1000);
     expect(project.percentage).toBe(20);
+    // Value is auto-calculated: 1000 - (1000 * 0.20) = 800
+    expect(project.value).toBe(800);
 
     // Sanitize for non-privileged restricted user -> email, amount, percentage, value must be null
     const normalView = await projectsService.sanitizeAndDecorateProject(project, restrictedUser);
@@ -524,6 +524,104 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     expect(normalView.amount).toBeNull();
     expect(normalView.percentage).toBeNull();
     expect(normalView.value).toBeNull();
+  });
+
+  it("11. Supports quick-creating client identity with optional contact details (email, company, phone, country, website)", async () => {
+    const timestamp = Date.now();
+    const newClient = await projectsService.createClient(
+      {
+        name: `Acme Corp ${timestamp}`,
+        platformId: samplePlatformId,
+        email: `partner_${timestamp}@acme.com`,
+        company: "Acme Holdings LLC",
+        phone: "+1 (555) 987-6543",
+        country: "Germany",
+        website: "https://acme-holdings.example.com",
+        contactNotes: "VIP client preferred timezone UTC+1",
+      },
+      superAdminUser,
+    );
+
+    expect(newClient.name).toBe(`Acme Corp ${timestamp}`);
+    expect(newClient.platformId).toBe(samplePlatformId);
+    expect(newClient.email).toBe(`partner_${timestamp}@acme.com`);
+    expect(newClient.company).toBe("Acme Holdings LLC");
+    expect(newClient.phone).toBe("+1 (555) 987-6543");
+    expect(newClient.country).toBe("Germany");
+    expect(newClient.website).toBe("https://acme-holdings.example.com");
+    expect(newClient.contactNotes).toBe("VIP client preferred timezone UTC+1");
+  });
+
+  it("12. Supports dynamic Order Source creation on demand and associates with project", async () => {
+    const timestamp = Date.now();
+    const sourceName = `Conversion/Query ${timestamp}`;
+
+    // Quick-create Order Source dynamically on demand
+    const createdSource = await projectsService.createOrderSource(
+      {
+        name: sourceName,
+        description: "Inbound client inquiry from portfolio conversion",
+      },
+      superAdminUser,
+    );
+
+    expect(createdSource.id).toBeDefined();
+    expect(createdSource.name).toBe(sourceName);
+    expect(createdSource.isActive).toBe(true);
+
+    // Verify lookups include orderSources
+    const lookups = await projectsService.getLookups(superAdminUser);
+    expect(lookups.orderSources).toBeDefined();
+    expect(lookups.orderSources.some((os) => os.id === createdSource.id)).toBe(true);
+
+    // Create project linking to the order source
+    const orderId = `ORD-SRC-${timestamp}`;
+    const project = await projectsService.createProject(
+      {
+        orderId,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        orderSourceId: createdSource.id,
+        statusId: sampleStatusId,
+        amount: 3000,
+        percentage: 20,
+      },
+      superAdminUser,
+    );
+
+    expect(project.orderSourceId).toBe(createdSource.id);
+    expect(project.orderSource?.name).toBe(sourceName);
+
+    // Fetch by ID and verify orderSource relation
+    const detail = await projectsService.getProjectById(project.id, superAdminUser);
+    expect(detail.orderSourceId).toBe(createdSource.id);
+    expect(detail.orderSource?.name).toBe(sourceName);
+  });
+
+  it("13. Supports searching and paginating clients via getClients", async () => {
+    const timestamp = Date.now();
+    await projectsService.createClient(
+      {
+        name: `Zeta Innovations ${timestamp}`,
+        platformId: samplePlatformId,
+        company: "Zeta Global",
+        email: `contact_${timestamp}@zeta.example`,
+      },
+      superAdminUser,
+    );
+
+    const clientRes = await projectsService.getClients(
+      { search: `Zeta Innovations ${timestamp}`, page: 1, limit: 10 },
+      superAdminUser,
+    );
+
+    expect(clientRes.items).toBeDefined();
+    expect(clientRes.items.length).toBeGreaterThan(0);
+    expect(clientRes.items[0]?.name).toBe(`Zeta Innovations ${timestamp}`);
+    expect(clientRes.pagination).toBeDefined();
+    expect(clientRes.pagination.total).toBeGreaterThanOrEqual(1);
+    expect(clientRes.pagination.page).toBe(1);
   });
 });
 

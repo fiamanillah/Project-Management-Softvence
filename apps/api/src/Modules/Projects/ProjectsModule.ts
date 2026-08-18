@@ -17,6 +17,7 @@ import {
   createQuickPlatformSchema,
   createQuickServiceLineSchema,
   createQuickStatusSchema,
+  createQuickOrderSourceSchema,
 } from "./ProjectDTO";
 
 export class ProjectsModule extends BaseModule {
@@ -84,6 +85,12 @@ export class ProjectsModule extends BaseModule {
       controller.getLookups.bind(controller),
     );
 
+    this.router.get(
+      "/lookups/clients",
+      requirePermission("project.client.view"),
+      controller.getClients.bind(controller),
+    );
+
     // Lookup Quick-Creation
     this.router.post(
       "/lookups/clients",
@@ -118,6 +125,13 @@ export class ProjectsModule extends BaseModule {
       validateRequest({ body: createQuickStatusSchema }),
       requirePermission("project.create"),
       controller.createStatus.bind(controller),
+    );
+
+    this.router.post(
+      "/lookups/order-sources",
+      validateRequest({ body: createQuickOrderSourceSchema }),
+      requirePermission("project.create"),
+      controller.createOrderSource.bind(controller),
     );
 
     // Project CRUD

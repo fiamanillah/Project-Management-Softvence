@@ -39,6 +39,7 @@ export const createProjectSchema = z.object({
   profileId: z.string().uuid("Invalid profile ID format"),
   serviceLineId: z.string().uuid("Invalid service line ID format").optional().nullable(),
   statusId: z.string().uuid("Invalid status ID format"),
+  orderSourceId: z.string().uuid("Invalid order source ID format").optional().nullable(),
   value: z
     .union([z.number(), z.string()])
     .transform((val) => Number(val))
@@ -88,6 +89,7 @@ export const updateProjectSchema = z.object({
   profileId: z.string().uuid().optional(),
   serviceLineId: z.string().uuid().optional().nullable(),
   statusId: z.string().uuid().optional(),
+  orderSourceId: z.string().uuid().optional().nullable(),
   value: z
     .union([z.number(), z.string()])
     .transform((val) => Number(val))
@@ -154,7 +156,12 @@ export const assignComponentMemberSchema = z.object({
 export const createQuickClientSchema = z.object({
   name: z.string().min(1, "Client name is required").max(150, "Client name is too long"),
   platformId: z.string().uuid("Invalid platform ID format"),
-  contactNotes: z.string().max(1000).optional().nullable(),
+  email: z.string().email("Invalid email format").optional().nullable().or(z.literal("")),
+  company: z.string().max(150).optional().nullable().or(z.literal("")),
+  phone: z.string().max(50).optional().nullable().or(z.literal("")),
+  country: z.string().max(100).optional().nullable().or(z.literal("")),
+  website: z.string().url("Invalid website URL").optional().nullable().or(z.literal("")),
+  contactNotes: z.string().max(2000).optional().nullable().or(z.literal("")),
 });
 
 export const createQuickProfileSchema = z.object({
@@ -182,6 +189,12 @@ export const createQuickStatusSchema = z.object({
   isTerminal: z.boolean().optional().default(false),
 });
 
+export const createQuickOrderSourceSchema = z.object({
+  name: z.string().min(1, "Order source name is required").max(100, "Order source name is too long"),
+  code: z.string().min(1).max(50).optional(),
+  description: z.string().max(255).optional().nullable(),
+});
+
 // Types inferred from Zod schemas
 export type CreateProjectDTO = z.infer<typeof createProjectSchema>;
 export type UpdateProjectDTO = z.infer<typeof updateProjectSchema>;
@@ -196,6 +209,7 @@ export type CreateQuickProfileDTO = z.infer<typeof createQuickProfileSchema>;
 export type CreateQuickPlatformDTO = z.infer<typeof createQuickPlatformSchema>;
 export type CreateQuickServiceLineDTO = z.infer<typeof createQuickServiceLineSchema>;
 export type CreateQuickStatusDTO = z.infer<typeof createQuickStatusSchema>;
+export type CreateQuickOrderSourceDTO = z.infer<typeof createQuickOrderSourceSchema>;
 
 // ============================================================================
 // DOMAIN ENTITIES & VIEW MODELS
@@ -230,6 +244,14 @@ export interface PlatformItem {
   isActive: boolean;
 }
 
+export interface OrderSourceItem {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+}
+
 export interface ProfileItem {
   id: string;
   platformId: string;
@@ -242,6 +264,11 @@ export interface ClientItem {
   id: string;
   name: string;
   platformId: string;
+  email?: string | null;
+  company?: string | null;
+  phone?: string | null;
+  country?: string | null;
+  website?: string | null;
   contactNotes?: string | null;
   platform?: PlatformItem;
 }
@@ -266,6 +293,7 @@ export interface ProjectTeamAssignmentItem {
     name: string;
     slug: string;
     shift?: string | null;
+    avatarUrl?: string | null;
     department: {
       id: string;
       code: string;
@@ -289,6 +317,7 @@ export interface ProjectUserAssignmentItem {
     lastName: string;
     email: string;
     systemRole: string;
+    avatarUrl?: string | null;
     isActive: boolean;
   };
   role: {
@@ -310,6 +339,7 @@ export interface ComponentTeamAssignmentItem {
     id: string;
     name: string;
     slug: string;
+    avatarUrl?: string | null;
   };
 }
 
@@ -327,6 +357,7 @@ export interface ComponentUserAssignmentItem {
     firstName: string;
     lastName: string;
     email: string;
+    avatarUrl?: string | null;
   };
   role: {
     id: string;
@@ -374,6 +405,7 @@ export interface ProjectItem {
   clientId: string | null;
   profileId: string | null;
   serviceLineId: string | null;
+  orderSourceId?: string | null;
   value: number | string | null;
   amount?: number | string | null;
   percentage?: number | string | null;
@@ -391,6 +423,7 @@ export interface ProjectItem {
   status: ProjectStatusItem;
   profile?: ProfileItem | null;
   serviceLine?: ServiceLineItem | null;
+  orderSource?: OrderSourceItem | null;
   client?: ClientItem | null;
   teamAssignments: ProjectTeamAssignmentItem[];
   userAssignments: ProjectUserAssignmentItem[];
@@ -440,6 +473,7 @@ export interface ProjectLookups {
   profiles: ProfileItem[];
   serviceLines: ServiceLineItem[];
   clients: ClientItem[];
+  orderSources: OrderSourceItem[];
   parentCandidates?: ProjectParentCandidate[];
   assignmentRoles: {
     id: string;
@@ -451,6 +485,8 @@ export interface ProjectLookups {
     id: string;
     name: string;
     slug: string;
+    shift?: string | null;
+    avatarUrl?: string | null;
     departmentId: string;
     department: {
       id: string;

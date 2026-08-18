@@ -50,6 +50,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       departmentId: testDepartment.id,
       hierarchyLevel: 1,
       isLeadership: false,
+      isActive: true,
     });
 
     testDesignation = await orgService.createDesignation({
@@ -58,6 +59,7 @@ describe("User Invitation Lifecycle & Multi-Status Management", () => {
       departmentId: testDepartment.id,
       hierarchyLevel: 1,
       isLeadership: false,
+      isActive: true,
     });
   });
 

@@ -13,6 +13,7 @@ model User {
   status             UserStatus @default(INVITED) @map("status")
   roleId             String?    @map("role_id") @db.Uuid
   designationId      String?    @map("designation_id") @db.Uuid
+  avatarUrl          String?    @map("avatar_url")
   isActive           Boolean    @default(true) @map("is_active")
   mustChangePassword Boolean    @default(true) @map("must_change_password")
   lastLoginAt        DateTime?  @map("last_login_at")

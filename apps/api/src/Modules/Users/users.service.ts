@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@workspace/db";
+import type { StorageManager } from "@workspace/storage";
 import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
 import { hashPassword } from "@/utils/crypto";
@@ -10,6 +11,7 @@ import { publishEmail, publishNotification } from "@workspace/message-broker";
 import type {
   CreateAdminUserDTO,
   UpdateAdminUserDTO,
+  UpdateProfileDTO,
   CreateOverrideDTO,
   CreateDelegationDTO,
 } from "./UserDTO";
@@ -26,7 +28,10 @@ function generateTemporaryPassword(): string {
 export class UsersService {
   private logger = new AppLogger("UsersService");
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly storageManager?: StorageManager,
+  ) {}
 
   // ==========================================
   // USERS MANAGEMENT
@@ -130,6 +135,193 @@ export class UsersService {
     return result;
   }
 
+  // ==========================================
+  // USER PROFILE & AVATAR MANAGEMENT
+  // ==========================================
+
+  public async getProfile(userId: string) {
+    return this.getUserById(userId);
+  }
+
+  public async updateProfile(userId: string, data: UpdateProfileDTO, req?: Request) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new NotFoundError("User");
+    }
+
+    const { passwordHash: _, ...oldUserSanitized } = user;
+
+    const updateData: any = {
+      ...(data.firstName && { firstName: data.firstName.trim() }),
+      ...(data.lastName && { lastName: data.lastName.trim() }),
+      ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+      updatedAt: new Date(),
+    };
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      include: {
+        role: {
+          include: { department: true },
+        },
+        designation: {
+          include: { department: true },
+        },
+      },
+    });
+
+    await AuthorizationEngine.getInstance().invalidateUserCache(userId);
+
+    const { passwordHash, ...result } = updated;
+
+    await AuditLogService.log({
+      module: "USERS",
+      action: "USER_PROFILE_UPDATE",
+      entityTable: "users",
+      entityId: result.id,
+      oldPayload: oldUserSanitized,
+      newPayload: result,
+      req,
+    });
+
+    return result;
+  }
+
+  public async uploadAvatar(userId: string, file: Express.Multer.File, req?: Request) {
+    if (!file) {
+      throw new BadRequestError("No avatar image file provided");
+    }
+
+    const allowedMimeTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/svg+xml",
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestError("Invalid file format. Only JPEG, PNG, WEBP, GIF, and SVG images are allowed.");
+    }
+
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_SIZE) {
+      throw new BadRequestError("Avatar image size exceeds the 5MB limit");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new NotFoundError("User");
+    }
+
+    const oldAvatarUrl = user.avatarUrl;
+
+    let avatarUrl: string;
+
+    if (this.storageManager) {
+      const uploadResult = await this.storageManager.uploadFile({
+        body: file.buffer,
+        fileName: file.originalname || `avatar-${userId}.png`,
+        contentType: file.mimetype,
+        entityType: "avatar",
+        entityId: userId,
+        isPublic: true,
+      });
+      avatarUrl = uploadResult.publicUrl || uploadResult.url;
+    } else {
+      avatarUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        avatarUrl,
+        updatedAt: new Date(),
+      },
+      include: {
+        role: {
+          include: { department: true },
+        },
+        designation: {
+          include: { department: true },
+        },
+      },
+    });
+
+    await AuthorizationEngine.getInstance().invalidateUserCache(userId);
+
+    const { passwordHash, ...result } = updated;
+
+    await AuditLogService.log({
+      module: "USERS",
+      action: "USER_AVATAR_UPDATE",
+      entityTable: "users",
+      entityId: userId,
+      oldPayload: { avatarUrl: oldAvatarUrl },
+      newPayload: { avatarUrl },
+      req,
+    });
+
+    return {
+      avatarUrl,
+      user: result,
+    };
+  }
+
+  public async removeAvatar(userId: string, req?: Request) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new NotFoundError("User");
+    }
+
+    const oldAvatarUrl = user.avatarUrl;
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        avatarUrl: null,
+        updatedAt: new Date(),
+      },
+      include: {
+        role: {
+          include: { department: true },
+        },
+        designation: {
+          include: { department: true },
+        },
+      },
+    });
+
+    await AuthorizationEngine.getInstance().invalidateUserCache(userId);
+
+    const { passwordHash, ...result } = updated;
+
+    await AuditLogService.log({
+      module: "USERS",
+      action: "USER_AVATAR_REMOVE",
+      entityTable: "users",
+      entityId: userId,
+      oldPayload: { avatarUrl: oldAvatarUrl },
+      newPayload: { avatarUrl: null },
+      req,
+    });
+
+    return {
+      message: "Avatar removed successfully",
+      user: result,
+    };
+  }
+
   public async createAdminUser(data: CreateAdminUserDTO, req?: Request) {
     const existing = await this.prisma.user.findUnique({
       where: { email: data.email },
@@ -184,6 +376,7 @@ export class UsersService {
         systemRole: data.systemRole as any,
         roleId: data.roleId,
         designationId: data.designationId || null,
+        avatarUrl: data.avatarUrl || null,
         status: "INVITED",
         isActive: true,
         mustChangePassword: true,
@@ -368,6 +561,7 @@ export class UsersService {
       ...(data.systemRole && { systemRole: data.systemRole as any }),
       ...(data.roleId && { roleId: data.roleId }),
       ...(data.designationId !== undefined && { designationId: data.designationId }),
+      ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
       ...(data.status && { status: data.status as any }),
       ...(targetIsActive !== undefined && { isActive: targetIsActive }),
       updatedAt: new Date(),

@@ -11,7 +11,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
-import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { api } from "@/lib/api";
@@ -105,16 +105,30 @@ export function TeamDetailSheet({
             {/* Sheet Header */}
             <SheetHeader className="p-6 pb-4 border-b bg-muted/20">
               <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <SheetTitle className="text-xl font-bold">{team.name}</SheetTitle>
-                    <Badge variant={team.isActive ? "default" : "secondary"} className="text-[10px]">
-                      {team.isActive ? "Active Team" : "Inactive"}
-                    </Badge>
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Avatar className="size-12 rounded-xl border border-primary/20 shrink-0 shadow-xs">
+                    {team.avatarUrl && (
+                      <AvatarImage
+                        src={team.avatarUrl}
+                        alt={team.name}
+                        className="rounded-xl object-cover"
+                      />
+                    )}
+                    <AvatarFallback className="rounded-xl bg-primary/10 text-primary font-bold text-base">
+                      {team.name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <SheetTitle className="text-xl font-bold truncate">{team.name}</SheetTitle>
+                      <Badge variant={team.isActive ? "default" : "secondary"} className="text-[10px]">
+                        {team.isActive ? "Active Team" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <SheetDescription className="text-xs font-mono text-muted-foreground truncate">
+                      {team.slug}
+                    </SheetDescription>
                   </div>
-                  <SheetDescription className="text-xs font-mono text-muted-foreground">
-                    {team.slug}
-                  </SheetDescription>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -253,6 +267,12 @@ export function TeamDetailSheet({
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <Avatar className="size-8.5 border">
+                              {member.user.avatarUrl && (
+                                <AvatarImage
+                                  src={member.user.avatarUrl}
+                                  alt={`${member.user.firstName || ""} ${member.user.lastName || ""}`.trim()}
+                                />
+                              )}
                               <AvatarFallback className="text-[11px] bg-primary/10 text-primary font-semibold">
                                 {getInitials(member.user.firstName, member.user.lastName)}
                               </AvatarFallback>
