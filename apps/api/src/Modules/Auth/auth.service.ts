@@ -300,6 +300,8 @@ export class AuthServices {
     const newAccessToken = signAccessToken({
       sub: user.id,
       systemRole: user.systemRole,
+      roleId: user.roleId || "",
+      branchId: user.branchId || null,
       designationId: user.designationId,
     });
 

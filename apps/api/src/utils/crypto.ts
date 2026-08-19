@@ -6,7 +6,8 @@ import { env } from "@/env";
 export interface JWTCustomPayload {
   sub: string; // user_id
   systemRole: string; // system_role
-  roleId: string; // role_id (authorization role)
+  roleId?: string | null; // role_id (authorization role)
+  branchId?: string | null; // branch_id (Betopia Group branch affiliation)
   designationId?: string | null; // designation_id (optional HR title)
 }
 

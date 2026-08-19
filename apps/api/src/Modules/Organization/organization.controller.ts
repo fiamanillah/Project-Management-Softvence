@@ -4,6 +4,9 @@ import { Request, Response } from "express";
 import { BaseController } from "@/core/BaseController";
 import { OrganizationService } from "./organization.service";
 import type {
+  CreateBranchDTO,
+  UpdateBranchDTO,
+  AssignBranchManagerDTO,
   CreateDepartmentDTO,
   UpdateDepartmentDTO,
   AssignDepartmentManagerDTO,
@@ -19,6 +22,103 @@ export class OrganizationController extends BaseController {
     super();
   }
 
+  // Unified Enterprise Organization Structure (Branches -> Departments -> Teams)
+  public async getOrganizationStructure(req: Request, res: Response) {
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          roleId: req.user.roleId,
+          branchId: (req.user as any).branchId,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const structure = await this.organizationService.getOrganizationStructure(actor);
+    return this.sendResponse(req, res, "Organization structure retrieved successfully", 200, structure);
+  }
+
+  // Branches (Betopia Group Hierarchy)
+  public async getBranches(req: Request, res: Response) {
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          roleId: req.user.roleId,
+          branchId: (req.user as any).branchId,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const result = await this.organizationService.getBranches(actor, {
+      search: req.query.search as string,
+      status: req.query.status as string,
+      page: req.query.page as string,
+      limit: req.query.limit as string,
+    });
+
+    if (result && typeof result === "object" && "pagination" in result) {
+      return this.sendPaginatedResponse(
+        req,
+        res,
+        (result as any).pagination,
+        "Branches retrieved successfully",
+        (result as any).items,
+      );
+    }
+
+    return this.sendResponse(req, res, "Branches retrieved successfully", 200, result);
+  }
+
+  public async getBranchById(req: Request, res: Response) {
+    const id = req.params.id as string;
+    const actor = req.user
+      ? {
+          id: req.user.sub,
+          systemRole: req.user.systemRole,
+          roleId: req.user.roleId,
+          branchId: (req.user as any).branchId,
+          designationId: req.user.designationId,
+          email: (req.user as any).email,
+        }
+      : undefined;
+    const branch = await this.organizationService.getBranchById(id, actor);
+    return this.sendResponse(req, res, "Branch retrieved successfully", 200, branch);
+  }
+
+  public async createBranch(req: Request, res: Response) {
+    const dto = req.validatedBody as CreateBranchDTO;
+    const branch = await this.organizationService.createBranch(dto, req);
+    return this.sendCreatedResponse(req, res, branch, "Branch created successfully");
+  }
+
+  public async updateBranch(req: Request, res: Response) {
+    const id = req.params.id as string;
+    const dto = req.validatedBody as UpdateBranchDTO;
+    const updated = await this.organizationService.updateBranch(id, dto, req);
+    return this.sendResponse(req, res, "Branch updated successfully", 200, updated);
+  }
+
+  public async deleteBranch(req: Request, res: Response) {
+    const id = req.params.id as string;
+    const result = await this.organizationService.deleteBranch(id, req);
+    return this.sendResponse(req, res, result.message, 200);
+  }
+
+  public async assignBranchManager(req: Request, res: Response) {
+    const branchId = req.params.id as string;
+    const dto = req.validatedBody as AssignBranchManagerDTO;
+    const manager = await this.organizationService.assignBranchManager(branchId, dto, req);
+    return this.sendCreatedResponse(req, res, manager, "Branch manager assigned successfully");
+  }
+
+  public async removeBranchManager(req: Request, res: Response) {
+    const branchId = req.params.id as string;
+    const managerId = req.params.managerId as string;
+    const result = await this.organizationService.removeBranchManager(branchId, managerId, req);
+    return this.sendResponse(req, res, result.message, 200);
+  }
+
   // Departments
   public async getDepartments(req: Request, res: Response) {
     const actor = req.user
@@ -26,12 +126,30 @@ export class OrganizationController extends BaseController {
           id: req.user.sub,
           systemRole: req.user.systemRole,
           roleId: req.user.roleId,
+          branchId: (req.user as any).branchId,
           designationId: req.user.designationId,
           email: (req.user as any).email,
         }
       : undefined;
-    const departments = await this.organizationService.getDepartments(actor);
-    return this.sendResponse(req, res, "Departments retrieved successfully", 200, departments);
+    const result = await this.organizationService.getDepartments(actor, {
+      branchId: req.query.branchId as string,
+      status: req.query.status as string,
+      search: req.query.search as string,
+      page: req.query.page as string,
+      limit: req.query.limit as string,
+    });
+
+    if (result && typeof result === "object" && "pagination" in result) {
+      return this.sendPaginatedResponse(
+        req,
+        res,
+        (result as any).pagination,
+        "Departments retrieved successfully",
+        (result as any).items,
+      );
+    }
+
+    return this.sendResponse(req, res, "Departments retrieved successfully", 200, result);
   }
 
   public async getDepartmentById(req: Request, res: Response) {

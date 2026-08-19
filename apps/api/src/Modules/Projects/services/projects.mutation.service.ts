@@ -43,11 +43,10 @@ export class ProjectsMutationService {
     }
 
     // 2. Check financial edit permission if custom value, amount, or percentage is provided
-    if (
-      (dto.value && dto.value > 0) ||
-      (dto.amount && dto.amount > 0) ||
-      (dto.percentage && dto.percentage > 0)
-    ) {
+    const valNum = dto.value !== undefined && dto.value !== null ? Number(dto.value) : 0;
+    const amtNum = dto.amount !== undefined && dto.amount !== null ? Number(dto.amount) : 0;
+    const pctNum = dto.percentage !== undefined && dto.percentage !== null ? Number(dto.percentage) : 0;
+    if (valNum > 0 || amtNum > 0 || pctNum > 0) {
       const hasFinancialEdit = await can(actor, "project.financial.edit", undefined);
       if (!hasFinancialEdit) {
         throw new AuthorizationError("You do not have permission to set project financial values");
@@ -108,6 +107,7 @@ export class ProjectsMutationService {
         data: {
           parentId: dto.parentId || null,
           parentOrderId,
+          branchId: dto.branchId || null,
           projectName: generatedProjectName,
           orderId: dto.orderId,
           service: dto.service?.trim() || null,
@@ -258,6 +258,7 @@ export class ProjectsMutationService {
     };
 
     if (dto.projectName !== undefined) updateData.projectName = dto.projectName;
+    if (dto.branchId !== undefined) updateData.branchId = dto.branchId || null;
     if (dto.orderId !== undefined) updateData.orderId = dto.orderId;
     if (dto.service !== undefined) updateData.service = dto.service?.trim() || null;
     if (dto.email !== undefined) updateData.email = dto.email?.trim() || null;

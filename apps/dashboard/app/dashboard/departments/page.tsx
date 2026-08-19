@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import type { DepartmentItem } from "@workspace/shared";
+import type { DepartmentItem, BranchItem } from "@workspace/shared";
 import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { PermissionGate } from "@/components/permission-gate/PermissionGate";
 import { DataTableToolbar } from "@/components/data-table";
@@ -36,9 +36,11 @@ export default function DepartmentsPage() {
 
 function DepartmentsContent() {
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([]);
+  const [branches, setBranches] = React.useState<BranchItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | "active" | "inactive">("all");
+  const [branchFilter, setBranchFilter] = React.useState<string>("all");
   const [viewMode, setViewMode] = React.useState<"tree" | "chart">("tree");
 
   // Modal States
@@ -50,21 +52,25 @@ function DepartmentsContent() {
 
   const [selectedDepartment, setSelectedDepartment] = React.useState<DepartmentItem | null>(null);
 
-  const fetchDepartments = React.useCallback(async () => {
+  const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await api.get("/organization/departments");
-      setDepartments(res || []);
+      const [deptRes, branchRes] = await Promise.all([
+        api.get("/organization/departments"),
+        api.get("/organization/branches").catch(() => []),
+      ]);
+      setDepartments(deptRes || []);
+      setBranches(branchRes || []);
     } catch (err: any) {
-      toast.error(err.message || "Failed to load departments");
+      toast.error(err.message || "Failed to load organization data");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    fetchDepartments();
-  }, [fetchDepartments]);
+    fetchData();
+  }, [fetchData]);
 
   const handleEdit = (dept: DepartmentItem) => {
     setSelectedDepartment(dept);
@@ -96,7 +102,8 @@ function DepartmentsContent() {
     return departments.filter((dept) => {
       const matchesSearch =
         dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        dept.code.toLowerCase().includes(searchQuery.toLowerCase());
+        dept.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (dept.branch && dept.branch.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchesStatus =
         statusFilter === "all"
@@ -105,9 +112,16 @@ function DepartmentsContent() {
             ? dept.isActive
             : !dept.isActive;
 
-      return matchesSearch && matchesStatus;
+      const matchesBranch =
+        branchFilter === "all"
+          ? true
+          : branchFilter === "NONE"
+            ? !dept.branchId
+            : dept.branchId === branchFilter;
+
+      return matchesSearch && matchesStatus && matchesBranch;
     });
-  }, [departments, searchQuery, statusFilter]);
+  }, [departments, searchQuery, statusFilter, branchFilter]);
 
   // Analytics counts
   const totalDepts = departments.length;
@@ -131,7 +145,7 @@ function DepartmentsContent() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => fetchDepartments()}>
+          <Button variant="outline" size="sm" onClick={() => fetchData()}>
             <RefreshCw className="mr-2 size-4" /> Refresh
           </Button>
 
@@ -308,8 +322,9 @@ function DepartmentsContent() {
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         departments={departments}
+        branches={branches}
         defaultParentId={selectedParentId}
-        onSuccess={fetchDepartments}
+        onSuccess={fetchData}
       />
 
       {/* Edit Department Modal */}
@@ -318,7 +333,8 @@ function DepartmentsContent() {
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
         departments={departments}
-        onSuccess={fetchDepartments}
+        branches={branches}
+        onSuccess={fetchData}
       />
 
       {/* Assign Manager Modal */}
@@ -326,7 +342,7 @@ function DepartmentsContent() {
         department={selectedDepartment}
         open={assignModalOpen}
         onOpenChange={setAssignModalOpen}
-        onSuccess={fetchDepartments}
+        onSuccess={fetchData}
       />
 
       {/* Delete Department Dialog */}
@@ -334,7 +350,7 @@ function DepartmentsContent() {
         department={selectedDepartment}
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        onSuccess={fetchDepartments}
+        onSuccess={fetchData}
       />
     </div>
   );

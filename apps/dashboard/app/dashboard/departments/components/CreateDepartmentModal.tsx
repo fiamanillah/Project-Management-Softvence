@@ -26,10 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import { Loader2, Building2, GitFork } from "lucide-react";
+import { Loader2, Building2, GitBranch, GitFork } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api";
-import { createDepartmentSchema, type DepartmentItem } from "@workspace/shared";
+import { createDepartmentSchema, type DepartmentItem, type BranchItem } from "@workspace/shared";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 
@@ -37,6 +37,7 @@ interface CreateDepartmentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   departments?: DepartmentItem[];
+  branches?: BranchItem[];
   defaultParentId?: string | null;
   onSuccess: () => void;
 }
@@ -45,11 +46,13 @@ export function CreateDepartmentModal({
   open,
   onOpenChange,
   departments = [],
+  branches = [],
   defaultParentId = null,
   onSuccess,
 }: CreateDepartmentModalProps) {
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
+  const [branchId, setBranchId] = React.useState<string>("NONE");
   const [parentId, setParentId] = React.useState<string>("NONE");
   const [isActive, setIsActive] = React.useState(true);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -68,6 +71,7 @@ export function CreateDepartmentModal({
   const handleReset = () => {
     setCode("");
     setName("");
+    setBranchId("NONE");
     setParentId(defaultParentId || "NONE");
     setIsActive(true);
     setErrors({});
@@ -80,6 +84,7 @@ export function CreateDepartmentModal({
     const validationResult = createDepartmentSchema.safeParse({
       code: code.trim(),
       name: name.trim(),
+      branchId: branchId === "NONE" ? null : branchId,
       parentId: parentId === "NONE" ? null : parentId,
       isActive,
     });
@@ -134,14 +139,54 @@ export function CreateDepartmentModal({
             <Building2 className="size-5 text-primary" /> Create New Department
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Add a new organizational unit or sub-department to your company hierarchy.
+            Add a new organizational unit or sub-department to your Betopia Group hierarchy.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <ScrollArea className="max-h-[60vh] h-[360px] w-full px-6 py-2">
+          <ScrollArea className="max-h-[60vh] h-[400px] w-full px-6 py-2">
             <FieldSet>
               <FieldGroup className="space-y-4 pr-2">
+                {/* Branch Selection */}
+                {branches.length > 0 && (
+                  <Field data-invalid={Boolean(errors.branchId)}>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <FieldLabel htmlFor="create-dept-branch" className="text-xs font-semibold">
+                        Host Branch / Subsidiary
+                      </FieldLabel>
+                      <HelpTooltip text="Assign this department to a specific Betopia Group branch or leave unassigned." />
+                    </div>
+                    <Select
+                      value={branchId}
+                      onValueChange={(val: string | null) => setBranchId(val || "NONE")}
+                      disabled={isLoading}
+                    >
+                      <SelectTrigger id="create-dept-branch" className="w-full text-xs">
+                        <SelectValue placeholder="Select Branch" />
+                      </SelectTrigger>
+                      <SelectContent className="w-full max-h-56">
+                        <SelectItem value="NONE" className="text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <GitBranch className="size-3.5 text-muted-foreground" />
+                            <span>None (Corporate HQ / Unassigned)</span>
+                          </div>
+                        </SelectItem>
+                        {branches.map((b) => (
+                          <SelectItem key={b.id} value={b.id} className="text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                {b.code}
+                              </span>
+                              <span>{b.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldError errors={errors.branchId} />
+                  </Field>
+                )}
+
                 {/* Department Code Field */}
                 <Field data-invalid={Boolean(errors.code)}>
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -218,8 +263,10 @@ export function CreateDepartmentModal({
                       {activeDepartments.map((dept) => (
                         <SelectItem key={dept.id} value={dept.id} className="text-xs">
                           <div className="flex items-center gap-1.5">
-                            <GitFork className="size-3.5 text-primary" />
-                            <span>{dept.name} ({dept.code})</span>
+                            <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                              {dept.code}
+                            </span>
+                            <span>{dept.name}</span>
                           </div>
                         </SelectItem>
                       ))}
@@ -228,30 +275,28 @@ export function CreateDepartmentModal({
                   <FieldError errors={errors.parentId} />
                 </Field>
 
-                {/* Status Switch */}
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                {/* Is Active Switch Field */}
+                <Field className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
                   <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <FieldLabel className="text-xs font-semibold cursor-pointer">
-                        Active Operational Status
-                      </FieldLabel>
-                      <HelpTooltip text="Inactive departments cannot have teams created or new members assigned to them." />
-                    </div>
+                    <FieldLabel htmlFor="create-dept-active" className="text-xs font-medium cursor-pointer">
+                      Operational Status
+                    </FieldLabel>
                     <p className="text-[11px] text-muted-foreground">
-                      Enable this department for operations and user assignment.
+                      Active departments can have roles, designations, teams, and members assigned.
                     </p>
                   </div>
                   <Switch
+                    id="create-dept-active"
                     checked={isActive}
                     onCheckedChange={setIsActive}
                     disabled={isLoading}
                   />
-                </div>
+                </Field>
               </FieldGroup>
             </FieldSet>
           </ScrollArea>
 
-          <DialogFooter className="p-6 pt-3 border-t mt-auto">
+          <DialogFooter className="p-6 pt-3 border-t bg-muted/10 gap-2">
             <Button
               type="button"
               variant="outline"

@@ -1,11 +1,16 @@
 import { hashPassword } from "../../src/utils/crypto";
+import { AuditLogService } from "../../src/core/audit/audit.service";
 import type { SeedContext, SeedUserRef } from "./types";
 
 export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
   const { prisma } = ctx;
 
+  const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
+  const envAdminPassword = process.env.ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD || "adminpassword123";
+  const envAdminPasswordHash = await hashPassword(envAdminPassword);
+
   const defaultPassword = "Password123!";
-  const passwordHash = await hashPassword(defaultPassword);
+  const defaultPasswordHash = await hashPassword(defaultPassword);
 
   const USERS_DATA: {
     email: string;
@@ -15,9 +20,9 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     systemRole: "SuperAdmin" | "Admin" | "Staff";
     roleCode: string;
     desigCode: string;
+    customPasswordHash?: string;
   }[] = [
     { email: "superadmin@softvence.com", employeeId: "ADM-000001", firstName: "Super", lastName: "Admin", systemRole: "SuperAdmin", roleCode: "SUPER_ADMIN", desigCode: "SUPER_ADMIN" },
-    { email: "admin@example.com", employeeId: "ADM-000002", firstName: "System", lastName: "Administrator", systemRole: "SuperAdmin", roleCode: "SUPER_ADMIN", desigCode: "SUPER_ADMIN" },
     { email: "director.tech@softvence.com", employeeId: "ENG-000001", firstName: "Arthur", lastName: "Pendleton", systemRole: "Admin", roleCode: "ENG_DIRECTOR", desigCode: "ENG_DIRECTOR" },
     { email: "pm.sarah@softvence.com", employeeId: "PM-000001", firstName: "Sarah", lastName: "Jenkins", systemRole: "Staff", roleCode: "PROJECT_MANAGER", desigCode: "PROJECT_MANAGER" },
     { email: "pm.david@softvence.com", employeeId: "PM-000002", firstName: "David", lastName: "Miller", systemRole: "Staff", roleCode: "PROJECT_MANAGER", desigCode: "PROJECT_MANAGER" },
@@ -34,9 +39,32 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     { email: "support.anna@softvence.com", employeeId: "CS-000001", firstName: "Anna", lastName: "Bell", systemRole: "Staff", roleCode: "SUPPORT_SPECIALIST", desigCode: "SUPPORT_SPECIALIST" },
   ];
 
+  // Add or update configured env admin in USERS_DATA
+  const existingAdminEntry = USERS_DATA.find((u) => u.email.toLowerCase() === envAdminEmail);
+  if (existingAdminEntry) {
+    existingAdminEntry.systemRole = "SuperAdmin";
+    existingAdminEntry.roleCode = "SUPER_ADMIN";
+    existingAdminEntry.desigCode = "SUPER_ADMIN";
+    existingAdminEntry.customPasswordHash = envAdminPasswordHash;
+  } else {
+    USERS_DATA.unshift({
+      email: envAdminEmail,
+      employeeId: `ADM-${Date.now().toString().slice(-6)}`,
+      firstName: "System",
+      lastName: "Administrator",
+      systemRole: "SuperAdmin",
+      roleCode: "SUPER_ADMIN",
+      desigCode: "SUPER_ADMIN",
+      customPasswordHash: envAdminPasswordHash,
+    });
+  }
+
+  const defaultBranchId = ctx.branches.get("BET-SA")!;
+
   for (const u of USERS_DATA) {
     const roleId = ctx.roles.get(u.roleCode);
     const designationId = ctx.designations.get(u.desigCode);
+    const userPasswordHash = u.customPasswordHash || defaultPasswordHash;
 
     let userRecord = await prisma.user.findUnique({
       where: { email: u.email },
@@ -48,8 +76,9 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
         data: {
           firstName: u.firstName,
           lastName: u.lastName,
-          passwordHash,
+          passwordHash: userPasswordHash,
           systemRole: u.systemRole,
+          branchId: defaultBranchId,
           roleId,
           designationId,
           status: "ACTIVE",
@@ -64,8 +93,9 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
           employeeId: u.employeeId,
           firstName: u.firstName,
           lastName: u.lastName,
-          passwordHash,
+          passwordHash: userPasswordHash,
           systemRole: u.systemRole,
+          branchId: defaultBranchId,
           roleId,
           designationId,
           status: "ACTIVE",
@@ -86,10 +116,30 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     };
 
     ctx.users.set(u.email, ref);
+
+    // Dispatch audit log for SuperAdmin bootstrap
+    if (u.systemRole === "SuperAdmin") {
+      AuditLogService.log({
+        module: "Auth",
+        action: "SUPER_ADMIN_BOOTSTRAP",
+        entityTable: "users",
+        entityId: userRecord.id,
+        actor: {
+          id: userRecord.id,
+          email: userRecord.email,
+          role: "SuperAdmin",
+        },
+        metadata: {
+          email: userRecord.email,
+          bootstrappedAt: new Date().toISOString(),
+        },
+        status: "SUCCESS",
+      });
+    }
   }
 
   // 2. Assign Scoped Permissions to Roles
-  const superAdminUser = ctx.users.get("superadmin@softvence.com")!;
+  const superAdminUser = ctx.users.get(envAdminEmail) || ctx.users.get("superadmin@softvence.com")!;
   const globalScopeId = ctx.scopeTypes.get("GLOBAL")!;
   const ownDeptScopeId = ctx.scopeTypes.get("OWN_DEPARTMENT")!;
   const ownTeamScopeId = ctx.scopeTypes.get("OWN_TEAM")!;
@@ -134,7 +184,7 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     }
   };
 
-  // SUPER_ADMIN gets everything GLOBAL
+  // SUPER_ADMIN gets everything GLOBAL (All 32 Permissions)
   await grantRolePerms("SUPER_ADMIN", globalScopeId);
 
   // ENG_DIRECTOR gets everything OWN_DEPARTMENT
@@ -170,7 +220,31 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     code.startsWith("support:") || code.startsWith("clients:read") || code.startsWith("issues:")
   );
 
-  // 3. Department Managers
+  // 3. Branch Managers
+  const saBranchId = ctx.branches.get("BET-SA")!;
+  const BRANCH_MANAGERS = [
+    { branchId: saBranchId, userEmail: "director.tech@softvence.com" },
+  ];
+
+  for (const bm of BRANCH_MANAGERS) {
+    const user = ctx.users.get(bm.userEmail);
+    if (!user) continue;
+
+    const existing = await prisma.branchManager.findFirst({
+      where: { branchId: bm.branchId, userId: user.id, unassignedAt: null },
+    });
+
+    if (!existing) {
+      await prisma.branchManager.create({
+        data: {
+          branchId: bm.branchId,
+          userId: user.id,
+        },
+      });
+    }
+  }
+
+  // 4. Department Managers
   const engDeptId = ctx.departments.get("ENG")!;
   const desDeptId = ctx.departments.get("DES")!;
   const bdDeptId = ctx.departments.get("BD")!;

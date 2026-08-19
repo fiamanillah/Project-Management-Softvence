@@ -91,6 +91,9 @@ async function main() {
 
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
+  const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
+  const envAdminPassword = process.env.ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD || "adminpassword123";
+
   console.log("\n============================================================");
   console.log("🎉  DATABASE SEEDING COMPLETED SUCCESSFULLY!");
   console.log(`⏱   Total execution time: ${totalTime}s`);
@@ -107,16 +110,19 @@ async function main() {
   console.log(`    • Chat Messages:      ${chatCount}`);
   console.log(`    • BD Orders:          ${bdOrderCount}`);
   console.log("------------------------------------------------------------");
-  console.log("🔑  Standard Test Accounts (Password: Password123!):");
-  console.log("    • SuperAdmin:         superadmin@softvence.com");
-  console.log("    • Eng Director:       director.tech@softvence.com");
-  console.log("    • Project Manager:    pm.sarah@softvence.com");
-  console.log("    • Tech Lead:          lead.alex@softvence.com");
-  console.log("    • Senior Developer:   dev.james@softvence.com");
-  console.log("    • Frontend Engineer:  dev.priya@softvence.com");
-  console.log("    • UI/UX Designer:     designer.lisa@softvence.com");
-  console.log("    • QA Specialist:      qa.tom@softvence.com");
-  console.log("    • BD Manager:         bd.rachel@softvence.com");
+  console.log("🔑  SuperAdmin & Standard Test Accounts:");
+  console.log(`    • SuperAdmin (Env):   ${envAdminEmail} (Password: ${envAdminPassword})`);
+  if (envAdminEmail !== "superadmin@softvence.com") {
+    console.log("    • SuperAdmin (Demo):  superadmin@softvence.com (Password: Password123!)");
+  }
+  console.log("    • Eng Director:       director.tech@softvence.com (Password: Password123!)");
+  console.log("    • Project Manager:    pm.sarah@softvence.com (Password: Password123!)");
+  console.log("    • Tech Lead:          lead.alex@softvence.com (Password: Password123!)");
+  console.log("    • Senior Developer:   dev.james@softvence.com (Password: Password123!)");
+  console.log("    • Frontend Engineer:  dev.priya@softvence.com (Password: Password123!)");
+  console.log("    • UI/UX Designer:     designer.lisa@softvence.com (Password: Password123!)");
+  console.log("    • QA Specialist:      qa.tom@softvence.com (Password: Password123!)");
+  console.log("    • BD Manager:         bd.rachel@softvence.com (Password: Password123!)");
   console.log("============================================================\n");
 }
 

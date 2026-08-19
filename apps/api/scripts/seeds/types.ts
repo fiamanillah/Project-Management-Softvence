@@ -44,6 +44,7 @@ export interface SeedContext {
   bdOrderTypes: Map<string, string>;
 
   // Organization & Security
+  branches: Map<string, string>;
   departments: Map<string, string>;
   teams: Map<string, string>;
   roles: Map<string, string>;
@@ -75,6 +76,7 @@ export function createSeedContext(prisma: PrismaClient, clean = false): SeedCont
     notificationTypes: new Map(),
     orderSources: new Map(),
     bdOrderTypes: new Map(),
+    branches: new Map(),
     departments: new Map(),
     teams: new Map(),
     roles: new Map(),

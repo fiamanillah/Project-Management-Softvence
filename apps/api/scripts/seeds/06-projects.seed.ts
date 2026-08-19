@@ -193,11 +193,14 @@ export async function seedProjects(ctx: SeedContext): Promise<void> {
       where: { orderId: p.orderId },
     });
 
+    const defaultBranchId = ctx.branches.get("BET-SA") || null;
+
     if (projectRecord) {
       projectRecord = await prisma.project.update({
         where: { orderId: p.orderId },
         data: {
           projectName: p.projectName,
+          branchId: defaultBranchId,
           clientId: p.clientId,
           profileId: p.profileId,
           serviceLineId: p.serviceLineId,
@@ -220,6 +223,7 @@ export async function seedProjects(ctx: SeedContext): Promise<void> {
         data: {
           orderId: p.orderId,
           projectName: p.projectName,
+          branchId: defaultBranchId,
           clientId: p.clientId,
           profileId: p.profileId,
           serviceLineId: p.serviceLineId,

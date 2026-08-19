@@ -7,10 +7,12 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
   // 1. Permission Scope Types
   const SCOPE_TYPES: { code: string; name: string; description: string; resolutionStrategy: ScopeResolutionStrategy }[] = [
     { code: "GLOBAL", name: "Global Access", description: "Applies system-wide with no resource boundary constraints", resolutionStrategy: "Global" },
+    { code: "OWN_BRANCH", name: "Own Branch", description: "Restricted to resources belonging to the user's branch or its sub-branches", resolutionStrategy: "OwnBranch" },
     { code: "OWN_DEPARTMENT", name: "Own Department", description: "Restricted to resources belonging to the user's department", resolutionStrategy: "OwnDepartment" },
     { code: "OWN_TEAM", name: "Own Team", description: "Restricted to resources belonging to teams the user actively belongs to", resolutionStrategy: "OwnTeam" },
     { code: "OWN_PROJECT", name: "Own Project", description: "Restricted to projects where the user is directly assigned", resolutionStrategy: "OwnProject" },
     { code: "OWN_PROFILE", name: "Own Profile", description: "Restricted to profiles assigned to the user", resolutionStrategy: "OwnProfile" },
+    { code: "EXPLICIT_BRANCHES", name: "Explicit Branches", description: "Restricted to specifically selected branch scope targets", resolutionStrategy: "ExplicitBranches" },
     { code: "EXPLICIT_DEPARTMENTS", name: "Explicit Departments", description: "Restricted to specifically selected department scope targets", resolutionStrategy: "ExplicitDepartments" },
     { code: "EXPLICIT_TEAMS", name: "Explicit Teams", description: "Restricted to specifically selected team scope targets", resolutionStrategy: "ExplicitTeams" },
     { code: "EXPLICIT_PROJECTS", name: "Explicit Projects", description: "Restricted to specifically selected project scope targets", resolutionStrategy: "ExplicitProjects" },

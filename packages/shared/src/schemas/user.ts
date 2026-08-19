@@ -55,6 +55,7 @@ export const createAdminUserSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).default("Staff"),
+  branchId: z.string().uuid("Invalid branch ID").optional().nullable(),
   roleId: z.string().uuid("Invalid role ID"),
   designationId: z.string().uuid("Invalid designation ID").optional().nullable(),
   avatarUrl: z.string().nullable().optional(),
@@ -70,6 +71,7 @@ export const updateAdminUserSchema = z.object({
   lastName: z.string().min(1, "Last name is required").optional(),
   employeeId: z.string().min(1, "Employee ID cannot be empty").optional(),
   systemRole: z.enum(["SuperAdmin", "Admin", "Staff"]).optional(),
+  branchId: z.string().uuid("Invalid branch ID").optional().nullable(),
   roleId: z.string().uuid("Invalid role ID").optional(),
   designationId: z.string().uuid("Invalid designation ID").optional().nullable(),
   avatarUrl: z.string().nullable().optional(),
@@ -87,6 +89,7 @@ export const createOverrideSchema = z.object({
   userId: z.string().uuid(),
   permissionId: z.string().uuid(),
   isDeny: z.boolean().default(false),
+  branchId: z.string().uuid().optional().nullable(),
   departmentId: z.string().uuid().optional().nullable(),
   teamId: z.string().uuid().optional().nullable(),
   projectId: z.string().uuid().optional().nullable(),
@@ -134,6 +137,7 @@ export interface UserItem {
   avatarUrl?: string | null;
   systemRole: "SuperAdmin" | "Admin" | "Staff";
   status: UserStatus;
+  branchId?: string | null;
   roleId?: string;
   designationId?: string | null;
   isActive: boolean;
@@ -141,6 +145,11 @@ export interface UserItem {
   lastLoginAt?: string | Date | null;
   createdAt: string | Date;
   updatedAt?: string | Date | null;
+  branch?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
   role?: {
     id: string;
     code: string;

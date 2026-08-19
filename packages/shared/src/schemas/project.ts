@@ -33,6 +33,7 @@ export const createProjectSchema = z.object({
     .string()
     .min(1, "Order ID is required")
     .max(100, "Order ID cannot exceed 100 characters"),
+  branchId: z.string().uuid("Invalid branch ID format").optional().nullable(),
   parentId: z.string().uuid("Invalid parent project ID format").optional().nullable(),
   parentOrderId: z.string().max(100).optional().nullable(),
   clientId: z.string().uuid("Invalid client ID format"),
@@ -83,6 +84,7 @@ export const updateProjectSchema = z.object({
     .nullable()
     .or(z.literal("")),
   orderId: z.string().min(1).max(100).optional(),
+  branchId: z.string().uuid("Invalid branch ID format").optional().nullable(),
   parentId: z.string().uuid("Invalid parent project ID format").optional().nullable(),
   parentOrderId: z.string().max(100).optional().nullable(),
   clientId: z.string().uuid().optional(),
@@ -196,7 +198,7 @@ export const createQuickOrderSourceSchema = z.object({
 });
 
 // Types inferred from Zod schemas
-export type CreateProjectDTO = z.infer<typeof createProjectSchema>;
+export type CreateProjectDTO = z.input<typeof createProjectSchema>;
 export type UpdateProjectDTO = z.infer<typeof updateProjectSchema>;
 export type AssignProjectTeamDTO = z.infer<typeof assignProjectTeamSchema>;
 export type AssignProjectMemberDTO = z.infer<typeof assignProjectMemberSchema>;
@@ -205,10 +207,10 @@ export type CreateProjectComponentDTO = z.infer<typeof createProjectComponentSch
 export type UpdateProjectComponentDTO = z.infer<typeof updateProjectComponentSchema>;
 export type AssignComponentMemberDTO = z.infer<typeof assignComponentMemberSchema>;
 export type CreateQuickClientDTO = z.infer<typeof createQuickClientSchema>;
-export type CreateQuickProfileDTO = z.infer<typeof createQuickProfileSchema>;
+export type CreateQuickProfileDTO = z.input<typeof createQuickProfileSchema>;
 export type CreateQuickPlatformDTO = z.infer<typeof createQuickPlatformSchema>;
 export type CreateQuickServiceLineDTO = z.infer<typeof createQuickServiceLineSchema>;
-export type CreateQuickStatusDTO = z.infer<typeof createQuickStatusSchema>;
+export type CreateQuickStatusDTO = z.input<typeof createQuickStatusSchema>;
 export type CreateQuickOrderSourceDTO = z.infer<typeof createQuickOrderSourceSchema>;
 
 // ============================================================================
@@ -394,6 +396,7 @@ export interface ProjectParentSummary {
 
 export interface ProjectItem {
   id: string;
+  branchId?: string | null;
   parentId?: string | null;
   parentOrderId?: string | null;
   orderId: string;
@@ -418,6 +421,11 @@ export interface ProjectItem {
   deletedAt?: string | Date | null;
 
   // Relations
+  branch?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
   parentProject?: ProjectParentSummary | null;
   subProjects?: ProjectItem[];
   status: ProjectStatusItem;

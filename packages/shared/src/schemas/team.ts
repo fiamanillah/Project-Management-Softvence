@@ -48,7 +48,7 @@ export const updateTeamMemberSchema = z.object({
   note: z.string().max(255, "Note cannot exceed 255 characters").optional().nullable(),
 });
 
-export type CreateTeamDTO = z.infer<typeof createTeamSchema>;
+export type CreateTeamDTO = z.input<typeof createTeamSchema>;
 export type UpdateTeamDTO = z.infer<typeof updateTeamSchema>;
 export type AddTeamMemberDTO = z.infer<typeof addTeamMemberSchema>;
 export type UpdateTeamMemberDTO = z.infer<typeof updateTeamMemberSchema>;

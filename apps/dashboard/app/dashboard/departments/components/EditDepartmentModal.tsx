@@ -26,10 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import { Loader2, Pencil, Building2, GitFork } from "lucide-react";
+import { Loader2, Pencil, Building2, GitBranch, GitFork } from "lucide-react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api";
-import { updateDepartmentSchema, type DepartmentItem } from "@workspace/shared";
+import { updateDepartmentSchema, type DepartmentItem, type BranchItem } from "@workspace/shared";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 
@@ -38,6 +38,7 @@ interface EditDepartmentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   departments?: DepartmentItem[];
+  branches?: BranchItem[];
   onSuccess: () => void;
 }
 
@@ -46,22 +47,25 @@ export function EditDepartmentModal({
   open,
   onOpenChange,
   departments = [],
+  branches = [],
   onSuccess,
 }: EditDepartmentModalProps) {
   const [name, setName] = React.useState("");
+  const [branchId, setBranchId] = React.useState<string>("NONE");
   const [parentId, setParentId] = React.useState<string>("NONE");
   const [isActive, setIsActive] = React.useState(true);
   const [isLoading, setIsLoading] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   React.useEffect(() => {
-    if (department) {
+    if (department && open) {
       setName(department.name || "");
+      setBranchId(department.branchId || "NONE");
       setParentId(department.parentId || "NONE");
       setIsActive(department.isActive ?? true);
       setErrors({});
     }
-  }, [department]);
+  }, [department, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +74,7 @@ export function EditDepartmentModal({
 
     const validationResult = updateDepartmentSchema.safeParse({
       name: name.trim(),
+      branchId: branchId === "NONE" ? null : branchId,
       parentId: parentId === "NONE" ? null : parentId,
       isActive,
     });
@@ -100,75 +105,99 @@ export function EditDepartmentModal({
     }
   };
 
-  // Helper to find all descendants of the current department to prevent cycle selection
-  const descendantIds = React.useMemo(() => {
-    if (!department) return new Set<string>();
-    const descendants = new Set<string>();
-    const queue = [department.id];
-
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      for (const d of departments) {
-        if (d.parentId === currentId && !descendants.has(d.id)) {
-          descendants.add(d.id);
-          queue.push(d.id);
-        }
-      }
-    }
-    return descendants;
-  }, [department, departments]);
-
-  const validParentDepartments = React.useMemo(() => {
-    if (!department) return [];
-    return departments.filter(
-      (d) => d.id !== department.id && !descendantIds.has(d.id) && d.isActive,
-    );
-  }, [department, departments, descendantIds]);
+  // Filter out the current department from parent candidates to prevent direct loops
+  const parentCandidates = React.useMemo(() => {
+    return departments.filter((d) => d.id !== department?.id && d.isActive);
+  }, [departments, department]);
 
   const selectedParent = React.useMemo(() => {
     if (!parentId || parentId === "NONE") return null;
-    return validParentDepartments.find((d) => d.id === parentId) || departments.find((d) => d.id === parentId);
-  }, [validParentDepartments, departments, parentId]);
+    return parentCandidates.find((d) => d.id === parentId);
+  }, [parentCandidates, parentId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-xl sm:min-w-[540px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-2">
           <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-            <Pencil className="size-5 text-primary" /> Edit Department Details
+            <Pencil className="size-5 text-primary" /> Edit Department: {department?.code}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Update department title, parent hierarchy branch, and operational status.
+            Update the title, operational status, branch host, or organizational parent hierarchy.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <ScrollArea className="max-h-[60vh] h-[360px] w-full px-6 py-2">
+          <ScrollArea className="max-h-[60vh] h-[400px] w-full px-6 py-2">
             <FieldSet>
               <FieldGroup className="space-y-4 pr-2">
-                {/* Readonly Code Field */}
+                {/* Department Code Field (Read-only) */}
                 <Field>
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <FieldLabel className="text-xs font-semibold">Department Code</FieldLabel>
-                    <HelpTooltip text="Permanent unique identifier code. Cannot be modified after creation." />
+                    <FieldLabel htmlFor="edit-dept-code" className="text-xs font-semibold">
+                      Department Code (Immutable)
+                    </FieldLabel>
+                    <HelpTooltip text="Department codes are immutable system identifiers required by security and permission rules." />
                   </div>
                   <Input
+                    id="edit-dept-code"
                     value={department?.code || ""}
                     disabled
-                    className="font-mono font-bold bg-muted/50 text-xs"
+                    className="bg-muted font-mono uppercase text-xs cursor-not-allowed opacity-80"
                   />
                 </Field>
 
-                {/* Editable Name Field */}
+                {/* Host Branch Selection */}
+                {branches.length > 0 && (
+                  <Field data-invalid={Boolean(errors.branchId)}>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <FieldLabel htmlFor="edit-dept-branch" className="text-xs font-semibold">
+                        Host Branch / Subsidiary
+                      </FieldLabel>
+                      <HelpTooltip text="Re-assign this department to a specific Betopia Group branch or leave unassigned." />
+                    </div>
+                    <Select
+                      value={branchId}
+                      onValueChange={(val: string | null) => setBranchId(val || "NONE")}
+                      disabled={isLoading}
+                    >
+                      <SelectTrigger id="edit-dept-branch" className="w-full text-xs">
+                        <SelectValue placeholder="Select Branch" />
+                      </SelectTrigger>
+                      <SelectContent className="w-full max-h-56">
+                        <SelectItem value="NONE" className="text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <GitBranch className="size-3.5 text-muted-foreground" />
+                            <span>None (Corporate HQ / Unassigned)</span>
+                          </div>
+                        </SelectItem>
+                        {branches.map((b) => (
+                          <SelectItem key={b.id} value={b.id} className="text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                {b.code}
+                              </span>
+                              <span>{b.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldError errors={errors.branchId} />
+                  </Field>
+                )}
+
+                {/* Department Name Field */}
                 <Field data-invalid={Boolean(errors.name)}>
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <FieldLabel htmlFor="edit-dept-name" className="text-xs font-semibold">
                       Department Name <span className="text-destructive">*</span>
                     </FieldLabel>
-                    <HelpTooltip text="Official title of the department displayed on organization views." />
+                    <HelpTooltip text="Full title of the department as displayed on organizational charts and reports." />
                   </div>
                   <Input
                     id="edit-dept-name"
+                    placeholder="e.g. Engineering & Product Architecture"
                     value={name}
                     onChange={(e) => {
                       setName(e.target.value);
@@ -187,7 +216,7 @@ export function EditDepartmentModal({
                     <FieldLabel htmlFor="edit-dept-parent" className="text-xs font-semibold">
                       Parent Department (Hierarchy Tier)
                     </FieldLabel>
-                    <HelpTooltip text="Parent department to nest under. Circular references are automatically excluded." />
+                    <HelpTooltip text="Modify the hierarchical parent. Circular hierarchy loops are strictly blocked by the server." />
                   </div>
                   <Select
                     value={parentId}
@@ -208,11 +237,13 @@ export function EditDepartmentModal({
                           <span>None (Top-Level Department)</span>
                         </div>
                       </SelectItem>
-                      {validParentDepartments.map((dept) => (
+                      {parentCandidates.map((dept) => (
                         <SelectItem key={dept.id} value={dept.id} className="text-xs">
                           <div className="flex items-center gap-1.5">
-                            <GitFork className="size-3.5 text-primary" />
-                            <span>{dept.name} ({dept.code})</span>
+                            <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                              {dept.code}
+                            </span>
+                            <span>{dept.name}</span>
                           </div>
                         </SelectItem>
                       ))}
@@ -221,30 +252,28 @@ export function EditDepartmentModal({
                   <FieldError errors={errors.parentId} />
                 </Field>
 
-                {/* Status Switch */}
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                {/* Is Active Switch Field */}
+                <Field className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
                   <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <FieldLabel className="text-xs font-semibold cursor-pointer">
-                        Active Operational Status
-                      </FieldLabel>
-                      <HelpTooltip text="Inactive departments are archived and prevent team assignments." />
-                    </div>
+                    <FieldLabel htmlFor="edit-dept-active" className="text-xs font-medium cursor-pointer">
+                      Operational Status
+                    </FieldLabel>
                     <p className="text-[11px] text-muted-foreground">
-                      Enable or disable operational availability for this department.
+                      Active departments can have roles, designations, teams, and members assigned.
                     </p>
                   </div>
                   <Switch
+                    id="edit-dept-active"
                     checked={isActive}
                     onCheckedChange={setIsActive}
                     disabled={isLoading}
                   />
-                </div>
+                </Field>
               </FieldGroup>
             </FieldSet>
           </ScrollArea>
 
-          <DialogFooter className="p-6 pt-3 border-t mt-auto">
+          <DialogFooter className="p-6 pt-3 border-t bg-muted/10 gap-2">
             <Button
               type="button"
               variant="outline"

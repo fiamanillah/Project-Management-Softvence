@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { ChevronRight, type LucideIcon } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import {
   Collapsible,
   CollapsibleContent,
@@ -9,6 +9,7 @@ import {
 } from '@workspace/ui/components/collapsible'
 import {
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -21,23 +22,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@workspace/ui/lib/utils'
 import { PermissionGate } from '@/components/permission-gate/PermissionGate'
+import { usePermissions, hasPermission } from '@/lib/permissions/PermissionContext'
+import type { NavGroupConfig, NavItemConfig } from './nav-data'
 
-export interface NavItem {
-  title: string
-  url: string
-  icon: LucideIcon
-  permission?: string
-  isActive?: boolean
-  badge?: string | number
-  items?: {
-    title: string
-    url: string
-    permission?: string
-    badge?: string | number
-  }[]
-}
+export type NavItem = NavItemConfig
+export type NavGroup = NavGroupConfig
 
-function NavMainItem({ item }: { item: NavItem }) {
+function NavMainItem({ item }: { item: NavItemConfig }) {
   const pathname = usePathname()
   const isActive = pathname === item.url || (item.url !== '/dashboard' && pathname.startsWith(item.url))
   const isAnySubActive = Boolean(item.items?.some((subItem) => pathname === subItem.url))
@@ -67,7 +58,7 @@ function NavMainItem({ item }: { item: NavItem }) {
                   tooltip={item.title}
                   isActive={isActive}
                   className={cn(
-                    'my-1 [&>svg]:size-5',
+                    'my-0.5 [&>svg]:size-4',
                     isActive && 'text-primary font-medium'
                   )}
                 >
@@ -82,7 +73,7 @@ function NavMainItem({ item }: { item: NavItem }) {
               tooltip={item.title}
               isActive={isActive}
               className={cn(
-                'my-1 [&>svg]:size-5',
+                'my-0.5 [&>svg]:size-4',
                 isActive && 'text-primary font-medium'
               )}
               render={
@@ -112,7 +103,7 @@ function NavMainItem({ item }: { item: NavItem }) {
                             <Link
                               href={subItem.url}
                               className={cn(
-                                'flex items-center justify-between w-full h-9',
+                                'flex items-center justify-between w-full h-8',
                                 isSubActive ? 'text-primary font-medium' : ''
                               )}
                             >
@@ -138,18 +129,62 @@ function NavMainItem({ item }: { item: NavItem }) {
   )
 }
 
-export function NavMain({
-  items,
-}: {
-  items: NavItem[]
-}) {
+function NavGroupSection({ group }: { group: NavGroupConfig }) {
+  const permissions = usePermissions()
+
+  // Verify that at least one item in the group is accessible to the user
+  const visibleItems = group.items.filter(
+    (item) => !item.permission || hasPermission(permissions, item.permission)
+  )
+
+  if (visibleItems.length === 0) {
+    return null
+  }
+
   return (
-    <SidebarGroup>
+    <SidebarGroup className="py-1">
+      {group.label && (
+        <SidebarGroupLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-2 py-1 select-none">
+          {group.label}
+        </SidebarGroupLabel>
+      )}
       <SidebarMenu>
-        {items.map((item) => (
+        {group.items.map((item) => (
           <NavMainItem key={item.title} item={item} />
         ))}
       </SidebarMenu>
     </SidebarGroup>
   )
+}
+
+export function NavMain({
+  groups,
+  items,
+}: {
+  groups?: NavGroupConfig[]
+  items?: NavItemConfig[]
+}) {
+  if (groups && groups.length > 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        {groups.map((group, idx) => (
+          <NavGroupSection key={group.label || idx} group={group} />
+        ))}
+      </div>
+    )
+  }
+
+  if (items && items.length > 0) {
+    return (
+      <SidebarGroup className="py-1">
+        <SidebarMenu>
+          {items.map((item) => (
+            <NavMainItem key={item.title} item={item} />
+          ))}
+        </SidebarMenu>
+      </SidebarGroup>
+    )
+  }
+
+  return null
 }

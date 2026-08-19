@@ -9,6 +9,28 @@ import type {
 
 export class ScopeEvaluator {
   /**
+   * Recursively collect all descendant branch IDs of a given branch
+   */
+  public static async getBranchDescendants(
+    branchId: string,
+    prisma: PrismaClient,
+  ): Promise<string[]> {
+    const children = await prisma.branch.findMany({
+      where: { parentId: branchId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (children.length === 0) return [];
+
+    const childIds = children.map((c) => c.id);
+    const subChildIds = await Promise.all(
+      childIds.map((id) => this.getBranchDescendants(id, prisma)),
+    );
+
+    return [...childIds, ...subChildIds.flat()];
+  }
+
+  /**
    * Recursively collect all descendant department IDs of a given department
    */
   public static async getDepartmentDescendants(
@@ -16,7 +38,7 @@ export class ScopeEvaluator {
     prisma: PrismaClient,
   ): Promise<string[]> {
     const children = await prisma.department.findMany({
-      where: { parentId: departmentId },
+      where: { parentId: departmentId, deletedAt: null },
       select: { id: true },
     });
 
@@ -49,6 +71,87 @@ export class ScopeEvaluator {
     switch (strategy) {
       case "Global":
         return true;
+
+      case "OwnBranch": {
+        let targetBranchId = resource?.branchId;
+
+        // If branchId is not directly on resource, resolve it from departmentId or projectId
+        if (!targetBranchId && resource?.departmentId) {
+          const dept = await prisma.department.findUnique({
+            where: { id: resource.departmentId },
+            select: { branchId: true },
+          });
+          targetBranchId = dept?.branchId || undefined;
+        }
+
+        if (!targetBranchId && resource?.projectId) {
+          const proj = await prisma.project.findUnique({
+            where: { id: resource.projectId },
+            select: { branchId: true },
+          });
+          targetBranchId = proj?.branchId || undefined;
+        }
+
+        if (!targetBranchId) return false;
+
+        // 1. Check user's direct branch affiliation
+        let userBranchId = user.branchId;
+        if (!userBranchId && user.id) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { branchId: true },
+          });
+          userBranchId = dbUser?.branchId;
+        }
+
+        if (userBranchId) {
+          if (userBranchId === targetBranchId) return true;
+          const descendantBranchIds = await this.getBranchDescendants(userBranchId, prisma);
+          if (descendantBranchIds.includes(targetBranchId)) return true;
+        }
+
+        // 2. Check if user is an active Branch Manager of this branch or an ancestor branch
+        const managedBranches = await prisma.branchManager.findMany({
+          where: {
+            userId: user.id,
+            unassignedAt: null,
+          },
+          select: { branchId: true },
+        });
+
+        for (const mb of managedBranches) {
+          if (mb.branchId === targetBranchId) return true;
+          const descendantBranchIds = await this.getBranchDescendants(mb.branchId, prisma);
+          if (descendantBranchIds.includes(targetBranchId)) return true;
+        }
+
+        // 3. Check if user belongs to a department whose branch matches targetBranchId
+        let effectiveRoleId = user.roleId;
+        if (!effectiveRoleId && user.id) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { roleId: true },
+          });
+          effectiveRoleId = dbUser?.roleId || "";
+        }
+
+        if (effectiveRoleId) {
+          const role = await prisma.role.findUnique({
+            where: { id: effectiveRoleId },
+            select: { department: { select: { branchId: true } } },
+          });
+          if (role?.department?.branchId) {
+            if (role.department.branchId === targetBranchId) return true;
+            const descendantBranchIds = await this.getBranchDescendants(
+              role.department.branchId,
+              prisma,
+            );
+            if (descendantBranchIds.includes(targetBranchId)) return true;
+          }
+        }
+
+        return false;
+      }
 
       case "OwnDepartment": {
         if (!resource?.departmentId) return false;
@@ -205,19 +308,32 @@ export class ScopeEvaluator {
         return Boolean(profileAssignment);
       }
 
+      case "ExplicitBranches": {
+        let targetBranchId = resource?.branchId;
+        if (!targetBranchId && resource?.departmentId) {
+          const dept = await prisma.department.findUnique({
+            where: { id: resource.departmentId },
+            select: { branchId: true },
+          });
+          targetBranchId = dept?.branchId || undefined;
+        }
+        if (!targetBranchId) return false;
+        return (grant.scopeTargets.branchIds ?? []).includes(targetBranchId);
+      }
+
       case "ExplicitDepartments": {
         if (!resource?.departmentId) return false;
-        return grant.scopeTargets.departmentIds.includes(resource.departmentId);
+        return (grant.scopeTargets.departmentIds ?? []).includes(resource.departmentId);
       }
 
       case "ExplicitTeams": {
         if (!resource?.teamId) return false;
-        return grant.scopeTargets.teamIds.includes(resource.teamId);
+        return (grant.scopeTargets.teamIds ?? []).includes(resource.teamId);
       }
 
       case "ExplicitProjects": {
         if (!resource?.projectId) return false;
-        return grant.scopeTargets.projectIds.includes(resource.projectId);
+        return (grant.scopeTargets.projectIds ?? []).includes(resource.projectId);
       }
 
       default:

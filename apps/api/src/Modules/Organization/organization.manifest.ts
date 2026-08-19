@@ -5,6 +5,24 @@ import { SCOPE_PRESETS } from "@/core/permissions/scopePresets";
 
 export const organizationPermissions: PermissionManifestItem[] = [
   {
+    code: "organization.branch.view",
+    module: "Organization",
+    description: "View branch structure, hierarchy, and managers",
+    supportedScopes: SCOPE_PRESETS.BRANCH_HIERARCHICAL,
+  },
+  {
+    code: "organization.branch.manage",
+    module: "Organization",
+    description: "Create, update, and manage branches, sub-branches, and branch managers",
+    supportedScopes: SCOPE_PRESETS.BRANCH_HIERARCHICAL,
+  },
+  {
+    code: "organization.branch.delete",
+    module: "Organization",
+    description: "Soft-delete organizational branches",
+    supportedScopes: SCOPE_PRESETS.BRANCH_HIERARCHICAL,
+  },
+  {
     code: "organization.department.view",
     module: "Organization",
     description: "View department structure and managers",

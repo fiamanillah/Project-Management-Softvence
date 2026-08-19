@@ -3,6 +3,7 @@ import { z } from "zod";
 export const permissionAssignmentItemSchema = z.object({
   permissionId: z.string().uuid("Invalid permission ID"),
   scopeTypeId: z.string().uuid("Invalid scope type ID"),
+  targetBranchIds: z.array(z.string().uuid()).optional(),
   targetDepartmentIds: z.array(z.string().uuid()).optional(),
   targetTeamIds: z.array(z.string().uuid()).optional(),
   targetProjectIds: z.array(z.string().uuid()).optional(),
@@ -34,7 +35,7 @@ export const saveRolePermissionsSchema = z.object({
 });
 
 export type PermissionAssignmentItem = z.infer<typeof permissionAssignmentItemSchema>;
-export type CreateRoleDTO = z.infer<typeof createRoleSchema>;
+export type CreateRoleDTO = z.input<typeof createRoleSchema>;
 export type UpdateRoleDTO = z.infer<typeof updateRoleSchema>;
 export type SaveRolePermissionsDTO = z.infer<typeof saveRolePermissionsSchema>;
 
@@ -56,6 +57,11 @@ export interface RoleItem {
   _count?: {
     users: number;
     permissions: number;
+  };
+  _capabilities?: {
+    canEdit?: boolean;
+    canDelete?: boolean;
+    canManagePermissions?: boolean;
   };
 }
 
@@ -81,9 +87,11 @@ export interface RoleDetailItem extends RoleItem {
     };
     scopeTargets: {
       id: string;
+      branchId?: string | null;
       departmentId?: string | null;
       teamId?: string | null;
       projectId?: string | null;
+      branch?: { id: string; code: string; name: string } | null;
       department?: { id: string; code: string; name: string } | null;
       team?: { id: string; name: string } | null;
       project?: { id: string; projectName: string } | null;

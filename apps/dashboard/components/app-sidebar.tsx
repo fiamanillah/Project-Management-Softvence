@@ -32,8 +32,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <FolderKanban className="size-5" />
                   </div>
                   <div className="group-data-[collapsible=icon]:hidden flex flex-col gap-0.5 leading-none">
-                    <span className="font-bold text-sm tracking-tight">Softvence PM</span>
-                    <span className="text-[11px] text-muted-foreground font-medium">Project Management</span>
+                    <span className="font-bold text-sm tracking-tight">Betopia Group</span>
+                    <span className="text-[11px] text-muted-foreground font-medium">Enterprise Management</span>
                   </div>
                 </Link>
               }
@@ -42,7 +42,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain groups={data.navGroups} items={data.navMain} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

@@ -29,6 +29,8 @@ export function isSensitivePermission(permissionCode: string): boolean {
     code === "auth.user.create" ||
     code === "auth.user.manage" ||
     code === "auth.session.revoke" ||
+    code === "organization.branch.manage" ||
+    code === "organization.branch.delete" ||
     code === "organization.department.manage" ||
     code === "organization.role.manage" ||
     code === "organization.designation.manage"
@@ -136,9 +138,10 @@ export class AuthorizationEngine {
     if (overrides.length > 0) {
       const matchingOverrides = overrides.filter((o) => {
         // Global override (all resource scope fields null)
-        const isGlobal = !o.departmentId && !o.teamId && !o.projectId;
+        const isGlobal = !o.branchId && !o.departmentId && !o.teamId && !o.projectId;
         if (isGlobal) return true;
 
+        if (resource?.branchId && o.branchId === resource.branchId) return true;
         if (resource?.departmentId && o.departmentId === resource.departmentId) return true;
         if (resource?.teamId && o.teamId === resource.teamId) return true;
         if (resource?.projectId && o.projectId === resource.projectId) return true;
@@ -268,8 +271,9 @@ export class AuthorizationEngine {
 
     if (overrides.length > 0) {
       const matchingOverrides = overrides.filter((o) => {
-        const isGlobal = !o.departmentId && !o.teamId && !o.projectId;
+        const isGlobal = !o.branchId && !o.departmentId && !o.teamId && !o.projectId;
         if (isGlobal) return true;
+        if (resource?.branchId && o.branchId === resource.branchId) return true;
         if (resource?.departmentId && o.departmentId === resource.departmentId) return true;
         if (resource?.teamId && o.teamId === resource.teamId) return true;
         if (resource?.projectId && o.projectId === resource.projectId) return true;
@@ -405,11 +409,13 @@ export class AuthorizationEngine {
     });
 
     const resolvedGrants: ResolvedRoleGrant[] = dbGrants.map((dg) => {
+      const branchIds: string[] = [];
       const departmentIds: string[] = [];
       const teamIds: string[] = [];
       const projectIds: string[] = [];
 
       for (const target of dg.scopeTargets) {
+        if (target.branchId) branchIds.push(target.branchId);
         if (target.departmentId) departmentIds.push(target.departmentId);
         if (target.teamId) teamIds.push(target.teamId);
         if (target.projectId) projectIds.push(target.projectId);
@@ -420,6 +426,7 @@ export class AuthorizationEngine {
         permissionId: dg.permissionId,
         resolutionStrategy: dg.scopeType.resolutionStrategy,
         scopeTargets: {
+          branchIds,
           departmentIds,
           teamIds,
           projectIds,

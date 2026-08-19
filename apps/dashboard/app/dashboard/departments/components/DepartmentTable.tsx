@@ -52,6 +52,7 @@ import {
   type DataTableFeatures,
   DataTableColumnHeader,
   DataTableToolbar,
+  DataTablePagination,
 } from "@/components/data-table";
 
 interface DepartmentCapabilities {
@@ -196,12 +197,14 @@ export function DepartmentTable({
     return { flattenedRows: rows, rootCount: roots.length, subCount: subs };
   }, [departments, expandedIds]);
 
-  // Table state
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<ColumnVisibilityState>({});
+  const [pagination, setPagination] = React.useState({
+    pageIndex: 0,
+    pageSize: 10,
+  });
 
-  // Define table columns
   const columns = React.useMemo(() => {
     return columnHelper.columns([
       columnHelper.accessor((row) => row.department.name, {
@@ -210,8 +213,8 @@ export function DepartmentTable({
           <DataTableColumnHeader column={column} title="Department & Hierarchy" />
         ),
         cell: ({ row }) => {
-          const { department: dept, depth, hasChildren, childCount } = row.original;
-          const isExpanded = expandedIds.has(dept.id);
+          const { department, depth, hasChildren, childCount } = row.original;
+          const isExpanded = expandedIds.has(department.id);
 
           return (
             <div
@@ -225,7 +228,7 @@ export function DepartmentTable({
               {hasChildren ? (
                 <button
                   type="button"
-                  onClick={() => toggleExpand(dept.id)}
+                  onClick={() => toggleExpand(department.id)}
                   className="size-6 rounded-md hover:bg-muted border bg-background flex items-center justify-center text-muted-foreground transition-colors shrink-0 cursor-pointer shadow-2xs"
                   title={isExpanded ? "Collapse sub-departments" : "Expand sub-departments"}
                 >
@@ -250,7 +253,7 @@ export function DepartmentTable({
                         : "font-medium text-foreground/90"
                     }`}
                   >
-                    {dept.name}
+                    {department.name}
                   </span>
                   {hasChildren && (
                     <Badge
@@ -261,9 +264,11 @@ export function DepartmentTable({
                     </Badge>
                   )}
                 </div>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  ID: {dept.id.substring(0, 8)}...
-                </span>
+                {department.code && (
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    ID: {department.id.substring(0, 8)}...
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -282,31 +287,37 @@ export function DepartmentTable({
         ),
       }),
 
-      columnHelper.accessor((row) => row.department.parent?.name || "Root Org", {
-        id: "hierarchyUnit",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Hierarchy Unit" />
-        ),
-        cell: ({ row }) => {
-          const dept = row.original.department;
-          return dept.parent ? (
-            <Badge
-              variant="outline"
-              className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1 w-fit font-normal text-xs"
-            >
-              <GitFork className="size-3" />
-              <span className="truncate max-w-[140px]">{dept.parent.name}</span>
-            </Badge>
-          ) : (
-            <Badge
-              variant="secondary"
-              className="bg-secondary/60 text-secondary-foreground flex items-center gap-1 w-fit font-semibold text-xs"
-            >
-              <Building2 className="size-3 text-primary" /> Root Org
-            </Badge>
-          );
-        },
-      }),
+      columnHelper.accessor(
+        (row) =>
+          row.department.branch?.name
+            ? `${row.department.branch.name} (${row.department.branch.code})`
+            : "Enterprise Global HQ",
+        {
+          id: "branch",
+          header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="Host Branch" />
+          ),
+          cell: ({ row }) => {
+            const b = row.original.department.branch;
+            return b ? (
+              <Badge
+                variant="outline"
+                className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1 w-fit font-normal text-xs"
+              >
+                <Building2 className="size-3" />
+                <span className="truncate max-w-[140px]">{b.name}</span>
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="bg-secondary/60 text-secondary-foreground flex items-center gap-1 w-fit font-semibold text-xs"
+              >
+                <Building2 className="size-3 text-primary" /> Global HQ
+              </Badge>
+            );
+          },
+        }
+      ),
 
       columnHelper.accessor((row) => (row.department.isActive ? "Active" : "Inactive"), {
         id: "status",
@@ -314,8 +325,8 @@ export function DepartmentTable({
           <DataTableColumnHeader column={column} title="Status" />
         ),
         cell: ({ row }) => {
-          const dept = row.original.department;
-          return dept.isActive ? (
+          const d = row.original.department;
+          return d.isActive ? (
             <Badge
               variant="outline"
               className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400 flex items-center gap-1 w-fit text-xs"
@@ -342,7 +353,7 @@ export function DepartmentTable({
         {
           id: "managers",
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Active Manager(s)" />
+            <DataTableColumnHeader column={column} title="Active Leadership" />
           ),
           cell: ({ row }) => {
             const activeManagers =
@@ -376,57 +387,57 @@ export function DepartmentTable({
         }
       ),
 
+      columnHelper.accessor((row) => row.department._count?.teams ?? 0, {
+        id: "teams",
+        header: () => <div className="text-center">Teams</div>,
+        cell: ({ row }) => {
+          const d = row.original.department;
+          return (
+            <div className="flex justify-center">
+              <div
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-mono text-xs"
+                title="Teams in Department"
+              >
+                <Users className="size-3 text-primary" />
+                {d._count?.teams ?? 0}
+              </div>
+            </div>
+          );
+        },
+      }),
+
+      columnHelper.accessor((row) => row.department._count?.roles ?? 0, {
+        id: "roles",
+        header: () => <div className="text-center">Roles</div>,
+        cell: ({ row }) => {
+          const d = row.original.department;
+          return (
+            <div className="flex justify-center">
+              <div
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-mono text-xs"
+                title="Security Roles Defined"
+              >
+                <Shield className="size-3 text-emerald-500" />
+                {d._count?.roles ?? 0}
+              </div>
+            </div>
+          );
+        },
+      }),
+
       columnHelper.accessor((row) => row.department._count?.subDepartments ?? row.childCount, {
         id: "subDepartments",
         header: () => <div className="text-center">Sub-Depts</div>,
         cell: ({ row }) => {
-          const dept = row.original.department;
+          const d = row.original.department;
           return (
             <div className="flex justify-center">
               <div
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-mono text-xs"
                 title="Sub-Departments"
               >
-                <GitFork className="size-3 text-primary" />
-                {dept._count?.subDepartments ?? row.original.childCount}
-              </div>
-            </div>
-          );
-        },
-      }),
-
-      columnHelper.accessor((row) => row.department._count?.designations ?? 0, {
-        id: "designations",
-        header: () => <div className="text-center">Designations</div>,
-        cell: ({ row }) => {
-          const dept = row.original.department;
-          return (
-            <div className="flex justify-center">
-              <div
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-mono text-xs"
-                title="Designations"
-              >
-                <Shield className="size-3 text-primary" />
-                {dept._count?.designations ?? 0}
-              </div>
-            </div>
-          );
-        },
-      }),
-
-      columnHelper.accessor((row) => row.department._count?.teams ?? 0, {
-        id: "teams",
-        header: () => <div className="text-center">Teams</div>,
-        cell: ({ row }) => {
-          const dept = row.original.department;
-          return (
-            <div className="flex justify-center">
-              <div
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-mono text-xs"
-                title="Teams"
-              >
-                <Users className="size-3 text-primary" />
-                {dept._count?.teams ?? 0}
+                <Layers className="size-3 text-purple-500" />
+                {d._count?.subDepartments ?? row.original.childCount}
               </div>
             </div>
           );
@@ -437,22 +448,17 @@ export function DepartmentTable({
         id: "actions",
         header: () => <div className="text-right">Actions</div>,
         cell: ({ row }) => {
-          const dept = row.original.department;
-          const caps = dept._capabilities || {
-            canEdit: true,
-            canDelete: true,
-            canAssignManager: true,
-          };
-          const hasAnyAction =
-            caps.canEdit || caps.canAssignManager || caps.canDelete;
+          const d = row.original.department;
+          const caps = d._capabilities || { canEdit: true, canDelete: true, canAssignManager: true };
+          const hasAnyAction = caps.canEdit || caps.canAssignManager || caps.canDelete;
 
           return (
             <div className="flex items-center justify-end gap-1">
-              {onAddSubDepartment && (
+              {caps.canEdit && onAddSubDepartment && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => onAddSubDepartment(dept)}
+                  onClick={() => onAddSubDepartment(d)}
                   className="size-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
                   title="Add Sub-Department under this unit"
                 >
@@ -478,22 +484,22 @@ export function DepartmentTable({
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuLabel>Manage Department</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {onAddSubDepartment && (
-                      <DropdownMenuItem onClick={() => onAddSubDepartment(dept)}>
+                    {caps.canEdit && onAddSubDepartment && (
+                      <DropdownMenuItem onClick={() => onAddSubDepartment(d)}>
                         <Plus className="mr-2 size-4 text-primary" />
                         Add Sub-Department
                       </DropdownMenuItem>
                     )}
                     {caps.canEdit && (
-                      <DropdownMenuItem onClick={() => onEdit(dept)}>
+                      <DropdownMenuItem onClick={() => onEdit(d)}>
                         <Pencil className="mr-2 size-4 text-muted-foreground" />
                         Edit Details
                       </DropdownMenuItem>
                     )}
                     {caps.canAssignManager && (
-                      <DropdownMenuItem onClick={() => onAssignManager(dept)}>
+                      <DropdownMenuItem onClick={() => onAssignManager(d)}>
                         <UserCheck className="mr-2 size-4 text-muted-foreground" />
-                        Assign / Edit Manager
+                        Manage Leadership
                       </DropdownMenuItem>
                     )}
                     {caps.canDelete && (
@@ -501,7 +507,7 @@ export function DepartmentTable({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
-                          onClick={() => onDelete(dept)}
+                          onClick={() => onDelete(d)}
                         >
                           <Trash2 className="mr-2 size-4" />
                           Delete Department
@@ -528,10 +534,12 @@ export function DepartmentTable({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      pagination,
     },
   });
 
@@ -541,13 +549,12 @@ export function DepartmentTable({
 
   return (
     <div className="space-y-3">
-      {/* Unified Single Toolbar: Search, Status Filter Pills, Tree Controls, View Mode Switcher, and Columns Toggle */}
       <DataTableToolbar
         table={table}
         searchKey={typeof onSearchChange === "function" ? undefined : "department"}
         searchValue={searchQuery}
         onSearchChange={onSearchChange}
-        searchPlaceholder="Search code or name..."
+        searchPlaceholder="Search department code, name, or purpose..."
         onReset={() => {
           if (onSearchChange) onSearchChange("");
           if (onStatusFilterChange) onStatusFilterChange("all");
@@ -555,7 +562,6 @@ export function DepartmentTable({
         isFiltered={Boolean((searchQuery && searchQuery.trim() !== "") || statusFilter !== "all")}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Tree Branch Expand / Collapse Controls */}
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -576,7 +582,6 @@ export function DepartmentTable({
               </Button>
             </div>
 
-            {/* View Mode Toggle */}
             {onViewModeChange && (
               <>
                 <span className="text-border hidden sm:inline">|</span>
@@ -613,7 +618,6 @@ export function DepartmentTable({
           </div>
         }
       >
-        {/* Status Filter Pills */}
         {onStatusFilterChange && (
           <div className="flex items-center gap-1">
             <Button
@@ -643,7 +647,6 @@ export function DepartmentTable({
           </div>
         )}
 
-        {/* Tree Hierarchy Stats Badge */}
         <div className="hidden xl:flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-[11px] text-muted-foreground">
           <Layers className="size-3.5 text-primary shrink-0" />
           <span>
@@ -652,7 +655,6 @@ export function DepartmentTable({
         </div>
       </DataTableToolbar>
 
-      {/* TanStack Table Container */}
       <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/40">
@@ -700,6 +702,8 @@ export function DepartmentTable({
           </TableBody>
         </Table>
       </div>
+
+      <DataTablePagination table={table} />
     </div>
   );
 }

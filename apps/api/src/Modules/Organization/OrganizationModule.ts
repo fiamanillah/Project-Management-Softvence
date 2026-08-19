@@ -7,6 +7,9 @@ import { validateRequest } from "@/middleware/validation";
 import { authenticate } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/requirePermission";
 import {
+  createBranchSchema,
+  updateBranchSchema,
+  assignBranchManagerSchema,
   createDepartmentSchema,
   updateDepartmentSchema,
   assignDepartmentManagerSchema,
@@ -38,6 +41,58 @@ export class OrganizationModule extends BaseModule {
     const controller = this.getController<OrganizationController>("OrganizationController");
 
     this.router.use(authenticate);
+
+    // Unified Enterprise Organization Structure (Branches -> Departments -> Teams)
+    this.router.get(
+      "/structure",
+      requirePermission("auth.user.view"),
+      controller.getOrganizationStructure.bind(controller),
+    );
+    this.router.get(
+      "/tree",
+      requirePermission("auth.user.view"),
+      controller.getOrganizationStructure.bind(controller),
+    );
+
+    // Branches (Betopia Group Hierarchy)
+    this.router.get(
+      "/branches",
+      requirePermission("auth.user.view"),
+      controller.getBranches.bind(controller),
+    );
+    this.router.get(
+      "/branches/:id",
+      requirePermission("auth.user.view"),
+      controller.getBranchById.bind(controller),
+    );
+    this.router.post(
+      "/branches",
+      requirePermission("organization.branch.manage"),
+      validateRequest({ body: createBranchSchema }),
+      controller.createBranch.bind(controller),
+    );
+    this.router.patch(
+      "/branches/:id",
+      requirePermission("organization.branch.manage"),
+      validateRequest({ body: updateBranchSchema }),
+      controller.updateBranch.bind(controller),
+    );
+    this.router.delete(
+      "/branches/:id",
+      requirePermission("organization.branch.manage"),
+      controller.deleteBranch.bind(controller),
+    );
+    this.router.post(
+      "/branches/:id/managers",
+      requirePermission("organization.branch.manage"),
+      validateRequest({ body: assignBranchManagerSchema }),
+      controller.assignBranchManager.bind(controller),
+    );
+    this.router.delete(
+      "/branches/:id/managers/:managerId",
+      requirePermission("organization.branch.manage"),
+      controller.removeBranchManager.bind(controller),
+    );
 
     // Departments
     this.router.get(

@@ -28,10 +28,12 @@ enum UserStatus {
 
 enum ScopeResolutionStrategy {
   Global
+  OwnBranch
   OwnDepartment
   OwnTeam
   OwnProject
   OwnProfile
+  ExplicitBranches
   ExplicitDepartments
   ExplicitTeams
   ExplicitProjects

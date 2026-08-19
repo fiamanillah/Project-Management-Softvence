@@ -1,6 +1,9 @@
 // src/Modules/Organization/OrganizationDTO.ts
 
 export {
+  createBranchSchema,
+  updateBranchSchema,
+  assignBranchManagerSchema,
   createDepartmentSchema,
   updateDepartmentSchema,
   assignDepartmentManagerSchema,
@@ -10,6 +13,13 @@ export {
   createDesignationSchema,
   updateDesignationSchema,
   permissionAssignmentItemSchema,
+  type CreateBranchDTO,
+  type UpdateBranchDTO,
+  type AssignBranchManagerDTO,
+  type BranchItem,
+  type BranchManagerItem,
+  type BranchStats,
+  type BranchWithCapabilities,
   type CreateDepartmentDTO,
   type UpdateDepartmentDTO,
   type AssignDepartmentManagerDTO,
@@ -23,4 +33,7 @@ export {
   type RoleItem,
   type RoleDetailItem,
   type DesignationItem,
+  type OrgNodeType,
+  type UnifiedOrgNode,
+  type OrganizationStructureResponse,
 } from "@workspace/shared";

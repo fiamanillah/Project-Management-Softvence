@@ -5,7 +5,8 @@ import type { ScopeResolutionStrategy } from "@workspace/db";
 export interface AuthenticatedUser {
   id: string;
   systemRole: string;
-  roleId: string;
+  roleId?: string | null;
+  branchId?: string | null;
   designationId?: string | null;
   email?: string;
   ipAddress?: string;
@@ -13,6 +14,7 @@ export interface AuthenticatedUser {
 }
 
 export interface AuthorizationResourceContext {
+  branchId?: string;
   departmentId?: string;
   teamId?: string;
   projectId?: string;
@@ -20,9 +22,10 @@ export interface AuthorizationResourceContext {
 }
 
 export interface ScopeTargets {
-  departmentIds: string[];
-  teamIds: string[];
-  projectIds: string[];
+  branchIds?: string[];
+  departmentIds?: string[];
+  teamIds?: string[];
+  projectIds?: string[];
 }
 
 export interface ResolvedRoleGrant {

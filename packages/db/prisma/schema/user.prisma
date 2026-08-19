@@ -11,6 +11,7 @@ model User {
   lastName           String     @map("last_name")
   systemRole         SystemRole @default(Staff) @map("system_role")
   status             UserStatus @default(INVITED) @map("status")
+  branchId           String?    @map("branch_id") @db.Uuid
   roleId             String?    @map("role_id") @db.Uuid
   designationId      String?    @map("designation_id") @db.Uuid
   avatarUrl          String?    @map("avatar_url")
@@ -21,12 +22,14 @@ model User {
   updatedAt          DateTime?  @map("updated_at")
   deletedAt          DateTime?  @map("deleted_at")
 
+  branch      Branch?      @relation(fields: [branchId], references: [id])
   role        Role?        @relation(fields: [roleId], references: [id])
   designation Designation? @relation(fields: [designationId], references: [id])
 
   // Relations
   refreshTokens               RefreshToken[]
   passwordResetTokens         PasswordResetToken[]
+  managedBranches             BranchManager[]
   managedDepartments          DepartmentManager[]
   teamMemberships             TeamMember[]
   grantedRolePermissions      RolePermission[]                 @relation("RolePermissionGranter")
@@ -179,16 +182,19 @@ model RolePermission {
 model RolePermissionScopeTarget {
   id               String  @id @default(uuid()) @db.Uuid
   rolePermissionId String  @map("role_permission_id") @db.Uuid
+  branchId         String? @map("branch_id") @db.Uuid
   departmentId     String? @map("department_id") @db.Uuid
   teamId           String? @map("team_id") @db.Uuid
   projectId        String? @map("project_id") @db.Uuid
 
   rolePermission RolePermission @relation(fields: [rolePermissionId], references: [id], onDelete: Cascade)
+  branch         Branch?        @relation(fields: [branchId], references: [id])
   department     Department?    @relation(fields: [departmentId], references: [id])
   team           Team?          @relation(fields: [teamId], references: [id])
   project        Project?       @relation(fields: [projectId], references: [id])
 
   @@index([rolePermissionId])
+  @@index([branchId])
   @@index([departmentId])
   @@index([teamId])
   @@index([projectId])
@@ -199,9 +205,10 @@ model UserPermissionOverride {
   id           String    @id @default(uuid()) @db.Uuid
   userId       String    @map("user_id") @db.Uuid
   permissionId String    @map("permission_id") @db.Uuid
+  branchId     String?   @map("branch_id") @db.Uuid
+  departmentId String?   @map("department_id") @db.Uuid
   teamId       String?   @map("team_id") @db.Uuid
   projectId    String?   @map("project_id") @db.Uuid
-  departmentId String?   @map("department_id") @db.Uuid
   isDeny       Boolean   @default(false) @map("is_deny")
   grantedBy    String    @map("granted_by") @db.Uuid
   reason       String?
@@ -210,13 +217,15 @@ model UserPermissionOverride {
 
   user       User        @relation("OverrideUser", fields: [userId], references: [id])
   permission Permission  @relation(fields: [permissionId], references: [id])
+  branch     Branch?     @relation(fields: [branchId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
   team       Team?       @relation(fields: [teamId], references: [id])
   project    Project?    @relation(fields: [projectId], references: [id])
-  department Department? @relation(fields: [departmentId], references: [id])
   granter    User        @relation("OverrideGranter", fields: [grantedBy], references: [id])
 
-  @@unique([userId, permissionId, teamId, projectId, departmentId])
+  @@unique([userId, permissionId, branchId, departmentId, teamId, projectId])
   @@index([userId, expiresAt])
+  @@index([branchId])
   @@map("user_permission_overrides")
 }
 

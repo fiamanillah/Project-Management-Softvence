@@ -2,14 +2,63 @@
 // ORGANIZATION STRUCTURE
 // ==========================================
 
-model Department {
-  id        String   @id @default(uuid()) @db.Uuid
-  parentId  String?  @map("parent_id") @db.Uuid
-  code      String   @unique
-  name      String
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
+model Branch {
+  id          String    @id @default(uuid()) @db.Uuid
+  parentId    String?   @map("parent_id") @db.Uuid
+  code        String    @unique
+  name        String
+  description String?
+  email       String?
+  phone       String?
+  address     String?
+  logoUrl     String?   @map("logo_url")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
+  parent      Branch?   @relation("BranchHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  subBranches Branch[]  @relation("BranchHierarchy")
+
+  managers        BranchManager[]
+  departments     Department[]
+  users           User[]
+  projects        Project[]
+  scopeTargets    RolePermissionScopeTarget[]
+  overrideTargets UserPermissionOverride[]
+
+  @@index([parentId])
+  @@index([isActive, deletedAt])
+  @@map("branches")
+}
+
+model BranchManager {
+  id           String    @id @default(uuid()) @db.Uuid
+  branchId     String    @map("branch_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
+  unassignedAt DateTime? @map("unassigned_at")
+
+  branch Branch @relation(fields: [branchId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([branchId, unassignedAt])
+  @@index([userId, unassignedAt])
+  @@map("branch_managers")
+}
+
+model Department {
+  id        String    @id @default(uuid()) @db.Uuid
+  branchId  String?   @map("branch_id") @db.Uuid
+  parentId  String?   @map("parent_id") @db.Uuid
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime? @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  branch         Branch?       @relation(fields: [branchId], references: [id])
   parent         Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   subDepartments Department[]  @relation("DepartmentHierarchy")
 
@@ -20,7 +69,9 @@ model Department {
   scopeTargets    RolePermissionScopeTarget[]
   overrideTargets UserPermissionOverride[]
 
+  @@index([branchId])
   @@index([parentId])
+  @@index([isActive, deletedAt])
   @@map("departments")
 }
 

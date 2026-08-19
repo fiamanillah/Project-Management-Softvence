@@ -19,17 +19,13 @@ import {
   Building2,
   LayoutList,
   LayoutGrid,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import type { TeamItem, DepartmentItem, TeamStats } from "@workspace/shared";
 import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { PermissionGate } from "@/components/permission-gate/PermissionGate";
-import { DataTableToolbar } from "@/components/data-table";
+import { DataTableToolbar, DataTablePagination } from "@/components/data-table";
 import { TeamTable } from "./components/TeamTable";
 import { TeamCardGrid } from "./components/TeamCardGrid";
 import { CreateTeamModal } from "./components/CreateTeamModal";
@@ -398,81 +394,20 @@ function TeamsContent() {
         />
       )}
 
-      {/* Teams Pagination Footer */}
+      {/* Teams Pagination Toolbar */}
       {!isLoading && filteredTeams.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 px-1 text-xs text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <span>
-              Showing {(currentPage - 1) * pageSize + 1} to{" "}
-              {Math.min(currentPage * pageSize, filteredTeams.length)} of{" "}
-              {filteredTeams.length} teams
-            </span>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px]">Rows:</span>
-              <Select
-                value={String(pageSize)}
-                onValueChange={(val: string | null) => {
-                  if (val) setPageSize(Number(val));
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs w-[68px]">
-                  <SelectValue>{pageSize}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="6" className="text-xs">6</SelectItem>
-                  <SelectItem value="10" className="text-xs">10</SelectItem>
-                  <SelectItem value="20" className="text-xs">20</SelectItem>
-                  <SelectItem value="50" className="text-xs">50</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-7.5"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-              >
-                <ChevronsLeft className="size-3.5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-7.5"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                <ChevronLeft className="size-3.5" />
-              </Button>
-              <span className="text-xs px-2.5 font-medium">
-                Page {currentPage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-7.5"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                <ChevronRight className="size-3.5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-7.5"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-              >
-                <ChevronsRight className="size-3.5" />
-              </Button>
-            </div>
-          )}
-        </div>
+        <DataTablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredTeams.length}
+          limit={pageSize}
+          onPageChange={setCurrentPage}
+          onLimitChange={(newLimit) => {
+            setPageSize(newLimit);
+            setCurrentPage(1);
+          }}
+          isLoading={isLoading}
+        />
       )}
 
       {/* Create Team Modal */}

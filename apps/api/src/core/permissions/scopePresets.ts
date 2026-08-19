@@ -6,11 +6,22 @@
  */
 export const SCOPE_PRESETS = {
   /**
+   * For branch hierarchy management (Branches and Sister Companies).
+   * Supports: Global, Own Branch, and Explicit Target Branches.
+   */
+  BRANCH_HIERARCHICAL: [
+    "Global",
+    "OwnBranch",
+    "ExplicitBranches",
+  ] as const,
+
+  /**
    * For domain entities with a full operational hierarchy (Projects, Tasks, Issues, Components).
-   * Supports: Global, Own Department, Own Team, Directly Assigned Project, and Explicit Target Projects.
+   * Supports: Global, Own Branch, Own Department, Own Team, Directly Assigned Project, and Explicit Target Projects.
    */
   PROJECT_HIERARCHICAL: [
     "Global",
+    "OwnBranch",
     "OwnDepartment",
     "OwnTeam",
     "OwnProject",
@@ -19,12 +30,14 @@ export const SCOPE_PRESETS = {
 
   /**
    * For organizational structure, designations, and user directory management.
-   * Supports: Global, Own Department, Own Team, and Explicit Target Departments.
+   * Supports: Global, Own Branch, Own Department, Own Team, and Explicit Target Departments.
    */
   ORG_HIERARCHICAL: [
     "Global",
+    "OwnBranch",
     "OwnDepartment",
     "OwnTeam",
+    "ExplicitBranches",
     "ExplicitDepartments",
   ] as const,
 

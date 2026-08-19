@@ -3,14 +3,60 @@ import type { SeedContext } from "./types";
 export async function seedOrganization(ctx: SeedContext): Promise<void> {
   const { prisma } = ctx;
 
-  // 1. Departments
+  // 1. Branches (Betopia Group Multi-Branch Tree)
+  const BRANCHES = [
+    { code: "BET-HQ", name: "Betopia Group (Headquarters)", parentCode: null, description: "Holding enterprise parent headquarters" },
+    { code: "BET-SA", name: "Softvence Alpha", parentCode: "BET-HQ", description: "Primary software & digital solutions flagship branch" },
+    { code: "BET-SA-DHAKA", name: "Softvence Alpha - Dhaka R&D Hub", parentCode: "BET-SA", description: "Core engineering, product & AI innovation center" },
+    { code: "BET-SA-SYLHET", name: "Softvence Alpha - Sylhet Tech Hub", parentCode: "BET-SA", description: "Operations, client onboarding & regional delivery" },
+    { code: "BET-UK", name: "Betopia Overseas (London)", parentCode: "BET-HQ", description: "European sales & enterprise client partner branch" },
+    { code: "BET-MEDIA", name: "Betopia Creative & Media Lab", parentCode: "BET-HQ", description: "Sister concern for branding, video & multimedia design" },
+  ];
+
+  for (const b of BRANCHES) {
+    const parentId = b.parentCode ? ctx.branches.get(b.parentCode) || null : null;
+    let record = await prisma.branch.findUnique({
+      where: { code: b.code },
+    });
+
+    if (record) {
+      record = await prisma.branch.update({
+        where: { code: b.code },
+        data: {
+          name: b.name,
+          parentId,
+          description: b.description,
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+    } else {
+      record = await prisma.branch.create({
+        data: {
+          code: b.code,
+          name: b.name,
+          parentId,
+          description: b.description,
+          isActive: true,
+        },
+      });
+    }
+
+    ctx.branches.set(b.code, record.id);
+  }
+
+  const hqBranchId = ctx.branches.get("BET-HQ")!;
+  const saBranchId = ctx.branches.get("BET-SA")!;
+  const dhakaBranchId = ctx.branches.get("BET-SA-DHAKA")!;
+
+  // 2. Departments
   const DEPARTMENTS = [
-    { code: "SYS", name: "System Administration" },
-    { code: "ENG", name: "Software Engineering & Technology" },
-    { code: "DES", name: "UI/UX & Product Design" },
-    { code: "BD", name: "Business Development & Sales" },
-    { code: "QA", name: "Quality Assurance & Testing" },
-    { code: "CS", name: "Client Success & Account Management" },
+    { code: "SYS", name: "System Administration", branchId: hqBranchId },
+    { code: "ENG", name: "Software Engineering & Technology", branchId: dhakaBranchId },
+    { code: "DES", name: "UI/UX & Product Design", branchId: dhakaBranchId },
+    { code: "BD", name: "Business Development & Sales", branchId: saBranchId },
+    { code: "QA", name: "Quality Assurance & Testing", branchId: dhakaBranchId },
+    { code: "CS", name: "Client Success & Account Management", branchId: saBranchId },
   ];
 
   for (const dept of DEPARTMENTS) {
@@ -21,11 +67,11 @@ export async function seedOrganization(ctx: SeedContext): Promise<void> {
     if (record) {
       record = await prisma.department.update({
         where: { code: dept.code },
-        data: { name: dept.name, isActive: true },
+        data: { name: dept.name, branchId: dept.branchId, isActive: true, deletedAt: null },
       });
     } else {
       record = await prisma.department.create({
-        data: { code: dept.code, name: dept.name, isActive: true },
+        data: { code: dept.code, name: dept.name, branchId: dept.branchId, isActive: true },
       });
     }
 

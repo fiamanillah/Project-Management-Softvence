@@ -12,15 +12,36 @@ describe("OrganizationService (Department, Role & Designation Management)", () =
     await prisma.notification.deleteMany({});
     await prisma.refreshToken.deleteMany({});
     await prisma.passwordResetToken.deleteMany({});
+    await prisma.branchManager.deleteMany({});
     await prisma.departmentManager.deleteMany({});
     await prisma.userPermissionOverride.deleteMany({});
     await prisma.rolePermissionScopeTarget.deleteMany({});
     await prisma.rolePermission.deleteMany({});
-    await prisma.projectAssignment.deleteMany({});
+    await prisma.userAbsence.deleteMany({});
+    await prisma.delegation.deleteMany({});
+    await prisma.chatMessageRead.deleteMany({});
+    await prisma.chatMessage.deleteMany({});
+    await prisma.issueComment.deleteMany({});
+    await prisma.issue.deleteMany({});
+    await prisma.supportTicket.deleteMany({});
+    await prisma.messageApproval.deleteMany({});
+    await prisma.messageRevision.deleteMany({});
+    await prisma.platformThreadMessage.deleteMany({});
+    await prisma.message.deleteMany({});
+    await prisma.projectGroupMember.deleteMany({});
+    await prisma.projectGroup.deleteMany({});
     await prisma.componentAssignment.deleteMany({});
+    await prisma.componentTeamAssignment.deleteMany({});
     await prisma.projectComponent.deleteMany({});
+    await prisma.projectAssignment.deleteMany({});
     await prisma.projectTeamAssignment.deleteMany({});
+    await prisma.bdOrderAssignment.deleteMany({});
+    await prisma.bdOrder.deleteMany({});
     await prisma.project.deleteMany({});
+    await prisma.profileSeller.deleteMany({});
+    await prisma.profile.deleteMany({});
+    await prisma.client.deleteMany({});
+    await prisma.attachment.deleteMany({});
     await prisma.teamMember.deleteMany({});
     await prisma.assignmentRole.deleteMany({});
     await prisma.team.deleteMany({});
@@ -28,6 +49,7 @@ describe("OrganizationService (Department, Role & Designation Management)", () =
     await prisma.role.deleteMany({});
     await prisma.designation.deleteMany({});
     await prisma.department.deleteMany({});
+    await prisma.branch.deleteMany({});
   });
 
   it("should create a department successfully", async () => {
