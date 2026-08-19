@@ -33,6 +33,7 @@ import {
   Briefcase,
   AlertCircle,
   ExternalLink,
+  MessageSquare,
 } from "lucide-react";
 import type { ProjectItem } from "@workspace/shared";
 import { ProjectTeamsAndAssignees } from "./ProjectTeamsAndAssignees";
@@ -45,6 +46,7 @@ interface ProjectTableProps {
   onManageMembers: (project: ProjectItem) => void;
   onManageComponents: (project: ProjectItem) => void;
   onDelete: (project: ProjectItem) => void;
+  onOpenChat?: (project: ProjectItem) => void;
 }
 
 export function ProjectTable({
@@ -55,6 +57,7 @@ export function ProjectTable({
   onManageMembers,
   onManageComponents,
   onDelete,
+  onOpenChat,
 }: ProjectTableProps) {
   if (isLoading) {
     return (
@@ -332,6 +335,15 @@ export function ProjectTable({
                       >
                         <Eye className="size-4 text-primary" /> View Details
                       </DropdownMenuItem>
+
+                      {onOpenChat && (
+                        <DropdownMenuItem
+                          onClick={() => onOpenChat(project)}
+                          className="cursor-pointer gap-2"
+                        >
+                          <MessageSquare className="size-4 text-emerald-500" /> Open Chat Workspace
+                        </DropdownMenuItem>
+                      )}
 
                       {caps?.canEdit && (
                         <DropdownMenuItem

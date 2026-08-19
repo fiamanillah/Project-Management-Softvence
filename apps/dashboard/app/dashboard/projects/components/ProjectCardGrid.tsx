@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Briefcase,
+  MessageSquare,
 } from "lucide-react";
 import type { ProjectItem } from "@workspace/shared";
 import { ProjectTeamsAndAssignees } from "./ProjectTeamsAndAssignees";
@@ -39,6 +40,7 @@ interface ProjectCardGridProps {
   onManageMembers: (project: ProjectItem) => void;
   onManageComponents: (project: ProjectItem) => void;
   onDelete: (project: ProjectItem) => void;
+  onOpenChat?: (project: ProjectItem) => void;
 }
 
 export function ProjectCardGrid({
@@ -49,6 +51,7 @@ export function ProjectCardGrid({
   onManageMembers,
   onManageComponents,
   onDelete,
+  onOpenChat,
 }: ProjectCardGridProps) {
   if (isLoading) {
     return (
@@ -159,6 +162,15 @@ export function ProjectCardGrid({
                       >
                         <Eye className="size-4 text-primary" /> View Details
                       </DropdownMenuItem>
+
+                      {onOpenChat && (
+                        <DropdownMenuItem
+                          onClick={() => onOpenChat(project)}
+                          className="cursor-pointer gap-2"
+                        >
+                          <MessageSquare className="size-4 text-emerald-500" /> Open Chat Workspace
+                        </DropdownMenuItem>
+                      )}
 
                       {caps?.canEdit && (
                         <DropdownMenuItem
