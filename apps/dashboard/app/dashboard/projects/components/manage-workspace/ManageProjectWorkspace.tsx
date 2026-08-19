@@ -363,7 +363,7 @@ export function ManageProjectWorkspace({
   };
 
   return (
-    <div className="relative h-[calc(100vh-8.5rem)] min-h-[600px] w-full overflow-hidden rounded-2xl border border-border/80 bg-card/95 shadow-sm backdrop-blur-xs flex">
+    <div className="relative h-full w-full overflow-hidden bg-background flex flex-1 min-h-0">
       {/* 1. Left Project List Sidebar */}
       <div
         className={cn(

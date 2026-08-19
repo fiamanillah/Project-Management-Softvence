@@ -38,44 +38,46 @@ export function ProjectListItem({
               type="button"
               onClick={() => onSelect(project)}
               className={cn(
-                "group relative flex size-11 items-center justify-center rounded-xl transition-all cursor-pointer outline-none mx-auto",
+                "group relative flex size-10 items-center justify-center rounded-xl transition-all cursor-pointer outline-none mx-auto",
                 isSelected
-                  ? "bg-primary/20 text-primary ring-2 ring-primary shadow-xs scale-105"
-                  : "hover:bg-muted/80 text-muted-foreground hover:scale-105"
+                  ? "bg-primary/15 text-primary ring-2 ring-primary ring-offset-2 ring-offset-background shadow-xs"
+                  : "hover:bg-muted/80 text-muted-foreground"
               )}
             >
-              {/* Project Avatar */}
-              <Avatar className="size-9 rounded-lg ring-1 ring-border/50">
-                <AvatarImage src={project.client.avatar} alt={project.name} />
-                <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold text-[11px] font-mono">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              {/* Project Avatar & Badges Box */}
+              <div className="relative size-9">
+                <Avatar className="size-9 rounded-lg ring-1 ring-border/50">
+                  <AvatarImage src={project.client.avatar} alt={project.name} />
+                  <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold text-[11px] font-mono">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
 
-              {/* Online Indicator */}
-              {project.onlineCount && project.onlineCount > 0 ? (
-                <span
-                  className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background"
-                  title={`${project.onlineCount} online`}
-                />
-              ) : null}
+                {/* Online Indicator */}
+                {project.onlineCount && project.onlineCount > 0 ? (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background z-10"
+                    title={`${project.onlineCount} online`}
+                  />
+                ) : null}
 
-              {/* Unread Count Badge */}
-              {project.unreadCount && project.unreadCount > 0 ? (
-                <span className="absolute -top-1 -right-1 flex min-w-4 h-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-xs">
-                  {project.unreadCount}
-                </span>
-              ) : null}
+                {/* Unread Count Badge */}
+                {project.unreadCount && project.unreadCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 z-20 flex min-w-3.5 h-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold text-primary-foreground ring-1.5 ring-background shadow-xs">
+                    {project.unreadCount}
+                  </span>
+                ) : null}
 
-              {/* Pending Approvals Badge */}
-              {project.pendingApprovalsCount && project.pendingApprovalsCount > 0 ? (
-                <span
-                  className="absolute -top-1 -left-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold shadow-xs"
-                  title={`${project.pendingApprovalsCount} pending approvals`}
-                >
-                  <ShieldCheck className="size-2.5" />
-                </span>
-              ) : null}
+                {/* Pending Approvals Badge */}
+                {project.pendingApprovalsCount && project.pendingApprovalsCount > 0 ? (
+                  <span
+                    className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
+                    title={`${project.pendingApprovalsCount} pending approvals`}
+                  >
+                    <ShieldCheck className="size-2" />
+                  </span>
+                ) : null}
+              </div>
             </button>
           }
         />

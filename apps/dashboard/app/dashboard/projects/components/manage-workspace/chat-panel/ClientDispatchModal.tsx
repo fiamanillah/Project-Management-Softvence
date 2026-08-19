@@ -329,7 +329,7 @@ export function ClientDispatchModal({
               {attachments && attachments.length > 0 && (
                 <div className="space-y-1.5">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    Attached Handover Deliverables ({attachments.length})
+                    Attached Media & Documents ({attachments.length})
                   </span>
                   <MessageAttachmentPreview attachments={attachments} />
                 </div>

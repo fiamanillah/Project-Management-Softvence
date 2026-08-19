@@ -5,6 +5,7 @@ import {
   UsersRound,
   ShieldCheck,
   Briefcase,
+  MessagesSquare,
   FileSpreadsheet,
   KeyRound,
   type LucideIcon,
@@ -65,6 +66,12 @@ export const data = {
       title: "Projects",
       url: "/dashboard/projects",
       icon: Briefcase,
+      permission: "project.view",
+    },
+    {
+      title: "Manage Projects",
+      url: "/dashboard/manage-projects",
+      icon: MessagesSquare,
       permission: "project.view",
     },
     {

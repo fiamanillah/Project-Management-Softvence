@@ -359,19 +359,19 @@ export function ClientDispatchCard({
               </div>
             </div>
 
-            {/* Snug Bottom Reaction Pills Anchored Directly on the Card */}
+            {/* Reaction Badges Row (Positioned below card to avoid overlapping action buttons) */}
             {hasReactions && id && onReact && (
-              <div className="absolute -bottom-2.5 right-3 z-20 flex items-center gap-1 rounded-full bg-background/95 border border-border/80 px-1.5 py-0.5 shadow-xs backdrop-blur-xs">
+              <div className="flex items-center justify-end gap-1 mt-1.5 flex-wrap">
                 {reactions.map((r) => (
                   <button
                     key={r.emoji}
                     type="button"
                     onClick={() => onReact(id, r.emoji)}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[11px] font-medium transition-transform hover:scale-110 active:scale-95 cursor-pointer",
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-transform hover:scale-110 active:scale-95 cursor-pointer border shadow-2xs",
                       r.reactedByMe
-                        ? "bg-primary/20 text-primary font-bold ring-1 ring-primary/40"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-primary/20 text-primary border-primary/40 font-bold"
+                        : "bg-background/90 text-muted-foreground hover:text-foreground border-border/70"
                     )}
                     title={`${r.count} reactions`}
                   >

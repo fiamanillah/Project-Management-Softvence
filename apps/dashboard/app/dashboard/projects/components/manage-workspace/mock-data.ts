@@ -553,7 +553,12 @@ export const mockMessagesByProjectId: Record<string, ChatMessage[]> = {
       senderDesignation: "Principal Tech Lead",
       senderRole: "Tech Lead",
       isCurrentUser: true,
-      text: "According to ISO 27001 and PSD2 banking regulations, we should drop directly into the PIN pad after 3 failed attempts, then trigger email lock out on the 5th attempt.",
+      replyTo: {
+        id: "msg-101",
+        senderName: "Sarah Chen",
+        text: "Good morning team! 👋 I've finalized the Sprint 4 UI specifications for the Biometric Authentication and Instant Transfer flows.",
+      },
+      text: "According to ISO 27001 and PSD2 banking regulations, we should drop directly into the PIN pad after 3 failed attempts, then trigger email lock out on the 5th attempt.\n\nFurthermore, we need to enforce that all biometric signatures are encrypted at rest using AES-256-GCM hardware key stores on client devices, with audit tokens streamed asynchronously to MongoDB audit logs.",
       timestamp: "09:50 AM",
       dateGroup: "Today",
       purpose: "INTERNAL_DISCUSSION",

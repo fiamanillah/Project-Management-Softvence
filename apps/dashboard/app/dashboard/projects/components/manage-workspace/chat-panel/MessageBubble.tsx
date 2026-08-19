@@ -201,7 +201,10 @@ export function MessageBubble({
               onClick={() => onScrollToMessage?.(message.replyTo?.id || "")}
               className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity min-w-0 mb-1.5"
             >
-              <MessageReplyPreview replyTo={message.replyTo} />
+              <MessageReplyPreview
+                replyTo={message.replyTo}
+                isInCurrentUserBubble={message.isCurrentUser}
+              />
             </button>
           )}
 
@@ -213,9 +216,15 @@ export function MessageBubble({
                 <button
                   type="button"
                   onClick={() => setIsExpanded(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline mt-1 cursor-pointer"
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[11px] font-bold mt-1.5 cursor-pointer transition-opacity hover:opacity-85",
+                    message.isCurrentUser
+                      ? "text-primary-foreground underline underline-offset-2 decoration-primary-foreground/60"
+                      : "text-primary hover:underline underline-offset-2"
+                  )}
                 >
-                  Show more <ChevronDown className="size-3" />
+                  <span>Show full message</span>
+                  <ChevronDown className="size-3" />
                 </button>
               </>
             ) : isLongMessage && isExpanded ? (
@@ -224,9 +233,15 @@ export function MessageBubble({
                 <button
                   type="button"
                   onClick={() => setIsExpanded(false)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline mt-1 cursor-pointer"
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[11px] font-bold mt-1.5 cursor-pointer transition-opacity hover:opacity-85",
+                    message.isCurrentUser
+                      ? "text-primary-foreground underline underline-offset-2 decoration-primary-foreground/60"
+                      : "text-primary hover:underline underline-offset-2"
+                  )}
                 >
-                  Show less <ChevronUp className="size-3" />
+                  <span>Show less</span>
+                  <ChevronUp className="size-3" />
                 </button>
               </>
             ) : (

@@ -229,6 +229,14 @@ export interface ChatAttachment {
   size?: string;
   thumbnailUrl?: string;
   version?: string;
+  extension?: string;
+  fileSizeBytes?: number;
+  mimeType?: string;
+  status?: "uploading" | "ready" | "error";
+  progress?: number;
+  error?: string;
+  file?: File;
+  dimensions?: { width: number; height: number };
 }
 
 export interface ChatDeliverableUpdate {

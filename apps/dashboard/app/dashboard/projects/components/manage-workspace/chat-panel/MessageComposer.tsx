@@ -6,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/component
 import { Badge } from "@workspace/ui/components/badge";
 import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
+import { Progress } from "@workspace/ui/components/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
 import {
   Paperclip,
   SendHorizontal,
@@ -14,20 +16,33 @@ import {
   FileText,
   Image as ImageIcon,
   ChevronDown,
-  Building2,
-  Users,
   Plus,
   ArrowDownLeft,
   ArrowUpRight,
   X,
   Check,
   Lock,
-  Pipette,
+  UploadCloud,
+  FileSpreadsheet,
+  Archive,
+  Eye,
+  Trash2,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
 import { MessageReplyPreview } from "./MessageReplyPreview";
 import { OUTBOUND_THEMES, INBOUND_THEMES, getMessageTheme } from "../message-theme";
+import {
+  formatBytes,
+  getFileExtension,
+  getFileTypeConfig,
+  isImageFile,
+  SAMPLE_ATTACHMENTS,
+} from "./attachment-utils";
 import type {
   ChatMessage,
   ChatAttachment,
@@ -97,10 +112,10 @@ export function MessageComposer({
   targetClientName,
 }: MessageComposerProps) {
   const [text, setText] = React.useState("");
-  
+
   // Single active composer stream mode
   const [streamMode, setStreamMode] = React.useState<ComposerStreamMode>("INTERNAL");
-  
+
   // Outbound message types
   const [outboundTypes, setOutboundTypes] = React.useState<MessageTypeOption[]>(DEFAULT_OUTBOUND_TYPES);
   const [selectedOutboundTypeId, setSelectedOutboundTypeId] = React.useState<string>("DELIVERY");
@@ -108,22 +123,44 @@ export function MessageComposer({
   // Inbound message types
   const [inboundTypes, setInboundTypes] = React.useState<MessageTypeOption[]>(DEFAULT_INBOUND_TYPES);
   const [selectedInboundTypeId, setSelectedInboundTypeId] = React.useState<string>("CLIENT_FEEDBACK");
-  
+
   // Custom type creation state
   const [isAddingCustomType, setIsAddingCustomType] = React.useState(false);
   const [customTypeLabel, setCustomTypeLabel] = React.useState("");
   const [customTypeColor, setCustomTypeColor] = React.useState("#10b981");
 
+  // Attachments state
   const [attachments, setAttachments] = React.useState<ChatAttachment[]>([]);
+  const [previewAttachment, setPreviewAttachment] = React.useState<ChatAttachment | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = React.useState(false);
+
+  // Popover menus state
   const [isRecordingVoice, setIsRecordingVoice] = React.useState(false);
   const [voiceSeconds, setVoiceSeconds] = React.useState(0);
   const [attachMenuOpen, setAttachMenuOpen] = React.useState(false);
   const [emojiMenuOpen, setEmojiMenuOpen] = React.useState(false);
   const [streamModeMenuOpen, setStreamModeMenuOpen] = React.useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = React.useState(false);
+  const [showSamplesMenu, setShowSamplesMenu] = React.useState(false);
 
   const colorInputRef = React.useRef<HTMLInputElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
+  const docInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Track upload intervals and object URLs for cleanup
+  const uploadIntervalsRef = React.useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const objectUrlsRef = React.useRef<Set<string>>(new Set());
+
+  // Cleanup object URLs on unmount
+  React.useEffect(() => {
+    return () => {
+      uploadIntervalsRef.current.forEach((interval) => clearInterval(interval));
+      uploadIntervalsRef.current.clear();
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current.clear();
+    };
+  }, []);
 
   // Voice recording timer
   React.useEffect(() => {
@@ -147,8 +184,180 @@ export function MessageComposer({
     }
   };
 
+  // Upload simulation helper
+  const simulateFileUpload = (attachmentId: string, durationMs = 600) => {
+    const stepInterval = 60;
+    const totalSteps = Math.max(1, Math.floor(durationMs / stepInterval));
+    let currentStep = 0;
+
+    const interval = setInterval(() => {
+      currentStep++;
+      const currentProgress = Math.min(100, Math.round((currentStep / totalSteps) * 100));
+
+      setAttachments((prev) =>
+        prev.map((att) => {
+          if (att.id === attachmentId) {
+            if (currentProgress >= 100) {
+              return { ...att, status: "ready", progress: 100 };
+            }
+            return { ...att, progress: currentProgress, status: "uploading" };
+          }
+          return att;
+        })
+      );
+
+      if (currentProgress >= 100) {
+        clearInterval(interval);
+        uploadIntervalsRef.current.delete(attachmentId);
+      }
+    }, stepInterval);
+
+    uploadIntervalsRef.current.set(attachmentId, interval);
+  };
+
+  // Handle file additions (from native input, drag & drop, or clipboard paste)
+  const handleAddFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+
+    const newAttachments: ChatAttachment[] = [];
+
+    for (const file of files) {
+      // 50 MB max file size limit check
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds the 50MB file size limit.`);
+        continue;
+      }
+
+      const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const isImg = isImageFile(file.name) || file.type.startsWith("image/");
+      const objectUrl = URL.createObjectURL(file);
+      objectUrlsRef.current.add(objectUrl);
+
+      const ext = getFileExtension(file.name);
+      const formattedSize = formatBytes(file.size);
+
+      const attachmentItem: ChatAttachment = {
+        id,
+        name: file.name,
+        type: isImg ? "image" : "file",
+        url: objectUrl,
+        size: formattedSize,
+        fileSizeBytes: file.size,
+        extension: ext,
+        mimeType: file.type,
+        status: "uploading",
+        progress: 10,
+        file,
+      };
+
+      newAttachments.push(attachmentItem);
+    }
+
+    if (newAttachments.length > 0) {
+      setAttachments((prev) => [...prev, ...newAttachments]);
+      setAttachMenuOpen(false);
+
+      // Start upload progress for each added file
+      newAttachments.forEach((att) => {
+        simulateFileUpload(att.id, 500 + Math.random() * 400);
+      });
+
+      toast.success(
+        newAttachments.length === 1
+          ? `Added "${newAttachments[0]!.name}"`
+          : `Added ${newAttachments.length} attachments`
+      );
+    }
+  };
+
+  // Handle sample demo file addition
+  const handleAddSample = (sample: (typeof SAMPLE_ATTACHMENTS)[0]) => {
+    const id = `att-sample-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const newAtt: ChatAttachment = {
+      id,
+      name: sample.name,
+      type: sample.type,
+      url: sample.url,
+      size: sample.size,
+      fileSizeBytes: sample.fileSizeBytes,
+      extension: sample.extension,
+      status: "uploading",
+      progress: 25,
+    };
+
+    setAttachments((prev) => [...prev, newAtt]);
+    setAttachMenuOpen(false);
+    setShowSamplesMenu(false);
+
+    simulateFileUpload(id, 400);
+    toast.success(`Attached demo ${sample.type === "image" ? "image" : "document"}: ${sample.name}`);
+  };
+
+  // Remove individual attachment
+  const handleRemoveAttachment = (attId: string) => {
+    // Clear any running upload interval
+    if (uploadIntervalsRef.current.has(attId)) {
+      clearInterval(uploadIntervalsRef.current.get(attId));
+      uploadIntervalsRef.current.delete(attId);
+    }
+
+    // Revoke object URL if exists
+    const target = attachments.find((a) => a.id === attId);
+    if (target?.url && objectUrlsRef.current.has(target.url)) {
+      URL.revokeObjectURL(target.url);
+      objectUrlsRef.current.delete(target.url);
+    }
+
+    setAttachments((prev) => prev.filter((a) => a.id !== attId));
+  };
+
+  // Clear all attachments
+  const handleClearAllAttachments = () => {
+    uploadIntervalsRef.current.forEach((interval) => clearInterval(interval));
+    uploadIntervalsRef.current.clear();
+    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    objectUrlsRef.current.clear();
+    setAttachments([]);
+    toast.info("Cleared all attachments");
+  };
+
+  // Drag and Drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleAddFiles(e.dataTransfer.files);
+    }
+  };
+
+  // Clipboard Paste handler
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      handleAddFiles(e.clipboardData.files);
+    }
+  };
+
+  // Check if any attachment is actively uploading
+  const isUploadingAny = attachments.some((a) => a.status === "uploading");
+
+  // Send message
   const handleSend = () => {
-    if (!text.trim() && attachments.length === 0) return;
+    if ((!text.trim() && attachments.length === 0) || isUploadingAny) return;
 
     let purpose: MessagePurpose = "INTERNAL_DISCUSSION";
     let clientDirection: ClientMessageDirection | undefined = undefined;
@@ -164,6 +373,20 @@ export function MessageComposer({
       chosenMessageType = (selectedInboundTypeId as ClientMessageType) || "CLIENT_FEEDBACK";
     }
 
+    // Only attach ready attachments
+    const readyAttachments = attachments
+      .filter((a) => a.status === "ready" || !a.status)
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        url: a.url,
+        size: a.size,
+        extension: a.extension,
+        fileSizeBytes: a.fileSizeBytes,
+        mimeType: a.mimeType,
+      }));
+
     onSendMessage({
       text: text.trim(),
       purpose,
@@ -177,7 +400,7 @@ export function MessageComposer({
             text: replyingTo.text,
           }
         : undefined,
-      attachments: attachments.length > 0 ? attachments : undefined,
+      attachments: readyAttachments.length > 0 ? readyAttachments : undefined,
     });
 
     setText("");
@@ -196,40 +419,6 @@ export function MessageComposer({
     }
   };
 
-  const handleAddSampleAttachment = (type: "file" | "image") => {
-    if (type === "image") {
-      setAttachments((prev) => [
-        ...prev,
-        {
-          id: `att-${Date.now()}`,
-          name: "Mobile_Design_Mockup_v5.png",
-          type: "image",
-          url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop&q=80",
-          size: "3.1 MB",
-          version: "v5.0",
-        },
-      ]);
-      toast.success("Attached image mockup");
-    } else if (type === "file") {
-      setAttachments((prev) => [
-        ...prev,
-        {
-          id: `att-${Date.now()}`,
-          name: "Sprint_Deliverables_Summary.pdf",
-          type: "file",
-          size: "2.4 MB",
-          version: "v1.2",
-        },
-      ]);
-      toast.success("Attached PDF brief");
-    }
-    setAttachMenuOpen(false);
-  };
-
-  const handleRemoveAttachment = (attId: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== attId));
-  };
-
   const handleInsertEmoji = (emoji: string) => {
     setText((prev) => prev + emoji);
     setEmojiMenuOpen(false);
@@ -238,7 +427,7 @@ export function MessageComposer({
     }
   };
 
-  // Add a dynamically managed custom message type (Color-based, with native color picker)
+  // Add a dynamically managed custom message type
   const handleCreateCustomType = () => {
     if (!customTypeLabel.trim()) return;
     const newId = customTypeLabel.trim().toUpperCase().replace(/\s+/g, "_");
@@ -270,45 +459,238 @@ export function MessageComposer({
 
   const currentTypeOptions = streamMode === "CLIENT_OUTBOUND" ? outboundTypes : inboundTypes;
   const currentSelectedTypeId = streamMode === "CLIENT_OUTBOUND" ? selectedOutboundTypeId : selectedInboundTypeId;
-  const currentActiveTypeObj = streamMode === "CLIENT_OUTBOUND" ? activeOutboundTypeObj : activeInboundTypeObj;
+
+  // Calculate total size of attachments
+  const totalAttachmentBytes = attachments.reduce((sum, a) => sum + (a.fileSizeBytes || 0), 0);
 
   return (
-    <div className="border-t border-border/60 bg-card/95 backdrop-blur-md p-2.5 select-none flex flex-col gap-1.5">
-      {/* 1. Reply Preview Banner (Compact) */}
+    <div
+      className="border-t border-border/60 bg-card/95 backdrop-blur-md p-2.5 select-none flex flex-col gap-1.5 relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Hidden Native File Inputs for Images and Documents */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml,image/bmp"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) handleAddFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={docInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.rtf,.txt,.xls,.xlsx,.csv,.ppt,.pptx,.key,.zip,.rar,.tar,.gz,.7z,.json,.md,.xml,.sql,.py,.js,.ts,.tsx"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) handleAddFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
+      {/* 1. Reply Preview Banner */}
       {replyingTo && (
-        <MessageReplyPreview replyTo={replyingTo} onCancel={onCancelReply} />
+        <MessageReplyPreview
+          replyTo={replyingTo}
+          isComposer={true}
+          onCancel={onCancelReply}
+        />
       )}
 
-      {/* 2. Attachment Chips Preview */}
+      {/* 2. Small Previews Tray in Composer (High-density, interactive card previews) */}
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-1">
-          {attachments.map((att) => (
-            <div
-              key={att.id}
-              className="flex items-center gap-1.5 rounded-lg bg-muted/80 border border-border/60 px-2 py-0.5 text-xs text-foreground shadow-2xs group"
-            >
-              {att.type === "image" ? (
-                <ImageIcon className="size-3 text-sky-500 shrink-0" />
-              ) : (
-                <FileText className="size-3 text-amber-500 shrink-0" />
+        <div className="flex flex-col gap-1.5 p-2 rounded-xl bg-muted/40 border border-border/60 backdrop-blur-xs">
+          {/* Header Summary Bar */}
+          <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground font-semibold">
+            <div className="flex items-center gap-1.5">
+              <Paperclip className="size-3 text-primary" />
+              <span>
+                {attachments.length} attachment{attachments.length > 1 ? "s" : ""}
+                {totalAttachmentBytes > 0 && ` • ${formatBytes(totalAttachmentBytes)}`}
+              </span>
+              {isUploadingAny && (
+                <span className="flex items-center gap-1 text-primary animate-pulse ml-1 font-bold">
+                  <Loader2 className="size-2.5 animate-spin" />
+                  Uploading...
+                </span>
               )}
-              <span className="font-medium max-w-[140px] truncate text-[11px]">{att.name}</span>
-              <span className="text-[9px] text-muted-foreground">({att.size})</span>
+            </div>
+
+            {attachments.length > 1 && (
               <button
                 type="button"
-                onClick={() => handleRemoveAttachment(att.id)}
-                className="size-3.5 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors ml-0.5 cursor-pointer"
-                title="Remove attachment"
+                onClick={handleClearAllAttachments}
+                className="text-[10px] text-muted-foreground hover:text-rose-500 font-medium transition-colors cursor-pointer flex items-center gap-0.5"
               >
-                <X className="size-2.5" />
+                <Trash2 className="size-2.5" />
+                <span>Clear all</span>
               </button>
+            )}
+          </div>
+
+          {/* Attachment Preview Items Strip */}
+          <ScrollArea className="w-full max-h-36">
+            <div className="flex flex-wrap gap-2 py-0.5 pr-2">
+              {attachments.map((att) => {
+                const isImg = att.type === "image";
+                const isUploading = att.status === "uploading";
+                const fileConfig = getFileTypeConfig(att.name, att.mimeType);
+                const DocIcon = fileConfig.icon;
+
+                if (isImg) {
+                  return (
+                    <div
+                      key={att.id}
+                      className={cn(
+                        "relative group/img-preview size-15 rounded-xl border border-border/80 bg-background overflow-hidden shadow-2xs shrink-0 transition-all",
+                        isUploading ? "ring-2 ring-primary/40" : "hover:border-primary/50"
+                      )}
+                    >
+                      {/* Image Thumbnail */}
+                      <img
+                        src={att.url}
+                        alt={att.name}
+                        className="size-full object-cover cursor-pointer"
+                        onClick={() => !isUploading && setPreviewAttachment(att)}
+                      />
+
+                      {/* Uploading Overlay */}
+                      {isUploading && (
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs flex flex-col items-center justify-center text-white gap-1 p-1">
+                          <Loader2 className="size-4 animate-spin text-primary-foreground" />
+                          <span className="text-[9px] font-mono font-bold">
+                            {att.progress || 0}%
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Ready Hover Overlay */}
+                      {!isUploading && (
+                        <div
+                          onClick={() => setPreviewAttachment(att)}
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover/img-preview:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                        >
+                          <Eye className="size-3.5 text-white" />
+                        </div>
+                      )}
+
+                      {/* Remove Button Badge */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveAttachment(att.id);
+                        }}
+                        className="absolute top-1 right-1 size-4 rounded-full bg-background/90 text-foreground border border-border/80 shadow-xs flex items-center justify-center hover:bg-rose-600 hover:text-white transition-colors cursor-pointer z-10 opacity-80 group-hover/img-preview:opacity-100"
+                        title="Remove image"
+                      >
+                        <X className="size-2.5" />
+                      </button>
+
+                      {/* Bottom Info Pill */}
+                      <div className="absolute bottom-0 inset-x-0 bg-black/70 px-1 py-0.5 text-[8px] text-white font-mono truncate text-center">
+                        {att.size}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Document Preview Card
+                return (
+                  <div
+                    key={att.id}
+                    className={cn(
+                      "relative group/doc-preview flex items-center gap-2.5 min-w-[200px] max-w-[250px] h-13 px-2.5 py-1.5 rounded-xl border border-border/70 bg-background/90 shadow-2xs backdrop-blur-xs transition-all hover:bg-muted/30 shrink-0",
+                      isUploading ? "ring-2 ring-primary/40" : fileConfig.borderHoverClass
+                    )}
+                  >
+                    {/* Document Icon in Color Box */}
+                    <div
+                      className={cn(
+                        "flex size-8 items-center justify-center rounded-lg shrink-0 shadow-2xs",
+                        fileConfig.iconBgClass
+                      )}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="size-4 animate-spin text-primary" />
+                      ) : (
+                        <DocIcon className={cn("size-4", fileConfig.iconColorClass)} />
+                      )}
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p
+                          className="truncate text-xs font-semibold text-foreground leading-tight"
+                          title={att.name}
+                        >
+                          {att.name}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[8px] font-mono px-1 py-0 rounded", fileConfig.badgeClass)}
+                        >
+                          {fileConfig.badgeLabel}
+                        </Badge>
+                        <span className="text-[9px] text-muted-foreground font-mono">
+                          {att.size}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Remove Action Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(att.id)}
+                      className="size-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0 cursor-pointer ml-auto"
+                      title="Remove document"
+                    >
+                      <X className="size-3" />
+                    </button>
+
+                    {/* Bottom Progress Bar for Uploading State */}
+                    {isUploading && (
+                      <div className="absolute bottom-0 inset-x-2 pb-0.5">
+                        <Progress value={att.progress || 0} className="h-1" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          </ScrollArea>
         </div>
       )}
 
-      {/* 3. Main Single Integrated Input Container (Zero wasted horizontal bars above) */}
-      <div className="relative flex flex-col rounded-2xl border border-border/80 bg-background shadow-xs focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/50 transition-all">
+      {/* 3. Main Single Integrated Input Container */}
+      <div
+        className={cn(
+          "relative flex flex-col rounded-2xl border bg-background shadow-xs transition-all",
+          isDraggingOver
+            ? "border-dashed border-primary bg-primary/5 ring-4 ring-primary/20 scale-[1.005]"
+            : "border-border/80 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/50"
+        )}
+      >
+        {/* Drag & Drop Overlay Indicator */}
+        {isDraggingOver && (
+          <div className="absolute inset-0 z-20 rounded-2xl bg-background/90 backdrop-blur-xs flex items-center justify-center gap-2 border-2 border-dashed border-primary animate-pulse pointer-events-none">
+            <UploadCloud className="size-6 text-primary animate-bounce" />
+            <span className="text-xs sm:text-sm font-bold text-primary">
+              Drop images or documents to attach
+            </span>
+          </div>
+        )}
+
         {/* Voice recording overlay */}
         {isRecordingVoice ? (
           <div className="flex h-14 items-center justify-between px-4 bg-rose-500/10 rounded-2xl animate-pulse">
@@ -345,9 +727,10 @@ export function MessageComposer({
             value={text}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               streamMode === "INTERNAL"
-                ? "Type internal discussion for the team (Enter to send)..."
+                ? "Type internal discussion for the team (Enter to send, drop files or paste images)..."
                 : streamMode === "CLIENT_OUTBOUND"
                 ? `Draft ${activeOutboundTypeObj.label} to ${targetClientName}...`
                 : `Record ${activeInboundTypeObj.label} from ${targetClientName}...`
@@ -356,9 +739,9 @@ export function MessageComposer({
           />
         )}
 
-        {/* 4. Bottom Integrated Toolbar (Everything fits compactly inside) */}
+        {/* 4. Bottom Integrated Toolbar */}
         <div className="flex items-center justify-between px-2.5 py-1.5 border-t border-border/40 bg-muted/15 rounded-b-2xl gap-2 flex-wrap sm:flex-nowrap">
-          {/* Left Group: Stream Selector + Message Type Selector (Outbound & Inbound) + Attachments */}
+          {/* Left Group: Stream Selector + Message Type Selector + Attachments + Emoji + Voice */}
           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
             {/* Stream Mode Dropdown Selector */}
             <Popover open={streamModeMenuOpen} onOpenChange={setStreamModeMenuOpen}>
@@ -466,7 +849,7 @@ export function MessageComposer({
               </PopoverContent>
             </Popover>
 
-            {/* Message Type Selector (Rendered for BOTH Client Outbound and Client Inbound) */}
+            {/* Message Type Selector */}
             {streamMode !== "INTERNAL" && (() => {
               const activeTheme = getMessageTheme(
                 currentSelectedTypeId as any,
@@ -507,7 +890,6 @@ export function MessageComposer({
                       </span>
                     </div>
 
-                    {/* Shadcn ScrollArea with Custom Scrollbar for Message Types */}
                     <ScrollArea className="h-44 w-full">
                       <div className="space-y-0.5 pr-2">
                         {currentTypeOptions.map((typeObj) => {
@@ -556,141 +938,210 @@ export function MessageComposer({
                       </div>
                     </ScrollArea>
 
-                  {/* Custom Message Type Builder with Presets + Interactive Native Color Picker */}
-                  {isAddingCustomType ? (
-                    <div className="p-2 border-t border-border/50 space-y-2 bg-muted/40 rounded-lg">
-                      <p className="text-[10px] font-bold text-foreground">
-                        New {streamMode === "CLIENT_OUTBOUND" ? "Outbound" : "Inbound"} Type
-                      </p>
-                      
-                      {/* Color Palette Selection + Full Color Picker */}
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-muted-foreground">Select or Pick Color:</span>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {PRESET_COLORS.map((color) => (
-                            <button
-                              key={color.name}
-                              type="button"
-                              onClick={() => setCustomTypeColor(color.hex)}
-                              className={cn(
-                                "size-4 rounded-full transition-transform cursor-pointer shadow-2xs",
-                                customTypeColor.toLowerCase() === color.hex.toLowerCase()
-                                  ? "ring-2 ring-foreground scale-110"
-                                  : "opacity-85 hover:opacity-100"
-                              )}
-                              style={{ backgroundColor: color.hex }}
-                              title={color.name}
-                            />
-                          ))}
+                    {/* Custom Message Type Builder */}
+                    {isAddingCustomType ? (
+                      <div className="p-2 border-t border-border/50 space-y-2 bg-muted/40 rounded-lg">
+                        <p className="text-[10px] font-bold text-foreground">
+                          New {streamMode === "CLIENT_OUTBOUND" ? "Outbound" : "Inbound"} Type
+                        </p>
 
-                          {/* Interactive Native Color Picker Trigger */}
-                          <label
-                            htmlFor="custom-hex-color-picker"
-                            className="relative size-4 rounded-full border border-border/80 flex items-center justify-center cursor-pointer overflow-hidden shadow-2xs hover:scale-110 transition-transform"
-                            title="Open Color Picker"
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-muted-foreground">Select or Pick Color:</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {PRESET_COLORS.map((color) => (
+                              <button
+                                key={color.name}
+                                type="button"
+                                onClick={() => setCustomTypeColor(color.hex)}
+                                className={cn(
+                                  "size-4 rounded-full transition-transform cursor-pointer shadow-2xs",
+                                  customTypeColor.toLowerCase() === color.hex.toLowerCase()
+                                    ? "ring-2 ring-foreground scale-110"
+                                    : "opacity-85 hover:opacity-100"
+                                )}
+                                style={{ backgroundColor: color.hex }}
+                                title={color.name}
+                              />
+                            ))}
+
+                            <label
+                              htmlFor="custom-hex-color-picker"
+                              className="relative size-4 rounded-full border border-border/80 flex items-center justify-center cursor-pointer overflow-hidden shadow-2xs hover:scale-110 transition-transform"
+                              title="Open Color Picker"
+                            >
+                              <input
+                                ref={colorInputRef}
+                                id="custom-hex-color-picker"
+                                type="color"
+                                value={customTypeColor}
+                                onChange={(e) => setCustomTypeColor(e.target.value)}
+                                className="absolute -inset-2 size-8 opacity-0 cursor-pointer"
+                              />
+                              <span
+                                className="size-full"
+                                style={{ backgroundColor: customTypeColor }}
+                              />
+                            </label>
+
+                            <span className="text-[9px] font-mono text-muted-foreground ml-1">
+                              {customTypeColor}
+                            </span>
+                          </div>
+                        </div>
+
+                        <Input
+                          value={customTypeLabel}
+                          onChange={(e) => setCustomTypeLabel(e.target.value)}
+                          placeholder="Type label (e.g. Contract Amendment)..."
+                          className="h-7 text-xs bg-background"
+                          autoFocus
+                        />
+
+                        <div className="flex items-center justify-end gap-1 pt-0.5">
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setIsAddingCustomType(false)}
+                            className="h-6 text-[10px] px-2"
                           >
-                            <input
-                              ref={colorInputRef}
-                              id="custom-hex-color-picker"
-                              type="color"
-                              value={customTypeColor}
-                              onChange={(e) => setCustomTypeColor(e.target.value)}
-                              className="absolute -inset-2 size-8 opacity-0 cursor-pointer"
-                            />
-                            <span
-                              className="size-full"
-                              style={{ backgroundColor: customTypeColor }}
-                            />
-                          </label>
-
-                          <span className="text-[9px] font-mono text-muted-foreground ml-1">
-                            {customTypeColor}
-                          </span>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="xs"
+                            onClick={handleCreateCustomType}
+                            disabled={!customTypeLabel.trim()}
+                            className="h-6 text-[10px] px-2.5 font-bold"
+                          >
+                            Add Type
+                          </Button>
                         </div>
                       </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingCustomType(true)}
+                        className="w-full flex items-center justify-center gap-1.5 py-1 text-[11px] font-bold text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer border border-dashed border-primary/30"
+                      >
+                        <Plus className="size-3" />
+                        <span>
+                          + Custom {streamMode === "CLIENT_OUTBOUND" ? "Outbound" : "Inbound"} Type
+                        </span>
+                      </button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              );
+            })()}
 
-                      <Input
-                        value={customTypeLabel}
-                        onChange={(e) => setCustomTypeLabel(e.target.value)}
-                        placeholder="Type label (e.g. Contract Amendment)..."
-                        className="h-7 text-xs bg-background"
-                        autoFocus
-                      />
-
-                      <div className="flex items-center justify-end gap-1 pt-0.5">
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => setIsAddingCustomType(false)}
-                          className="h-6 text-[10px] px-2"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="xs"
-                          onClick={handleCreateCustomType}
-                          disabled={!customTypeLabel.trim()}
-                          className="h-6 text-[10px] px-2.5 font-bold"
-                        >
-                          Add Type
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingCustomType(true)}
-                      className="w-full flex items-center justify-center gap-1.5 py-1 text-[11px] font-bold text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer border border-dashed border-primary/30"
-                    >
-                      <Plus className="size-3" />
-                      <span>
-                        + Custom {streamMode === "CLIENT_OUTBOUND" ? "Outbound" : "Inbound"} Type
-                      </span>
-                    </button>
-                  )}
-                </PopoverContent>
-              </Popover>
-            );
-          })()}
-
-            {/* Attachments Trigger Popover */}
+            {/* Attachments Dropdown Menu (Images & Documents) */}
             <Popover open={attachMenuOpen} onOpenChange={setAttachMenuOpen}>
               <PopoverTrigger
                 render={
                   <Button
                     size="icon-xs"
                     variant="ghost"
-                    className="size-6.5 text-muted-foreground hover:text-foreground cursor-pointer rounded-lg hover:bg-muted/80"
+                    className={cn(
+                      "size-6.5 cursor-pointer rounded-lg transition-colors",
+                      attachments.length > 0
+                        ? "text-primary bg-primary/10 hover:bg-primary/15 font-bold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                    )}
                     title="Attach image or document"
                   >
                     <Paperclip className="size-3.5" />
                   </Button>
                 }
               />
-              <PopoverContent side="top" align="start" className="w-48 p-1">
+              <PopoverContent side="top" align="start" className="w-64 p-1.5 space-y-1">
+                <div className="px-2 py-1 border-b border-border/50">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Attach Files
+                  </p>
+                </div>
+
+                {/* Real File Upload Triggers */}
                 <div className="space-y-0.5">
                   <button
                     type="button"
-                    onClick={() => handleAddSampleAttachment("image")}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted text-xs text-foreground cursor-pointer text-left"
+                    onClick={() => {
+                      imageInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-muted text-xs text-foreground cursor-pointer text-left transition-colors"
                   >
-                    <ImageIcon className="size-3.5 text-sky-500" />
-                    <div>
-                      <p className="font-semibold leading-tight text-xs">Image Mockup</p>
-                      <p className="text-[10px] text-muted-foreground">PNG / JPG file</p>
+                    <div className="flex size-7 items-center justify-center rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-400 shrink-0">
+                      <ImageIcon className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-xs leading-tight">Upload Image(s)</p>
+                      <p className="text-[10px] text-muted-foreground truncate">PNG, JPG, WebP, GIF, SVG</p>
                     </div>
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => handleAddSampleAttachment("file")}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted text-xs text-foreground cursor-pointer text-left"
+                    onClick={() => {
+                      docInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-muted text-xs text-foreground cursor-pointer text-left transition-colors"
                   >
-                    <FileText className="size-3.5 text-amber-500" />
-                    <div>
-                      <p className="font-semibold leading-tight text-xs">PDF Deliverable</p>
-                      <p className="text-[10px] text-muted-foreground">Document file</p>
+                    <div className="flex size-7 items-center justify-center rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                      <FileText className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-xs leading-tight">Upload Document(s)</p>
+                      <p className="text-[10px] text-muted-foreground truncate">PDF, DOCX, XLSX, ZIP, TXT</p>
                     </div>
                   </button>
+                </div>
+
+                {/* Sample Presets Section */}
+                <div className="pt-1 border-t border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => setShowSamplesMenu((prev) => !prev)}
+                    className="w-full flex items-center justify-between px-2 py-1 rounded-md text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="size-3 text-amber-500" />
+                      <span>Sample Test Attachments</span>
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "size-3 transition-transform duration-200",
+                        showSamplesMenu ? "rotate-180" : ""
+                      )}
+                    />
+                  </button>
+
+                  {showSamplesMenu && (
+                    <div className="space-y-0.5 mt-1 pt-1 border-t border-border/40 max-h-40 overflow-y-auto">
+                      {SAMPLE_ATTACHMENTS.map((sample) => {
+                        const isImg = sample.type === "image";
+                        return (
+                          <button
+                            key={sample.id}
+                            type="button"
+                            onClick={() => handleAddSample(sample)}
+                            className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md hover:bg-muted text-left text-xs cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isImg ? (
+                                <ImageIcon className="size-3 text-sky-500 shrink-0" />
+                              ) : (
+                                <FileText className="size-3 text-amber-500 shrink-0" />
+                              )}
+                              <span className="truncate text-[11px] font-medium group-hover:text-primary transition-colors">
+                                {sample.name}
+                              </span>
+                            </div>
+                            <span className="text-[9px] font-mono text-muted-foreground shrink-0">
+                              {sample.size}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
@@ -751,9 +1202,10 @@ export function MessageComposer({
             <Button
               size="xs"
               onClick={handleSend}
-              disabled={!text.trim() && attachments.length === 0}
+              disabled={(!text.trim() && attachments.length === 0) || isUploadingAny}
               className={cn(
                 "h-6.5 px-3 rounded-lg font-bold gap-1 text-[11px] shadow-2xs cursor-pointer transition-all",
+                isUploadingAny ? "opacity-60 cursor-not-allowed" : "",
                 streamMode === "CLIENT_OUTBOUND"
                   ? "bg-sky-600 hover:bg-sky-700 text-white"
                   : streamMode === "CLIENT_INBOUND"
@@ -761,12 +1213,97 @@ export function MessageComposer({
                   : "bg-primary text-primary-foreground hover:bg-primary/90"
               )}
             >
-              <span>Send</span>
-              <SendHorizontal className="size-3" />
+              {isUploadingAny ? (
+                <>
+                  <Loader2 className="size-3 animate-spin" />
+                  <span>Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <span>Send</span>
+                  <SendHorizontal className="size-3" />
+                </>
+              )}
             </Button>
           </div>
         </div>
       </div>
+
+      {/* 5. Pre-Send Image / Attachment Lightbox Modal */}
+      {previewAttachment && (
+        <Dialog open={!!previewAttachment} onOpenChange={() => setPreviewAttachment(null)}>
+          <DialogContent className="min-w-[340px] xs:min-w-[460px] sm:min-w-[600px] md:min-w-[720px] lg:min-w-[820px] w-[92vw] sm:w-[84vw] md:w-[76vw] lg:w-[68vw] p-0 overflow-hidden bg-card/95 backdrop-blur-xl border border-border/80 shadow-2xl">
+            <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/30 pr-12 sm:pr-14">
+              <div className="min-w-0 pr-4">
+                <DialogTitle className="text-sm font-bold text-foreground truncate">
+                  {previewAttachment.name}
+                </DialogTitle>
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                  {previewAttachment.size && <span>{previewAttachment.size}</span>}
+                  {previewAttachment.extension && (
+                    <>
+                      <span>•</span>
+                      <span className="uppercase font-mono font-semibold">
+                        {previewAttachment.extension}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  size="xs"
+                  variant="destructive"
+                  className="h-7 text-xs gap-1.5 font-semibold cursor-pointer shadow-2xs"
+                  onClick={() => {
+                    handleRemoveAttachment(previewAttachment.id);
+                    setPreviewAttachment(null);
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>Remove</span>
+                </Button>
+              </div>
+            </DialogHeader>
+
+            <div className="flex items-center justify-center p-4 sm:p-6 bg-black/10 dark:bg-black/30 max-h-[75vh] overflow-auto">
+              {previewAttachment.type === "image" ? (
+                <img
+                  src={previewAttachment.url}
+                  alt={previewAttachment.name}
+                  className="max-h-[68vh] w-auto max-w-full object-contain rounded-xl shadow-lg border border-border/40"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-3 p-8 rounded-2xl bg-card border border-border/80 text-center max-w-md shadow-lg">
+                  {(() => {
+                    const cfg = getFileTypeConfig(previewAttachment.name, previewAttachment.mimeType);
+                    const IconComp = cfg.icon;
+                    return (
+                      <>
+                        <div
+                          className={cn(
+                            "flex size-16 items-center justify-center rounded-2xl shadow-md",
+                            cfg.iconBgClass
+                          )}
+                        >
+                          <IconComp className={cn("size-8", cfg.iconColorClass)} />
+                        </div>
+                        <p className="font-bold text-sm text-foreground break-all">
+                          {previewAttachment.name}
+                        </p>
+                        <Badge variant="outline" className={cn("font-mono text-xs", cfg.badgeClass)}>
+                          {cfg.badgeLabel} • {previewAttachment.size}
+                        </Badge>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

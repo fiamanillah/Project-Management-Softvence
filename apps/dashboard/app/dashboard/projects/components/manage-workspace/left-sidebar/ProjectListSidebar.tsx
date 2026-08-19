@@ -122,7 +122,7 @@ export function ProjectListSidebar({
 
           {/* Project Avatars List */}
           <ScrollArea className="flex-1 w-full py-2">
-            <div className="flex flex-col items-center gap-2 px-1">
+            <div className="flex flex-col items-center gap-3 px-1 py-1">
               {filteredProjects.map((proj) => (
                 <ProjectListItem
                   key={proj.id}
