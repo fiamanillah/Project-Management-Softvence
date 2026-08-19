@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@workspace/ui/components/dialog";
 import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
 import {
   FieldSet,
   FieldGroup,
@@ -18,12 +19,17 @@ import {
   FieldDescription,
   FieldError,
 } from "@workspace/ui/components/field";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import { Badge } from "@workspace/ui/components/badge";
 import { UserSearchSelect, type UserItem } from "@/components/user-search-select";
-import { Loader2, UserCheck, UserX, Trash2, ShieldCheck } from "lucide-react";
+import { Loader2, UserCheck, UserX, Trash2, ShieldCheck, Crown, Star } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { assignDepartmentManagerSchema, type DepartmentItem } from "@workspace/shared";
+import {
+  assignDepartmentManagerSchema,
+  type DepartmentItem,
+  type DepartmentManagerItem,
+} from "@workspace/shared";
 
 interface AssignManagerModalProps {
   department: DepartmentItem | null;
@@ -40,16 +46,31 @@ export function AssignManagerModal({
 }: AssignManagerModalProps) {
   const [selectedUserId, setSelectedUserId] = React.useState("");
   const [selectedUser, setSelectedUser] = React.useState<UserItem | null>(null);
+  const [roleTitle, setRoleTitle] = React.useState("");
+  const [isPrimary, setIsPrimary] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [unassigningManagerId, setUnassigningManagerId] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [activeManagers, setActiveManagers] = React.useState<DepartmentManagerItem[]>([]);
 
-  const activeManagers = department?.managers?.filter((m) => !m.unassignedAt) || [];
-  const assignedUserIds = activeManagers.map((m) => m.userId || m.user?.id).filter(Boolean) as string[];
+  // Sync active managers from department prop
+  React.useEffect(() => {
+    if (department?.managers) {
+      setActiveManagers(department.managers.filter((m) => !m.unassignedAt));
+    } else {
+      setActiveManagers([]);
+    }
+  }, [department]);
+
+  const assignedUserIds = React.useMemo(() => {
+    return activeManagers.map((m) => m.userId || m.user?.id).filter(Boolean) as string[];
+  }, [activeManagers]);
 
   const resetForm = () => {
     setSelectedUserId("");
     setSelectedUser(null);
+    setRoleTitle("");
+    setIsPrimary(false);
     setErrors({});
   };
 
@@ -68,6 +89,8 @@ export function AssignManagerModal({
     // Validate using shared Zod schema
     const validationResult = assignDepartmentManagerSchema.safeParse({
       userId: selectedUserId,
+      roleTitle: roleTitle.trim() || undefined,
+      isPrimary,
     });
 
     if (!validationResult.success) {
@@ -84,9 +107,22 @@ export function AssignManagerModal({
 
     setIsSubmitting(true);
     try {
-      await api.post(`/organization/departments/${department.id}/managers`, validationResult.data);
+      const newManager = await api.post<DepartmentManagerItem>(
+        `/organization/departments/${department.id}/managers`,
+        validationResult.data,
+      );
 
-      toast.success("Department manager assigned successfully!");
+      toast.success("Department leadership position assigned successfully!");
+
+      // Update local state immediately
+      setActiveManagers((prev) => {
+        let updated = prev;
+        if (isPrimary) {
+          updated = updated.map((m) => ({ ...m, isPrimary: false }));
+        }
+        return [newManager, ...updated];
+      });
+
       resetForm();
       onSuccess();
     } catch (err: unknown) {
@@ -102,7 +138,8 @@ export function AssignManagerModal({
     setUnassigningManagerId(managerId);
     try {
       await api.delete(`/organization/departments/${department.id}/managers/${managerId}`);
-      toast.success("Manager unassigned successfully!");
+      toast.success("Department leadership position unassigned successfully!");
+      setActiveManagers((prev) => prev.filter((m) => m.id !== managerId));
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to unassign manager";
@@ -117,10 +154,10 @@ export function AssignManagerModal({
       <DialogContent className="w-[95vw] sm:max-w-lg sm:min-w-[560px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-2">
           <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-            <UserCheck className="size-5 text-primary" /> Department Managers
+            <UserCheck className="size-5 text-primary" /> Manage Department Leadership
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Manage active manager assignments for{" "}
+            Assign multiple department heads, directors, or managers for{" "}
             <span className="font-semibold text-foreground">{department?.name}</span> (
             <span className="font-mono text-primary font-bold">{department?.code}</span>).
           </DialogDescription>
@@ -131,7 +168,7 @@ export function AssignManagerModal({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Currently Assigned Manager(s)
+                Active Leadership Team ({activeManagers.length})
               </h4>
               <Badge variant="outline" className="text-[11px] font-normal">
                 {activeManagers.length} Active
@@ -139,18 +176,19 @@ export function AssignManagerModal({
             </div>
 
             {activeManagers.length > 0 ? (
-              <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {activeManagers.map((mgr) => {
-                  const userFirstName = mgr.user?.firstName || "";
-                  const userLastName = mgr.user?.lastName || "";
-                  const userEmail = mgr.user?.email || "";
-                  const avatarChar = userFirstName
-                    ? userFirstName.charAt(0).toUpperCase()
-                    : userEmail
-                      ? userEmail.charAt(0).toUpperCase()
-                      : "?";
+                  const u = mgr.user;
+                  const userFirstName = u?.firstName || "";
+                  const userLastName = u?.lastName || "";
+                  const userEmail = u?.email || "";
+                  const initials =
+                    (userFirstName.charAt(0) + userLastName.charAt(0)).toUpperCase() ||
+                    userEmail.charAt(0).toUpperCase() ||
+                    "DM";
                   const displayName =
                     `${userFirstName} ${userLastName}`.trim() || userEmail || "Manager";
+                  const displayTitle = mgr.roleTitle || "Department Manager";
 
                   return (
                     <div
@@ -158,16 +196,36 @@ export function AssignManagerModal({
                       className="flex items-center justify-between p-2.5 rounded-lg border bg-card/80 shadow-2xs"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                          {avatarChar}
-                        </div>
+                        <Avatar className="size-8 rounded-full border border-primary/20 shrink-0">
+                          {u?.avatarUrl && <AvatarImage src={u.avatarUrl} alt={displayName} />}
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-xs font-medium truncate text-foreground">
-                            {displayName}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground truncate font-mono">
-                            {userEmail}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-semibold truncate text-foreground">
+                              {displayName}
+                            </span>
+                            {mgr.isPrimary ? (
+                              <Badge variant="secondary" className="text-[9px] py-0 px-1.5 h-4 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 gap-0.5">
+                                <Crown className="size-2.5 text-amber-500" /> Primary Lead
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[9px] py-0 px-1.5 h-4 text-muted-foreground">
+                                {displayTitle}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground truncate font-mono mt-0.5">
+                            <span>{userEmail}</span>
+                            {u?.designation?.name && (
+                              <>
+                                <span>&bull;</span>
+                                <span className="font-sans text-foreground font-medium">{u.designation.name}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -178,6 +236,7 @@ export function AssignManagerModal({
                         className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2"
                         onClick={() => handleUnassign(mgr.id)}
                         disabled={unassigningManagerId === mgr.id}
+                        title="Unassign Leadership Position"
                       >
                         {unassigningManagerId === mgr.id ? (
                           <Loader2 className="size-3.5 animate-spin" />
@@ -193,17 +252,19 @@ export function AssignManagerModal({
             ) : (
               <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground border border-dashed rounded-lg bg-muted/20">
                 <UserX className="size-4 text-muted-foreground/60" />
-                No manager assigned to this department yet.
+                No leaders assigned to this department yet.
               </div>
             )}
           </div>
 
           {/* Assign New Manager Form */}
-          <form onSubmit={handleAssign} className="space-y-4 pt-3 border-t">
+          <form id="assign-dept-manager-form" onSubmit={handleAssign} className="space-y-4 pt-3 border-t">
             <FieldSet>
-              <FieldGroup>
+              <FieldGroup className="space-y-3">
                 <Field data-invalid={Boolean(errors.userId)}>
-                  <FieldLabel htmlFor="user-select-field">Assign New Manager</FieldLabel>
+                  <FieldLabel htmlFor="user-select-field" className="text-xs font-semibold flex items-center gap-1.5">
+                    <ShieldCheck className="size-3.5 text-primary" /> Assign New Leadership Position
+                  </FieldLabel>
                   <UserSearchSelect
                     id="user-select-field"
                     value={selectedUserId}
@@ -221,6 +282,48 @@ export function AssignManagerModal({
                   />
                   <FieldError errors={errors.userId} />
                 </Field>
+
+                {/* Optional Leadership Position Title */}
+                <Field>
+                  <FieldLabel htmlFor="dept-role-title" className="text-xs font-semibold">
+                    Position / Leadership Title (Optional)
+                  </FieldLabel>
+                  <Input
+                    id="dept-role-title"
+                    value={roleTitle}
+                    onChange={(e) => setRoleTitle(e.target.value)}
+                    placeholder="e.g. Department Head, Associate Director, Technical Manager"
+                    className="h-8 text-xs"
+                    disabled={isSubmitting}
+                  />
+                  <div className="flex gap-1.5 flex-wrap mt-1">
+                    {["Department Head", "Associate Director", "Operations Lead", "Engineering Lead"].map((title) => (
+                      <button
+                        type="button"
+                        key={title}
+                        onClick={() => setRoleTitle(title)}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {title}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+
+                {/* Primary Lead Checkbox */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="dept-is-primary"
+                    checked={isPrimary}
+                    onChange={(e) => setIsPrimary(e.target.checked)}
+                    className="size-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                    disabled={isSubmitting}
+                  />
+                  <label htmlFor="dept-is-primary" className="text-xs font-medium cursor-pointer select-none flex items-center gap-1">
+                    <Star className="size-3 text-amber-500" /> Designate as Primary Department Head
+                  </label>
+                </div>
               </FieldGroup>
             </FieldSet>
 
@@ -234,7 +337,7 @@ export function AssignManagerModal({
                     <strong className="text-foreground">
                       {selectedUser.firstName} {selectedUser.lastName}
                     </strong>{" "}
-                    as department manager.
+                    as {roleTitle || "Department Manager"}.
                   </span>
                 </div>
               </div>
@@ -251,7 +354,7 @@ export function AssignManagerModal({
               </Button>
               <Button type="submit" disabled={isSubmitting || !selectedUserId}>
                 {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-                Assign Manager
+                Assign Position
               </Button>
             </DialogFooter>
           </form>
@@ -260,3 +363,4 @@ export function AssignManagerModal({
     </Dialog>
   );
 }
+

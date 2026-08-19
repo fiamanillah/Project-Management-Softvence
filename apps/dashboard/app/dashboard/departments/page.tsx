@@ -59,8 +59,12 @@ function DepartmentsContent() {
         api.get("/organization/departments"),
         api.get("/organization/branches").catch(() => []),
       ]);
-      setDepartments(deptRes || []);
+      const deptList: DepartmentItem[] = deptRes || [];
+      setDepartments(deptList);
       setBranches(branchRes || []);
+      setSelectedDepartment((current) =>
+        current ? deptList.find((d) => d.id === current.id) || current : null,
+      );
     } catch (err: any) {
       toast.error(err.message || "Failed to load organization data");
     } finally {

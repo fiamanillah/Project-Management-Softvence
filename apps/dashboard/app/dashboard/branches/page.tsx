@@ -55,7 +55,11 @@ function BranchesContent() {
     setIsLoading(true);
     try {
       const res = await api.get("/organization/branches");
-      setBranches(res || []);
+      const list: BranchItem[] = res || [];
+      setBranches(list);
+      setSelectedBranch((current) =>
+        current ? list.find((b) => b.id === current.id) || current : null,
+      );
     } catch (err: any) {
       toast.error(err.message || "Failed to load branches");
     } finally {

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import type { UnifiedOrgNode, OrgNodeType } from "@workspace/shared";
 import type { UnifiedTreeNode, DepthFilter } from "./types";
+import { UnitLeadershipStack } from "@/components/data-table";
 
 export interface UnifiedCardNodeProps {
   treeNode: UnifiedTreeNode;
@@ -221,34 +222,20 @@ export function UnifiedCardNode({
         {/* Leadership Pill */}
         <div className="pt-0.5">
           {isTeam ? (
-            teamLead ? (
-              <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-amber-500/10 text-xs border border-amber-500/20 text-amber-700 dark:text-amber-300">
-                <UserCheck className="size-3.5 shrink-0" />
-                <span className="font-medium truncate text-[11px]">{teamLead.fullName} (Lead)</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-muted/20 text-xs text-muted-foreground italic border border-dashed border-border/60">
-                <UserX className="size-3.5 shrink-0" />
-                <span className="text-[11px]">No active lead assigned</span>
-              </div>
-            )
-          ) : activeManagers.length > 0 ? (
-            <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-muted/40 text-xs border border-border/50">
-              <UserCheck className="size-3.5 text-primary shrink-0" />
-              <span className="font-medium truncate text-foreground text-[11px]">
-                {activeManagers[0]?.fullName}
-              </span>
-              {activeManagers.length > 1 && (
-                <Badge variant="secondary" className="text-[9px] py-0 px-1 ml-auto">
-                  +{activeManagers.length - 1}
-                </Badge>
-              )}
-            </div>
+            <UnitLeadershipStack
+              singleLead={teamLead}
+              roleTitle="Team Lead"
+              showLeadBadge={true}
+              emptyLabel="No active lead assigned"
+            />
           ) : (
-            <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-muted/20 text-xs text-muted-foreground italic border border-dashed border-border/60">
-              <UserX className="size-3.5 shrink-0" />
-              <span className="text-[11px]">No active managers</span>
-            </div>
+            <UnitLeadershipStack
+              items={activeManagers}
+              roleTitle={isBranch ? "Branch Manager" : "Department Head"}
+              maxVisible={2}
+              showLeadBadge={true}
+              emptyLabel="No active managers"
+            />
           )}
         </div>
 

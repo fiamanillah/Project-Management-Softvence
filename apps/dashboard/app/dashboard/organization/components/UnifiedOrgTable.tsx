@@ -53,6 +53,7 @@ import {
   DataTableColumnHeader,
   DataTableToolbar,
   DataTablePagination,
+  UnitLeadershipStack,
 } from "@/components/data-table";
 
 interface UnifiedOrgTableProps {
@@ -412,39 +413,25 @@ export function UnifiedOrgTable({
           ),
           cell: ({ row }) => {
             const n = row.original.node;
-            if (n.type === "TEAM" && n.teamLead) {
+            if (n.type === "TEAM") {
               return (
-                <Badge
-                  variant="secondary"
-                  className="text-xs font-normal flex items-center gap-1 py-0.5 px-2 bg-secondary/60"
-                >
-                  <UserCheck className="size-3 text-amber-500" />
-                  {n.teamLead.fullName}
-                </Badge>
-              );
-            }
-
-            if (n.managers && n.managers.length > 0) {
-              return (
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  {n.managers.map((mgr) => (
-                    <Badge
-                      key={mgr.id}
-                      variant="secondary"
-                      className="text-xs font-normal flex items-center gap-1 py-0.5 px-2 bg-secondary/60"
-                    >
-                      <UserCheck className="size-3 text-primary" />
-                      {mgr.fullName}
-                    </Badge>
-                  ))}
-                </div>
+                <UnitLeadershipStack
+                  singleLead={n.teamLead}
+                  roleTitle="Team Lead"
+                  showLeadBadge={true}
+                  emptyLabel="No lead assigned"
+                />
               );
             }
 
             return (
-              <span className="text-xs text-muted-foreground italic flex items-center gap-1">
-                <UserX className="size-3" /> Unassigned
-              </span>
+              <UnitLeadershipStack
+                items={n.managers}
+                roleTitle={n.type === "BRANCH" ? "Branch Manager" : "Department Manager"}
+                maxVisible={3}
+                showLeadBadge={true}
+                emptyLabel="No leadership"
+              />
             );
           },
         }

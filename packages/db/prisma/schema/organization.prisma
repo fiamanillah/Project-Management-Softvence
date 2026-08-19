@@ -36,6 +36,8 @@ model BranchManager {
   id           String    @id @default(uuid()) @db.Uuid
   branchId     String    @map("branch_id") @db.Uuid
   userId       String    @map("user_id") @db.Uuid
+  roleTitle    String?   @map("role_title")
+  isPrimary    Boolean   @default(false) @map("is_primary")
   assignedAt   DateTime  @default(now()) @map("assigned_at")
   unassignedAt DateTime? @map("unassigned_at")
 
@@ -79,6 +81,8 @@ model DepartmentManager {
   id           String    @id @default(uuid()) @db.Uuid
   departmentId String    @map("department_id") @db.Uuid
   userId       String    @map("user_id") @db.Uuid
+  roleTitle    String?   @map("role_title")
+  isPrimary    Boolean   @default(false) @map("is_primary")
   assignedAt   DateTime  @default(now()) @map("assigned_at")
   unassignedAt DateTime? @map("unassigned_at")
 

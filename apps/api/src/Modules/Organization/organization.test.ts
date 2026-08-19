@@ -79,7 +79,7 @@ describe("OrganizationService (Department, Role & Designation Management)", () =
     expect(list[0].managers).toEqual([]);
   });
 
-  it("should assign a department manager and automatically unassign the previous active manager", async () => {
+  it("should assign multiple department managers with roles and titles", async () => {
     const dept = await orgService.createDepartment({
       code: "OPS",
       name: "Operations",
@@ -88,10 +88,9 @@ describe("OrganizationService (Department, Role & Designation Management)", () =
     const role = await prisma.role.create({
       data: {
         code: "OPS_MGR",
-        name: "Ops Manager",
+        name: "Operations Manager",
         departmentId: dept.id,
         hierarchyLevel: 2,
-        isLeadership: true,
       },
     });
 
@@ -119,22 +118,32 @@ describe("OrganizationService (Department, Role & Designation Management)", () =
       },
     });
 
-    // Assign Manager 1
-    const mgr1Record = await orgService.assignDepartmentManager(dept.id, { userId: user1.id });
+    // Assign Manager 1 (Primary)
+    const mgr1Record = await orgService.assignDepartmentManager(dept.id, {
+      userId: user1.id,
+      roleTitle: "Department Head",
+      isPrimary: true,
+    });
     expect(mgr1Record.userId).toBe(user1.id);
+    expect(mgr1Record.roleTitle).toBe("Department Head");
+    expect(mgr1Record.isPrimary).toBe(true);
     expect(mgr1Record.unassignedAt).toBeNull();
 
-    // Assign Manager 2 -> should unassign Manager 1
-    const mgr2Record = await orgService.assignDepartmentManager(dept.id, { userId: user2.id });
+    // Assign Manager 2 (Co-Manager) -> multiple managers should co-exist
+    const mgr2Record = await orgService.assignDepartmentManager(dept.id, {
+      userId: user2.id,
+      roleTitle: "Operations Lead",
+      isPrimary: false,
+    });
     expect(mgr2Record.userId).toBe(user2.id);
+    expect(mgr2Record.roleTitle).toBe("Operations Lead");
 
     const updatedDept = await orgService.getDepartmentById(dept.id);
     expect(updatedDept.managers.length).toBe(2);
-    
-    // Check active manager
+
+    // Check both active managers co-exist
     const activeManagers = updatedDept.managers.filter((m) => m.unassignedAt === null);
-    expect(activeManagers.length).toBe(1);
-    expect(activeManagers[0].userId).toBe(user2.id);
+    expect(activeManagers.length).toBe(2);
   });
 
   it("should prevent deleting a department if it contains roles", async () => {

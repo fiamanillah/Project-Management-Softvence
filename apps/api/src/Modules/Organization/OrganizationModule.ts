@@ -97,40 +97,40 @@ export class OrganizationModule extends BaseModule {
     // Departments
     this.router.get(
       "/departments",
-      requirePermission("auth.user.view"),
+      requirePermission("organization.department.view"),
       controller.getDepartments.bind(controller),
     );
     this.router.get(
       "/departments/:id",
-      requirePermission("auth.user.view"),
+      requirePermission("organization.department.view"),
       controller.getDepartmentById.bind(controller),
     );
     this.router.post(
       "/departments",
-      requirePermission("auth.user.manage"),
+      requirePermission("organization.department.manage"),
       validateRequest({ body: createDepartmentSchema }),
       controller.createDepartment.bind(controller),
     );
     this.router.patch(
       "/departments/:id",
-      requirePermission("auth.user.manage"),
+      requirePermission("organization.department.manage"),
       validateRequest({ body: updateDepartmentSchema }),
       controller.updateDepartment.bind(controller),
     );
     this.router.delete(
       "/departments/:id",
-      requirePermission("auth.user.manage"),
+      requirePermission("organization.department.manage"),
       controller.deleteDepartment.bind(controller),
     );
     this.router.post(
       "/departments/:id/managers",
-      requirePermission("auth.user.manage"),
+      requirePermission("organization.department.manage"),
       validateRequest({ body: assignDepartmentManagerSchema }),
       controller.assignDepartmentManager.bind(controller),
     );
     this.router.delete(
       "/departments/:id/managers/:managerId",
-      requirePermission("auth.user.manage"),
+      requirePermission("organization.department.manage"),
       controller.removeDepartmentManager.bind(controller),
     );
 

@@ -233,6 +233,41 @@ export class ScopeEvaluator {
           }
         }
 
+        // 4. Check if user is an active Department Manager of this department or ancestor
+        const managedDepts = await prisma.departmentManager.findMany({
+          where: {
+            userId: user.id,
+            unassignedAt: null,
+          },
+          select: { departmentId: true },
+        });
+
+        for (const md of managedDepts) {
+          if (md.departmentId === resource.departmentId) return true;
+          const descendantIds = await this.getDepartmentDescendants(md.departmentId, prisma);
+          if (descendantIds.includes(resource.departmentId)) return true;
+        }
+
+        // 5. Check if user is an active Branch Manager of the branch containing this department
+        const targetDept = await prisma.department.findUnique({
+          where: { id: resource.departmentId },
+          select: { branchId: true },
+        });
+        if (targetDept?.branchId) {
+          const managedBranches = await prisma.branchManager.findMany({
+            where: {
+              userId: user.id,
+              unassignedAt: null,
+            },
+            select: { branchId: true },
+          });
+          for (const mb of managedBranches) {
+            if (mb.branchId === targetDept.branchId) return true;
+            const descendantBranchIds = await this.getBranchDescendants(mb.branchId, prisma);
+            if (descendantBranchIds.includes(targetDept.branchId)) return true;
+          }
+        }
+
         return false;
       }
 

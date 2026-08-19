@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@workspace/ui/components/dialog";
 import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
 import {
   FieldSet,
   FieldGroup,
@@ -18,12 +19,17 @@ import {
   FieldDescription,
   FieldError,
 } from "@workspace/ui/components/field";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import { Badge } from "@workspace/ui/components/badge";
 import { UserSearchSelect, type UserItem } from "@/components/user-search-select";
-import { Loader2, UserCheck, UserX, Trash2, ShieldCheck, GitBranch } from "lucide-react";
+import { Loader2, UserCheck, UserX, Trash2, ShieldCheck, Crown, Star } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { assignBranchManagerSchema, type BranchItem } from "@workspace/shared";
+import {
+  assignBranchManagerSchema,
+  type BranchItem,
+  type BranchManagerItem,
+} from "@workspace/shared";
 
 interface AssignBranchManagerModalProps {
   branch: BranchItem | null;
@@ -40,18 +46,31 @@ export function AssignBranchManagerModal({
 }: AssignBranchManagerModalProps) {
   const [selectedUserId, setSelectedUserId] = React.useState("");
   const [selectedUser, setSelectedUser] = React.useState<UserItem | null>(null);
+  const [roleTitle, setRoleTitle] = React.useState("");
+  const [isPrimary, setIsPrimary] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [unassigningManagerId, setUnassigningManagerId] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [activeManagers, setActiveManagers] = React.useState<BranchManagerItem[]>([]);
 
-  const activeManagers = branch?.managers?.filter((m) => !m.unassignedAt) || [];
-  const assignedUserIds = activeManagers
-    .map((m) => m.userId || m.user?.id)
-    .filter(Boolean) as string[];
+  // Sync active managers from branch prop
+  React.useEffect(() => {
+    if (branch?.managers) {
+      setActiveManagers(branch.managers.filter((m) => !m.unassignedAt));
+    } else {
+      setActiveManagers([]);
+    }
+  }, [branch]);
+
+  const assignedUserIds = React.useMemo(() => {
+    return activeManagers.map((m) => m.userId || m.user?.id).filter(Boolean) as string[];
+  }, [activeManagers]);
 
   const resetForm = () => {
     setSelectedUserId("");
     setSelectedUser(null);
+    setRoleTitle("");
+    setIsPrimary(false);
     setErrors({});
   };
 
@@ -69,6 +88,8 @@ export function AssignBranchManagerModal({
 
     const validationResult = assignBranchManagerSchema.safeParse({
       userId: selectedUserId,
+      roleTitle: roleTitle.trim() || undefined,
+      isPrimary,
     });
 
     if (!validationResult.success) {
@@ -85,9 +106,22 @@ export function AssignBranchManagerModal({
 
     setIsSubmitting(true);
     try {
-      await api.post(`/organization/branches/${branch.id}/managers`, validationResult.data);
+      const newManager = await api.post<BranchManagerItem>(
+        `/organization/branches/${branch.id}/managers`,
+        validationResult.data,
+      );
 
-      toast.success("Branch manager assigned successfully!");
+      toast.success("Branch leadership position assigned successfully!");
+
+      // Update local state immediately
+      setActiveManagers((prev) => {
+        let updated = prev;
+        if (isPrimary) {
+          updated = updated.map((m) => ({ ...m, isPrimary: false }));
+        }
+        return [newManager, ...updated];
+      });
+
       resetForm();
       onSuccess();
     } catch (err: unknown) {
@@ -105,7 +139,8 @@ export function AssignBranchManagerModal({
     try {
       await api.delete(`/organization/branches/${branch.id}/managers/${managerId}`);
 
-      toast.success("Branch manager unassigned successfully!");
+      toast.success("Branch leadership position unassigned successfully!");
+      setActiveManagers((prev) => prev.filter((m) => m.id !== managerId));
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to unassign manager";
@@ -123,7 +158,7 @@ export function AssignBranchManagerModal({
             <UserCheck className="size-5 text-primary" /> Manage Branch Leadership
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Assign executive directors or branch managers for{" "}
+            Assign multiple executive directors or branch managers for{" "}
             <span className="font-semibold text-foreground">{branch?.name} ({branch?.code})</span>.
           </DialogDescription>
         </DialogHeader>
@@ -133,26 +168,29 @@ export function AssignBranchManagerModal({
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Current Active Managers ({activeManagers.length})
+                Active Leadership Team ({activeManagers.length})
               </span>
               <Badge variant="outline" className="text-[10px] font-mono">
-                Branch Scope: {branch?.code}
+                Branch: {branch?.code}
               </Badge>
             </div>
 
             {activeManagers.length === 0 ? (
               <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed text-xs text-muted-foreground bg-muted/20">
                 <UserX className="size-4 shrink-0 text-muted-foreground/60" />
-                <span>No active managers currently assigned to this branch.</span>
+                <span>No active leaders currently assigned to this branch.</span>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {activeManagers.map((mgr) => {
+                  const u = mgr.user;
                   const fullName =
-                    `${mgr.user?.firstName || ""} ${mgr.user?.lastName || ""}`.trim() ||
-                    mgr.user?.email ||
+                    `${u?.firstName || ""} ${u?.lastName || ""}`.trim() ||
+                    u?.email ||
                     "Assigned Manager";
+                  const initials = (u?.firstName?.charAt(0) || "") + (u?.lastName?.charAt(0) || "") || "BM";
                   const isUnassigning = unassigningManagerId === mgr.id;
+                  const displayTitle = mgr.roleTitle || "Branch Manager";
 
                   return (
                     <div
@@ -160,21 +198,36 @@ export function AssignBranchManagerModal({
                       className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/10 transition-colors shadow-2xs"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                          {fullName.charAt(0).toUpperCase()}
-                        </div>
+                        <Avatar className="size-9 rounded-full border border-primary/20 shrink-0">
+                          {u?.avatarUrl && <AvatarImage src={u.avatarUrl} alt={fullName} />}
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                            {initials.toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-xs font-semibold text-foreground truncate">
                               {fullName}
                             </p>
-                            <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4">
-                              Active Lead
-                            </Badge>
+                            {mgr.isPrimary ? (
+                              <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 gap-0.5">
+                                <Crown className="size-2.5 text-amber-500" /> Primary Lead
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 text-muted-foreground">
+                                {displayTitle}
+                              </Badge>
+                            )}
                           </div>
-                          <p className="text-[11px] text-muted-foreground font-mono truncate">
-                            {mgr.user?.email}
-                          </p>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground truncate font-mono mt-0.5">
+                            <span>{u?.email}</span>
+                            {u?.designation?.name && (
+                              <>
+                                <span>&bull;</span>
+                                <span className="font-sans text-foreground font-medium">{u.designation.name}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -184,7 +237,7 @@ export function AssignBranchManagerModal({
                         disabled={isUnassigning || isSubmitting}
                         onClick={() => handleUnassign(mgr.id)}
                         className="text-destructive hover:text-destructive hover:bg-destructive/10 size-8 p-0 shrink-0"
-                        title="Unassign Manager"
+                        title="Unassign Leadership Position"
                       >
                         {isUnassigning ? (
                           <Loader2 className="size-3.5 animate-spin" />
@@ -205,10 +258,10 @@ export function AssignBranchManagerModal({
               <FieldGroup className="space-y-3">
                 <Field data-invalid={Boolean(errors.userId)}>
                   <FieldLabel htmlFor="branch-manager-search" className="text-xs font-semibold flex items-center gap-1.5">
-                    <ShieldCheck className="size-3.5 text-primary" /> Assign New Branch Manager
+                    <ShieldCheck className="size-3.5 text-primary" /> Assign New Leadership Position
                   </FieldLabel>
                   <FieldDescription className="text-[11px] text-muted-foreground mb-1.5">
-                    Search and select a user to grant executive administrative scope over this branch.
+                    Select a user to grant executive administrative scope over this branch.
                   </FieldDescription>
 
                   <UserSearchSelect
@@ -227,6 +280,48 @@ export function AssignBranchManagerModal({
 
                   <FieldError errors={errors.userId} />
                 </Field>
+
+                {/* Optional Leadership Position Title */}
+                <Field>
+                  <FieldLabel htmlFor="branch-role-title" className="text-xs font-semibold">
+                    Position / Leadership Title (Optional)
+                  </FieldLabel>
+                  <Input
+                    id="branch-role-title"
+                    value={roleTitle}
+                    onChange={(e) => setRoleTitle(e.target.value)}
+                    placeholder="e.g. Branch Director, Assistant Manager, Regional Lead"
+                    className="h-8 text-xs"
+                    disabled={isSubmitting}
+                  />
+                  <div className="flex gap-1.5 flex-wrap mt-1">
+                    {["Branch Director", "Co-Manager", "Operations Head"].map((title) => (
+                      <button
+                        type="button"
+                        key={title}
+                        onClick={() => setRoleTitle(title)}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {title}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+
+                {/* Primary Lead Checkbox */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="branch-is-primary"
+                    checked={isPrimary}
+                    onChange={(e) => setIsPrimary(e.target.checked)}
+                    className="size-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                    disabled={isSubmitting}
+                  />
+                  <label htmlFor="branch-is-primary" className="text-xs font-medium cursor-pointer select-none flex items-center gap-1">
+                    <Star className="size-3 text-amber-500" /> Designate as Primary Branch Lead
+                  </label>
+                </div>
               </FieldGroup>
             </FieldSet>
           </form>
@@ -250,10 +345,11 @@ export function AssignBranchManagerModal({
             className="gap-1.5"
           >
             {isSubmitting && <Loader2 className="size-3.5 animate-spin" />}
-            Assign Manager
+            Assign Position
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+

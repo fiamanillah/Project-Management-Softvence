@@ -51,6 +51,7 @@ import {
   DataTableColumnHeader,
   DataTableToolbar,
   DataTablePagination,
+  UnitLeadershipStack,
 } from "@/components/data-table";
 
 interface BranchTableProps {
@@ -343,35 +344,15 @@ export function BranchTable({
           header: ({ column }) => (
             <DataTableColumnHeader column={column} title="Active Leadership" />
           ),
-          cell: ({ row }) => {
-            const activeManagers =
-              row.original.branch.managers?.filter((m) => !m.unassignedAt) || [];
-
-            return activeManagers.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 items-center">
-                {activeManagers.map((mgr) => {
-                  const fullName =
-                    `${mgr.user?.firstName || ""} ${mgr.user?.lastName || ""}`.trim() ||
-                    mgr.user?.email ||
-                    "Manager";
-                  return (
-                    <Badge
-                      key={mgr.id}
-                      variant="secondary"
-                      className="text-xs font-normal flex items-center gap-1 py-0.5 px-2 bg-secondary/60"
-                    >
-                      <UserCheck className="size-3 text-primary" />
-                      {fullName}
-                    </Badge>
-                  );
-                })}
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground italic flex items-center gap-1">
-                <UserX className="size-3" /> Unassigned
-              </span>
-            );
-          },
+          cell: ({ row }) => (
+            <UnitLeadershipStack
+              items={row.original.branch.managers}
+              roleTitle="Branch Manager"
+              maxVisible={3}
+              showLeadBadge={true}
+              emptyLabel="No leadership"
+            />
+          ),
         }
       ),
 

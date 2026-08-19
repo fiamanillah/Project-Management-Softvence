@@ -112,6 +112,7 @@ export class OrganizationDepartmentService {
           },
           managers: {
             where: { unassignedAt: null },
+            orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
             include: {
               user: {
                 select: {
@@ -119,6 +120,16 @@ export class OrganizationDepartmentService {
                   firstName: true,
                   lastName: true,
                   email: true,
+                  avatarUrl: true,
+                  employeeId: true,
+                  systemRole: true,
+                  designation: {
+                    select: {
+                      id: true,
+                      code: true,
+                      name: true,
+                    },
+                  },
                 },
               },
             },
@@ -196,6 +207,8 @@ export class OrganizationDepartmentService {
           },
         },
         managers: {
+          where: { unassignedAt: null },
+          orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
           include: {
             user: {
               select: {
@@ -203,10 +216,19 @@ export class OrganizationDepartmentService {
                 firstName: true,
                 lastName: true,
                 email: true,
+                avatarUrl: true,
+                employeeId: true,
+                systemRole: true,
+                designation: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
+                },
               },
             },
           },
-          orderBy: { assignedAt: "desc" },
         },
         roles: true,
         designations: true,
@@ -237,39 +259,54 @@ export class OrganizationDepartmentService {
     };
   }
 
-  public async createDepartment(data: CreateDepartmentDTO, req?: Request) {
+  public async createDepartment(dto: CreateDepartmentDTO, req?: Request) {
+    // Check if code is unique
     const existing = await this.prisma.department.findUnique({
-      where: { code: data.code },
+      where: { code: dto.code },
     });
-    if (existing && !existing.deletedAt) {
-      throw new ConflictError(`Department code '${data.code}' already exists`);
+    if (existing) {
+      throw new ConflictError("A department with this code already exists.");
     }
 
-    if (data.branchId) {
+    if (dto.branchId) {
       const branch = await this.prisma.branch.findFirst({
-        where: { id: data.branchId, deletedAt: null },
+        where: { id: dto.branchId, deletedAt: null },
       });
       if (!branch) throw new NotFoundError("Branch");
     }
 
-    if (data.parentId) {
+    if (dto.parentId) {
       const parent = await this.prisma.department.findFirst({
-        where: { id: data.parentId, deletedAt: null },
+        where: { id: dto.parentId, deletedAt: null },
       });
       if (!parent) throw new NotFoundError("Parent Department");
     }
 
-    const dept = await this.prisma.department.create({
+    const department = await this.prisma.department.create({
       data: {
-        code: data.code,
-        name: data.name,
-        branchId: data.branchId || null,
-        parentId: data.parentId || null,
-        isActive: data.isActive ?? true,
+        code: dto.code.trim().toUpperCase(),
+        name: dto.name.trim(),
+        branchId: dto.branchId || null,
+        parentId: dto.parentId || null,
+        isActive: dto.isActive ?? true,
       },
       include: {
-        branch: true,
-        parent: true,
+        branch: { select: { id: true, code: true, name: true } },
+        parent: { select: { id: true, code: true, name: true } },
+        managers: {
+          where: { unassignedAt: null },
+          orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -277,53 +314,75 @@ export class OrganizationDepartmentService {
       module: "ORGANIZATION",
       action: "DEPARTMENT_CREATE",
       entityTable: "Department",
-      entityId: dept.id,
+      entityId: department.id,
       oldPayload: undefined,
-      newPayload: dept,
+      newPayload: department,
       req,
     });
 
     await AuthorizationEngine.getInstance().invalidateCache();
 
-    return dept;
+    return department;
   }
 
-  public async updateDepartment(id: string, data: UpdateDepartmentDTO, req?: Request) {
-    const existing = await this.prisma.department.findFirst({ where: { id, deletedAt: null } });
-    if (!existing) throw new NotFoundError("Department");
+  public async updateDepartment(id: string, dto: UpdateDepartmentDTO, req?: Request) {
+    const department = await this.prisma.department.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!department) throw new NotFoundError("Department");
 
-    if (data.branchId !== undefined && data.branchId !== null) {
+    if (dto.branchId !== undefined && dto.branchId !== null) {
       const branch = await this.prisma.branch.findFirst({
-        where: { id: data.branchId, deletedAt: null },
+        where: { id: dto.branchId, deletedAt: null },
       });
       if (!branch) throw new NotFoundError("Branch");
     }
 
-    if (data.parentId !== undefined && data.parentId !== null) {
-      if (data.parentId === id) {
+    if (dto.parentId !== undefined && dto.parentId !== department.parentId) {
+      if (dto.parentId === id) {
         throw new BadRequestError("A department cannot be its own parent.");
       }
-      const isLoop = await this.isDescendant(id, data.parentId);
-      if (isLoop) {
-        throw new BadRequestError(
-          "Cannot set a descendant department as the parent (circular hierarchy detected).",
-        );
+
+      if (dto.parentId) {
+        const parent = await this.prisma.department.findFirst({
+          where: { id: dto.parentId, deletedAt: null },
+        });
+        if (!parent) throw new NotFoundError("Parent Department");
+
+        const descendants = await this.getDepartmentDescendantIds(id);
+        if (descendants.includes(dto.parentId)) {
+          throw new BadRequestError(
+            "Cannot assign a descendant department as parent (circular hierarchy detected).",
+          );
+        }
       }
-      const parent = await this.prisma.department.findFirst({ where: { id: data.parentId, deletedAt: null } });
-      if (!parent) throw new NotFoundError("Parent Department");
     }
 
     const updated = await this.prisma.department.update({
       where: { id },
       data: {
-        name: data.name ?? undefined,
-        branchId: data.branchId !== undefined ? data.branchId : undefined,
-        parentId: data.parentId !== undefined ? data.parentId : undefined,
-        isActive: data.isActive !== undefined ? data.isActive : undefined,
+        ...(dto.name ? { name: dto.name.trim() } : {}),
+        ...(dto.branchId !== undefined ? { branchId: dto.branchId } : {}),
+        ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
       include: {
-        branch: true,
-        parent: true,
+        branch: { select: { id: true, code: true, name: true } },
+        parent: { select: { id: true, code: true, name: true } },
+        managers: {
+          where: { unassignedAt: null },
+          orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -332,7 +391,7 @@ export class OrganizationDepartmentService {
       action: "DEPARTMENT_UPDATE",
       entityTable: "Department",
       entityId: id,
-      oldPayload: existing,
+      oldPayload: department,
       newPayload: updated,
       req,
     });
@@ -343,15 +402,15 @@ export class OrganizationDepartmentService {
   }
 
   public async deleteDepartment(id: string, req?: Request) {
-    const dept = await this.prisma.department.findUnique({
-      where: { id },
+    const dept = await this.prisma.department.findFirst({
+      where: { id, deletedAt: null },
       include: {
         _count: {
           select: {
-            roles: true,
-            designations: true,
+            subDepartments: { where: { deletedAt: null } },
             teams: true,
-            subDepartments: true,
+            designations: { where: { isActive: true } },
+            roles: { where: { isActive: true } },
           },
         },
       },
@@ -364,25 +423,25 @@ export class OrganizationDepartmentService {
       );
     }
 
-    if (dept._count.roles > 0) {
-      throw new BadRequestError(
-        `Cannot delete department with ${dept._count.roles} assigned role(s). Reassign or delete them first.`,
-      );
-    }
-
-    if (dept._count.designations > 0) {
-      throw new BadRequestError(
-        `Cannot delete department with ${dept._count.designations} assigned designation(s). Reassign or delete them first.`,
-      );
-    }
-
     if (dept._count.teams > 0) {
       throw new BadRequestError(
         `Cannot delete department with ${dept._count.teams} assigned team(s). Reassign or delete them first.`,
       );
     }
 
-    await this.prisma.department.delete({ where: { id } });
+    if (dept._count.designations > 0 || dept._count.roles > 0) {
+      throw new BadRequestError(
+        "Cannot delete department with active designations or roles. Reassign or remove them first.",
+      );
+    }
+
+    const deleted = await this.prisma.department.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        isActive: false,
+      },
+    });
 
     await AuditLogService.log({
       module: "ORGANIZATION",
@@ -390,39 +449,112 @@ export class OrganizationDepartmentService {
       entityTable: "Department",
       entityId: id,
       oldPayload: dept,
-      newPayload: undefined,
+      newPayload: deleted,
       req,
     });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
 
     return { message: "Department deleted successfully" };
   }
 
   public async assignDepartmentManager(departmentId: string, dto: AssignDepartmentManagerDTO, req?: Request) {
-    const dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
+    const dept = await this.prisma.department.findFirst({
+      where: { id: departmentId, deletedAt: null },
+    });
     if (!dept) throw new NotFoundError("Department");
 
-    const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+    });
     if (!user) throw new NotFoundError("User");
 
-    const previousManagers = await this.prisma.departmentManager.findMany({
-      where: { departmentId, unassignedAt: null },
-    });
-
-    await this.prisma.departmentManager.updateMany({
+    // Check if user is already an active manager
+    const existing = await this.prisma.departmentManager.findFirst({
       where: {
         departmentId,
+        userId: dto.userId,
         unassignedAt: null,
       },
-      data: {
-        unassignedAt: new Date(),
-      },
     });
+    if (existing) {
+      throw new ConflictError("User is already an active manager of this department.");
+    }
+
+    // If marked as primary, demote other active managers of this department
+    if (dto.isPrimary) {
+      await this.prisma.departmentManager.updateMany({
+        where: {
+          departmentId,
+          unassignedAt: null,
+          isPrimary: true,
+        },
+        data: {
+          isPrimary: false,
+        },
+      });
+    }
 
     const managerRecord = await this.prisma.departmentManager.create({
       data: {
         departmentId,
         userId: dto.userId,
+        roleTitle: dto.roleTitle || null,
+        isPrimary: dto.isPrimary ?? false,
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            avatarUrl: true,
+            employeeId: true,
+            systemRole: true,
+            designation: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await AuditLogService.log({
+      module: "ORGANIZATION",
+      action: "DEPARTMENT_MANAGER_ASSIGN",
+      entityTable: "DepartmentManager",
+      entityId: managerRecord.id,
+      oldPayload: undefined,
+      newPayload: managerRecord,
+      req,
+    });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
+
+    return managerRecord;
+  }
+
+  public async removeDepartmentManager(departmentId: string, managerId: string, req?: Request) {
+    const record = await this.prisma.departmentManager.findFirst({
+      where: {
+        id: managerId,
+        departmentId,
+      },
+    });
+    if (!record) throw new NotFoundError("Department Manager");
+
+    if (record.unassignedAt) {
+      throw new BadRequestError("Manager is already unassigned.");
+    }
+
+    const updated = await this.prisma.departmentManager.update({
+      where: { id: managerId },
+      data: { unassignedAt: new Date() },
       include: {
         user: {
           select: {
@@ -437,33 +569,6 @@ export class OrganizationDepartmentService {
 
     await AuditLogService.log({
       module: "ORGANIZATION",
-      action: "DEPARTMENT_MANAGER_ASSIGN",
-      entityTable: "DepartmentManager",
-      entityId: managerRecord.id,
-      oldPayload: { previousManagers },
-      newPayload: managerRecord,
-      req,
-    });
-
-    return managerRecord;
-  }
-
-  public async removeDepartmentManager(departmentId: string, managerId: string, req?: Request) {
-    const record = await this.prisma.departmentManager.findFirst({
-      where: {
-        id: managerId,
-        departmentId,
-      },
-    });
-    if (!record) throw new NotFoundError("Department manager assignment");
-
-    const updated = await this.prisma.departmentManager.update({
-      where: { id: managerId },
-      data: { unassignedAt: new Date() },
-    });
-
-    await AuditLogService.log({
-      module: "ORGANIZATION",
       action: "DEPARTMENT_MANAGER_REMOVE",
       entityTable: "DepartmentManager",
       entityId: managerId,
@@ -471,6 +576,8 @@ export class OrganizationDepartmentService {
       newPayload: updated,
       req,
     });
+
+    await AuthorizationEngine.getInstance().invalidateCache();
 
     return { message: "Department manager unassigned successfully" };
   }

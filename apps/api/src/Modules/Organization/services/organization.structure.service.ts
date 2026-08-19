@@ -24,8 +24,24 @@ export class OrganizationStructureService {
           parent: { select: { id: true, code: true, name: true } },
           managers: {
             where: { unassignedAt: null },
+            orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
             include: {
-              user: { select: { id: true, firstName: true, lastName: true, email: true } },
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  avatarUrl: true,
+                  employeeId: true,
+                  systemRole: true,
+                  designation: {
+                    select: {
+                      name: true,
+                    },
+                  },
+                },
+              },
             },
           },
           _count: { select: { subBranches: true, departments: true } },
@@ -39,8 +55,24 @@ export class OrganizationStructureService {
           branch: { select: { id: true, code: true, name: true } },
           managers: {
             where: { unassignedAt: null },
+            orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
             include: {
-              user: { select: { id: true, firstName: true, lastName: true, email: true } },
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  avatarUrl: true,
+                  employeeId: true,
+                  systemRole: true,
+                  designation: {
+                    select: {
+                      name: true,
+                    },
+                  },
+                },
+              },
             },
           },
           _count: { select: { designations: true, teams: true, subDepartments: true } },
@@ -60,8 +92,32 @@ export class OrganizationStructureService {
           },
           members: {
             where: { leftAt: null },
+            orderBy: { joinedAt: "asc" },
             include: {
-              user: { select: { id: true, firstName: true, lastName: true, email: true } },
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  avatarUrl: true,
+                  employeeId: true,
+                  systemRole: true,
+                  designation: {
+                    select: {
+                      name: true,
+                    },
+                  },
+                },
+              },
+              role: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  qualifiesForTeamScope: true,
+                },
+              },
             },
           },
           _count: { select: { members: true } },
@@ -103,6 +159,12 @@ export class OrganizationStructureService {
           userId: m.userId,
           fullName: `${m.user?.firstName || ""} ${m.user?.lastName || ""}`.trim() || m.user?.email || "Manager",
           email: m.user?.email || "",
+          avatarUrl: m.user?.avatarUrl,
+          employeeId: m.user?.employeeId,
+          systemRole: m.user?.systemRole,
+          designationName: m.user?.designation?.name,
+          roleTitle: m.roleTitle || "Branch Manager",
+          isPrimary: m.isPrimary,
         })),
         counts: {
           subBranches: b._count.subBranches,
@@ -154,6 +216,12 @@ export class OrganizationStructureService {
           userId: m.userId,
           fullName: `${m.user?.firstName || ""} ${m.user?.lastName || ""}`.trim() || m.user?.email || "Manager",
           email: m.user?.email || "",
+          avatarUrl: m.user?.avatarUrl,
+          employeeId: m.user?.employeeId,
+          systemRole: m.user?.systemRole,
+          designationName: m.user?.designation?.name,
+          roleTitle: m.roleTitle || "Department Manager",
+          isPrimary: m.isPrimary,
         })),
         counts: {
           subDepartments: d._count.subDepartments,
@@ -186,7 +254,21 @@ export class OrganizationStructureService {
           ])
         : [true, true, true];
 
-      const leadMember = t.members[0];
+      const leadMembers = t.members.filter((m) => m.role?.qualifiesForTeamScope);
+      const teamLeads = (leadMembers.length > 0 ? leadMembers : t.members.slice(0, 1)).map((leadMember, idx) => ({
+        id: leadMember.id,
+        userId: leadMember.userId,
+        fullName: `${leadMember.user?.firstName || ""} ${leadMember.user?.lastName || ""}`.trim() || leadMember.user?.email || "Lead",
+        email: leadMember.user?.email || "",
+        avatarUrl: leadMember.user?.avatarUrl,
+        employeeId: leadMember.user?.employeeId,
+        systemRole: leadMember.user?.systemRole,
+        designationName: leadMember.user?.designation?.name,
+        roleTitle: leadMember.role?.name || "Squad Lead",
+        isPrimary: idx === 0,
+      }));
+
+      const primaryLead = teamLeads[0] || null;
 
       const node: UnifiedOrgNode = {
         id: t.id,
@@ -201,14 +283,9 @@ export class OrganizationStructureService {
         departmentId: t.departmentId,
         departmentName: t.department?.name || null,
         isActive: t.isActive,
-        teamLead: leadMember
-          ? {
-              id: leadMember.id,
-              userId: leadMember.userId,
-              fullName: `${leadMember.user?.firstName || ""} ${leadMember.user?.lastName || ""}`.trim() || leadMember.user?.email || "Lead",
-              email: leadMember.user?.email || "",
-            }
-          : null,
+        teamLead: primaryLead,
+        teamLeads: teamLeads,
+        managers: teamLeads,
         counts: {
           members: t._count.members,
         },

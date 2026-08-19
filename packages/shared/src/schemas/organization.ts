@@ -32,15 +32,20 @@ export const updateBranchSchema = z.object({
 
 export const assignBranchManagerSchema = z.object({
   userId: z.string().uuid("Invalid user ID format"),
+  roleTitle: z.string().max(100).optional().nullable(),
+  isPrimary: z.boolean().optional().default(false),
 });
 
 export type CreateBranchDTO = z.input<typeof createBranchSchema>;
 export type UpdateBranchDTO = z.infer<typeof updateBranchSchema>;
-export type AssignBranchManagerDTO = z.infer<typeof assignBranchManagerSchema>;
+export type AssignBranchManagerDTO = z.input<typeof assignBranchManagerSchema>;
 
 export interface BranchManagerItem {
   id: string;
+  branchId?: string;
   userId: string;
+  roleTitle?: string | null;
+  isPrimary?: boolean;
   assignedAt?: string | Date;
   unassignedAt?: string | Date | null;
   user: {
@@ -48,6 +53,14 @@ export interface BranchManagerItem {
     firstName: string;
     lastName: string;
     email: string;
+    avatarUrl?: string | null;
+    employeeId?: string;
+    systemRole?: string;
+    designation?: {
+      id?: string;
+      code?: string;
+      name: string;
+    } | null;
   };
 }
 
@@ -119,10 +132,6 @@ export const updateDepartmentSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const assignDepartmentManagerSchema = z.object({
-  userId: z.string().uuid("Invalid user ID format"),
-});
-
 // Clean Designation (HR Job Title / Corporate Tag)
 export const createDesignationSchema = z.object({
   code: z.string().min(2, "Code is required").transform((val) => val.toUpperCase()),
@@ -141,15 +150,24 @@ export const updateDesignationSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const assignDepartmentManagerSchema = z.object({
+  userId: z.string().uuid("Invalid user ID format"),
+  roleTitle: z.string().max(100).optional().nullable(),
+  isPrimary: z.boolean().optional().default(false),
+});
+
 export type CreateDepartmentDTO = z.input<typeof createDepartmentSchema>;
 export type UpdateDepartmentDTO = z.infer<typeof updateDepartmentSchema>;
-export type AssignDepartmentManagerDTO = z.infer<typeof assignDepartmentManagerSchema>;
+export type AssignDepartmentManagerDTO = z.input<typeof assignDepartmentManagerSchema>;
 export type CreateDesignationDTO = z.input<typeof createDesignationSchema>;
 export type UpdateDesignationDTO = z.infer<typeof updateDesignationSchema>;
 
 export interface DepartmentManagerItem {
   id: string;
+  departmentId?: string;
   userId: string;
+  roleTitle?: string | null;
+  isPrimary?: boolean;
   assignedAt?: string | Date;
   unassignedAt?: string | Date | null;
   user: {
@@ -157,6 +175,14 @@ export interface DepartmentManagerItem {
     firstName: string;
     lastName: string;
     email: string;
+    avatarUrl?: string | null;
+    employeeId?: string;
+    systemRole?: string;
+    designation?: {
+      id?: string;
+      code?: string;
+      name: string;
+    } | null;
   };
 }
 
@@ -225,6 +251,19 @@ export interface DesignationItem {
 
 export type OrgNodeType = "BRANCH" | "DEPARTMENT" | "TEAM";
 
+export interface UnifiedOrgLeader {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  avatarUrl?: string | null;
+  employeeId?: string;
+  systemRole?: string;
+  designationName?: string | null;
+  roleTitle?: string | null;
+  isPrimary?: boolean;
+}
+
 export interface UnifiedOrgNode {
   id: string;
   type: OrgNodeType;
@@ -242,18 +281,9 @@ export interface UnifiedOrgNode {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
-  managers?: Array<{
-    id: string;
-    userId: string;
-    fullName: string;
-    email: string;
-  }>;
-  teamLead?: {
-    id: string;
-    userId: string;
-    fullName: string;
-    email: string;
-  } | null;
+  managers?: UnifiedOrgLeader[];
+  teamLead?: UnifiedOrgLeader | null;
+  teamLeads?: UnifiedOrgLeader[];
   counts: {
     subBranches?: number;
     departments?: number;

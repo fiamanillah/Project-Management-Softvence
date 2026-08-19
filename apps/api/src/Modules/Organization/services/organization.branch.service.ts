@@ -99,6 +99,7 @@ export class OrganizationBranchService {
           },
           managers: {
             where: { unassignedAt: null },
+            orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
             include: {
               user: {
                 select: {
@@ -106,6 +107,16 @@ export class OrganizationBranchService {
                   firstName: true,
                   lastName: true,
                   email: true,
+                  avatarUrl: true,
+                  employeeId: true,
+                  systemRole: true,
+                  designation: {
+                    select: {
+                      id: true,
+                      code: true,
+                      name: true,
+                    },
+                  },
                 },
               },
             },
@@ -189,6 +200,8 @@ export class OrganizationBranchService {
           },
         },
         managers: {
+          where: { unassignedAt: null },
+          orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
           include: {
             user: {
               select: {
@@ -196,10 +209,19 @@ export class OrganizationBranchService {
                 firstName: true,
                 lastName: true,
                 email: true,
+                avatarUrl: true,
+                employeeId: true,
+                systemRole: true,
+                designation: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                  },
+                },
               },
             },
           },
-          orderBy: { assignedAt: "desc" },
         },
         _count: {
           select: {
@@ -232,35 +254,59 @@ export class OrganizationBranchService {
     };
   }
 
-  public async createBranch(data: CreateBranchDTO, req?: Request) {
+  public async createBranch(dto: CreateBranchDTO, req?: Request) {
+    // Check if code is unique
     const existing = await this.prisma.branch.findUnique({
-      where: { code: data.code },
+      where: { code: dto.code },
     });
-    if (existing && !existing.deletedAt) {
-      throw new ConflictError(`Branch code '${data.code}' already exists`);
+    if (existing) {
+      throw new ConflictError("A branch with this code already exists.");
     }
 
-    if (data.parentId) {
+    // If parentId is specified, ensure parent branch exists
+    if (dto.parentId) {
       const parent = await this.prisma.branch.findFirst({
-        where: { id: data.parentId, deletedAt: null },
+        where: { id: dto.parentId, deletedAt: null },
       });
-      if (!parent) throw new NotFoundError("Parent Branch");
+      if (!parent) {
+        throw new NotFoundError("Parent Branch");
+      }
     }
 
     const branch = await this.prisma.branch.create({
       data: {
-        code: data.code,
-        name: data.name,
-        parentId: data.parentId || null,
-        description: data.description || null,
-        email: data.email || null,
-        phone: data.phone || null,
-        address: data.address || null,
-        logoUrl: data.logoUrl || null,
-        isActive: data.isActive ?? true,
+        code: dto.code.trim().toUpperCase(),
+        name: dto.name.trim(),
+        description: dto.description?.trim(),
+        email: dto.email?.trim(),
+        phone: dto.phone?.trim(),
+        address: dto.address?.trim(),
+        logoUrl: dto.logoUrl,
+        parentId: dto.parentId || null,
+        isActive: dto.isActive ?? true,
       },
       include: {
-        parent: true,
+        parent: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+        managers: {
+          where: { unassignedAt: null },
+          orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -279,42 +325,68 @@ export class OrganizationBranchService {
     return branch;
   }
 
-  public async updateBranch(id: string, data: UpdateBranchDTO, req?: Request) {
-    const existing = await this.prisma.branch.findFirst({
+  public async updateBranch(id: string, dto: UpdateBranchDTO, req?: Request) {
+    const branch = await this.prisma.branch.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!existing) throw new NotFoundError("Branch");
+    if (!branch) throw new NotFoundError("Branch");
 
-    if (data.parentId !== undefined && data.parentId !== null) {
-      if (data.parentId === id) {
+    // Prevent cycle in hierarchy if parentId is being updated
+    if (dto.parentId !== undefined && dto.parentId !== branch.parentId) {
+      if (dto.parentId === id) {
         throw new BadRequestError("A branch cannot be its own parent.");
       }
-      const isLoop = await this.isBranchDescendant(id, data.parentId);
-      if (isLoop) {
-        throw new BadRequestError(
-          "Cannot set a descendant branch as the parent (circular hierarchy detected).",
-        );
+
+      if (dto.parentId) {
+        const parent = await this.prisma.branch.findFirst({
+          where: { id: dto.parentId, deletedAt: null },
+        });
+        if (!parent) throw new NotFoundError("Parent Branch");
+
+        // Verify no circular reference
+        const isLoop = await this.isBranchDescendant(id, dto.parentId);
+        if (isLoop) {
+          throw new BadRequestError(
+            "Cannot assign a descendant branch as parent (circular hierarchy detected).",
+          );
+        }
       }
-      const parent = await this.prisma.branch.findFirst({
-        where: { id: data.parentId, deletedAt: null },
-      });
-      if (!parent) throw new NotFoundError("Parent Branch");
     }
 
     const updated = await this.prisma.branch.update({
       where: { id },
       data: {
-        name: data.name ?? undefined,
-        parentId: data.parentId !== undefined ? data.parentId : undefined,
-        description: data.description !== undefined ? data.description : undefined,
-        email: data.email !== undefined ? data.email : undefined,
-        phone: data.phone !== undefined ? data.phone : undefined,
-        address: data.address !== undefined ? data.address : undefined,
-        logoUrl: data.logoUrl !== undefined ? data.logoUrl : undefined,
-        isActive: data.isActive !== undefined ? data.isActive : undefined,
+        ...(dto.name ? { name: dto.name.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() } : {}),
+        ...(dto.email !== undefined ? { email: dto.email?.trim() } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone?.trim() } : {}),
+        ...(dto.address !== undefined ? { address: dto.address?.trim() } : {}),
+        ...(dto.logoUrl !== undefined ? { logoUrl: dto.logoUrl } : {}),
+        ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
       include: {
-        parent: true,
+        parent: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+        managers: {
+          where: { unassignedAt: null },
+          orderBy: [{ isPrimary: "desc" }, { assignedAt: "asc" }],
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -323,7 +395,7 @@ export class OrganizationBranchService {
       action: "BRANCH_UPDATE",
       entityTable: "Branch",
       entityId: id,
-      oldPayload: existing,
+      oldPayload: branch,
       newPayload: updated,
       req,
     });
@@ -339,24 +411,25 @@ export class OrganizationBranchService {
       include: {
         _count: {
           select: {
-            subBranches: true,
-            departments: true,
-            users: true,
+            subBranches: { where: { deletedAt: null } },
+            departments: { where: { deletedAt: null } },
+            users: { where: { deletedAt: null } },
+            projects: { where: { deletedAt: null } },
           },
         },
       },
     });
     if (!branch) throw new NotFoundError("Branch");
 
-    if (branch._count.subBranches > 0) {
+    // Enforce relational safety before deletion
+    if (
+      branch._count.subBranches > 0 ||
+      branch._count.departments > 0 ||
+      branch._count.users > 0 ||
+      branch._count.projects > 0
+    ) {
       throw new BadRequestError(
-        `Cannot delete branch with ${branch._count.subBranches} active sub-branch(es). Reassign or delete them first.`,
-      );
-    }
-
-    if (branch._count.departments > 0) {
-      throw new BadRequestError(
-        `Cannot delete branch with ${branch._count.departments} assigned department(s). Reassign or delete them first.`,
+        "Cannot delete branch with active child sub-branches, departments, assigned users, or projects. Reassign or remove children first.",
       );
     }
 
@@ -407,10 +480,26 @@ export class OrganizationBranchService {
       throw new ConflictError("User is already an active manager of this branch.");
     }
 
+    // If marked as primary, demote other active managers of this branch
+    if (dto.isPrimary) {
+      await this.prisma.branchManager.updateMany({
+        where: {
+          branchId,
+          unassignedAt: null,
+          isPrimary: true,
+        },
+        data: {
+          isPrimary: false,
+        },
+      });
+    }
+
     const manager = await this.prisma.branchManager.create({
       data: {
         branchId,
         userId: dto.userId,
+        roleTitle: dto.roleTitle || null,
+        isPrimary: dto.isPrimary ?? false,
       },
       include: {
         user: {
@@ -419,6 +508,16 @@ export class OrganizationBranchService {
             firstName: true,
             lastName: true,
             email: true,
+            avatarUrl: true,
+            employeeId: true,
+            systemRole: true,
+            designation: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
           },
         },
       },
