@@ -24,6 +24,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Filter,
+  ListTodo,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -239,6 +240,16 @@ function ProjectsContent() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/dashboard/tasks")}
+            className="text-xs h-8.5 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+          >
+            <ListTodo className="size-3.5" />
+            Agile Tasks & Sprints
+          </Button>
+
           <Button
             variant="outline"
             size="sm"

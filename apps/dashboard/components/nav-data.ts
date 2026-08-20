@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   KeyRound,
   Award,
+  ListTodo,
   type LucideIcon,
 } from "lucide-react";
 
@@ -101,6 +102,13 @@ export const data = {
           icon: MessagesSquare,
           permission: "project.view",
         },
+        {
+          title: "Agile Tasks & Boards",
+          url: "/dashboard/tasks",
+          icon: ListTodo,
+          permission: "project.view",
+          badge: "Agile",
+        },
       ],
     },
     {
@@ -184,6 +192,12 @@ export const data = {
       title: "Manage Projects",
       url: "/dashboard/manage-projects",
       icon: MessagesSquare,
+      permission: "project.view",
+    },
+    {
+      title: "Agile Tasks & Boards",
+      url: "/dashboard/tasks",
+      icon: ListTodo,
       permission: "project.view",
     },
     {
