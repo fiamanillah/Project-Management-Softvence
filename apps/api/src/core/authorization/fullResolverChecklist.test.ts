@@ -14,29 +14,22 @@ describe("Section 8 Resolver Verification Checklist", () => {
   let scopeTypeIdExplicitDepts: string;
 
   beforeEach(async () => {
-    // Clean tables
-    await prisma.notification.deleteMany({});
-    await prisma.refreshToken.deleteMany({});
-    await prisma.passwordResetToken.deleteMany({});
-    await prisma.departmentManager.deleteMany({});
-    await prisma.userPermissionOverride.deleteMany({});
-    await prisma.rolePermissionScopeTarget.deleteMany({});
-    await prisma.rolePermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.projectAssignment.deleteMany({});
-    await prisma.componentAssignment.deleteMany({});
-    await prisma.projectComponent.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
-    await prisma.project.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.team.deleteMany({});
-    await prisma.permission.deleteMany({});
-    await prisma.permissionScopeType.deleteMany({});
-    await prisma.user.deleteMany({});
-    await prisma.role.deleteMany({});
-    await prisma.designation.deleteMany({});
-    await prisma.department.deleteMany({});
+    // Invalidate Redis cache version before each test
+    await AuthorizationEngine.getInstance().invalidateCache();
+
+    // Clean tables using TRUNCATE CASCADE
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE 
+        "users", "roles", "departments", "designations", 
+        "permissions", "permission_scope_types", "role_permissions", 
+        "role_permission_scope_targets", "user_permission_overrides", 
+        "delegations", "projects", "teams", "team_members", "assignment_roles",
+        "project_assignments", "project_components", "component_assignments", 
+        "project_team_assignments", "project_groups", "project_group_members",
+        "chat_messages", "messages", "issues", "support_tickets",
+        "notifications", "refresh_tokens", "password_reset_tokens"
+      CASCADE;`
+    );
 
     const dept1 = await prisma.department.create({
       data: { code: "DEPT_ALPHA", name: "Alpha Department" },
@@ -123,28 +116,18 @@ describe("Section 8 Resolver Verification Checklist", () => {
   });
 
   afterAll(async () => {
-    await prisma.notification.deleteMany({});
-    await prisma.refreshToken.deleteMany({});
-    await prisma.passwordResetToken.deleteMany({});
-    await prisma.departmentManager.deleteMany({});
-    await prisma.userPermissionOverride.deleteMany({});
-    await prisma.rolePermissionScopeTarget.deleteMany({});
-    await prisma.rolePermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.projectAssignment.deleteMany({});
-    await prisma.componentAssignment.deleteMany({});
-    await prisma.projectComponent.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
-    await prisma.project.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.team.deleteMany({});
-    await prisma.permission.deleteMany({});
-    await prisma.permissionScopeType.deleteMany({});
-    await prisma.user.deleteMany({});
-    await prisma.role.deleteMany({});
-    await prisma.designation.deleteMany({});
-    await prisma.department.deleteMany({});
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE 
+        "users", "roles", "departments", "designations", 
+        "permissions", "permission_scope_types", "role_permissions", 
+        "role_permission_scope_targets", "user_permission_overrides", 
+        "delegations", "projects", "teams", "team_members", "assignment_roles",
+        "project_assignments", "project_components", "component_assignments", 
+        "project_team_assignments", "project_groups", "project_group_members",
+        "chat_messages", "messages", "issues", "support_tickets",
+        "notifications", "refresh_tokens", "password_reset_tokens"
+      CASCADE;`
+    );
   });
 
   it("Rule 1: SuperAdmin sees everything", async () => {

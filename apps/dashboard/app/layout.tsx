@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "@workspace/ui/globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/auth-context";
+import { SocketProvider } from "@/lib/socket/SocketProvider";
 import { Toaster } from "@workspace/ui/components/sonner";
 import { cn } from "@workspace/ui/lib/utils";
 
@@ -27,8 +28,10 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <ThemeProvider>
           <AuthProvider>
-            {children}
-            <Toaster position="top-right" richColors />
+            <SocketProvider>
+              {children}
+              <Toaster position="top-right" richColors />
+            </SocketProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

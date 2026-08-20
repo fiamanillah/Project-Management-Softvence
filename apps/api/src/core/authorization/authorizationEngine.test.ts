@@ -14,29 +14,22 @@ describe("AuthorizationEngine", () => {
   let scopeTypeIdOwnTeam: string;
 
   beforeEach(async () => {
-    // Clean up test records
-    await prisma.notification.deleteMany({});
-    await prisma.refreshToken.deleteMany({});
-    await prisma.passwordResetToken.deleteMany({});
-    await prisma.departmentManager.deleteMany({});
-    await prisma.userPermissionOverride.deleteMany({});
-    await prisma.rolePermissionScopeTarget.deleteMany({});
-    await prisma.rolePermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.projectAssignment.deleteMany({});
-    await prisma.componentAssignment.deleteMany({});
-    await prisma.projectComponent.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
-    await prisma.project.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.team.deleteMany({});
-    await prisma.permission.deleteMany({});
-    await prisma.permissionScopeType.deleteMany({});
-    await prisma.user.deleteMany({});
-    await prisma.role.deleteMany({});
-    await prisma.designation.deleteMany({});
-    await prisma.department.deleteMany({});
+    // Invalidate Redis cache version before each test
+    await AuthorizationEngine.getInstance().invalidateCache();
+
+    // Clean up test records using TRUNCATE CASCADE
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE 
+        "users", "roles", "departments", "designations", 
+        "permissions", "permission_scope_types", "role_permissions", 
+        "role_permission_scope_targets", "user_permission_overrides", 
+        "delegations", "projects", "teams", "team_members", "assignment_roles",
+        "project_assignments", "project_components", "component_assignments", 
+        "project_team_assignments", "project_groups", "project_group_members",
+        "chat_messages", "messages", "issues", "support_tickets",
+        "notifications", "refresh_tokens", "password_reset_tokens"
+      CASCADE;`
+    );
 
     // 1. Seed base Department & Role
     const dept = await prisma.department.create({
@@ -114,22 +107,18 @@ describe("AuthorizationEngine", () => {
 
   afterAll(async () => {
     // Cleanup after test suite completes
-    await prisma.notification.deleteMany({});
-    await prisma.refreshToken.deleteMany({});
-    await prisma.passwordResetToken.deleteMany({});
-    await prisma.departmentManager.deleteMany({});
-    await prisma.userPermissionOverride.deleteMany({});
-    await prisma.rolePermissionScopeTarget.deleteMany({});
-    await prisma.rolePermission.deleteMany({});
-    await prisma.delegation.deleteMany({});
-    await prisma.projectAssignment.deleteMany({});
-    await prisma.componentAssignment.deleteMany({});
-    await prisma.projectComponent.deleteMany({});
-    await prisma.projectTeamAssignment.deleteMany({});
-    await prisma.project.deleteMany({});
-    await prisma.teamMember.deleteMany({});
-    await prisma.assignmentRole.deleteMany({});
-    await prisma.team.deleteMany({});
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE 
+        "users", "roles", "departments", "designations", 
+        "permissions", "permission_scope_types", "role_permissions", 
+        "role_permission_scope_targets", "user_permission_overrides", 
+        "delegations", "projects", "teams", "team_members", "assignment_roles",
+        "project_assignments", "project_components", "component_assignments", 
+        "project_team_assignments", "project_groups", "project_group_members",
+        "chat_messages", "messages", "issues", "support_tickets",
+        "notifications", "refresh_tokens", "password_reset_tokens"
+      CASCADE;`
+    );
   });
 
   it("Step 1: SuperAdmin bypass should return true", async () => {

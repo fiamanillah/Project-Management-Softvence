@@ -79,6 +79,8 @@ interface PermissionItem {
   module: string;
   description: string;
   supportedScopes?: string[];
+  implies?: string[];
+  dependsOn?: string[];
 }
 
 interface ScopeTypeItem {
@@ -150,6 +152,56 @@ export function CreateRoleModal({
     [scopeTypes],
   );
 
+  const getPrerequisitePermissions = React.useCallback(
+    (perm: PermissionItem): PermissionItem[] => {
+      const codeMap = new Map<string, PermissionItem>();
+      for (const p of permissions) {
+        codeMap.set(p.code, p);
+      }
+
+      const prereqs: PermissionItem[] = [];
+      const visited = new Set<string>();
+      const queue = [perm];
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        const targets = [
+          ...(current.implies || []),
+          ...(current.dependsOn || []),
+        ];
+
+        for (const tCode of targets) {
+          if (!visited.has(tCode) && tCode !== perm.code) {
+            visited.add(tCode);
+            const targetPerm = codeMap.get(tCode);
+            if (targetPerm) {
+              prereqs.push(targetPerm);
+              queue.push(targetPerm);
+            }
+          }
+        }
+      }
+
+      return prereqs;
+    },
+    [permissions],
+  );
+
+  const getDependentPermissions = React.useCallback(
+    (perm: PermissionItem): PermissionItem[] => {
+      const dependents: PermissionItem[] = [];
+      for (const p of permissions) {
+        if (p.id === perm.id) continue;
+        const targets = [...(p.implies || []), ...(p.dependsOn || [])];
+        if (targets.includes(perm.code)) {
+          dependents.push(p);
+        }
+      }
+      return dependents;
+    },
+    [permissions],
+  );
+
   const handleTogglePermission = (perm: PermissionItem, isChecked: boolean) => {
     setSelectedScopes((prev) => {
       const copy = { ...prev };
@@ -162,8 +214,41 @@ export function CreateRoleModal({
           }
           copy[perm.id] = defaultScopeId;
         }
+
+        // Auto-check all prerequisite permissions
+        const prereqs = getPrerequisitePermissions(perm);
+        const autoAddedCodes: string[] = [];
+
+        for (const prereq of prereqs) {
+          if (!copy[prereq.id]) {
+            const prereqScopeId = getPermissionDefaultScopeId(prereq);
+            if (prereqScopeId) {
+              copy[prereq.id] = prereqScopeId;
+              autoAddedCodes.push(prereq.code);
+            }
+          }
+        }
+
+        if (autoAddedCodes.length > 0) {
+          toast.info(`Auto-enabled prerequisite(s): ${autoAddedCodes.slice(0, 3).join(", ")}${autoAddedCodes.length > 3 ? "..." : ""}`);
+        }
       } else {
         delete copy[perm.id];
+
+        // Cascade uncheck: uncheck any checked permissions that depend on this permission
+        const dependents = getDependentPermissions(perm);
+        const disabledCodes: string[] = [];
+
+        for (const dep of dependents) {
+          if (copy[dep.id]) {
+            delete copy[dep.id];
+            disabledCodes.push(dep.code);
+          }
+        }
+
+        if (disabledCodes.length > 0) {
+          toast.info(`Disabled dependent permission(s): ${disabledCodes.slice(0, 3).join(", ")}${disabledCodes.length > 3 ? "..." : ""}`);
+        }
       }
       return copy;
     });
@@ -192,8 +277,21 @@ export function CreateRoleModal({
               copy[p.id] = defaultScopeId;
             }
           }
+          const prereqs = getPrerequisitePermissions(p);
+          for (const prereq of prereqs) {
+            if (!copy[prereq.id]) {
+              const prereqScopeId = getPermissionDefaultScopeId(prereq);
+              if (prereqScopeId) {
+                copy[prereq.id] = prereqScopeId;
+              }
+            }
+          }
         } else {
           delete copy[p.id];
+          const dependents = getDependentPermissions(p);
+          for (const dep of dependents) {
+            delete copy[dep.id];
+          }
         }
       }
       return copy;
@@ -588,7 +686,7 @@ export function CreateRoleModal({
                                       onCheckedChange={(checked) => handleTogglePermission(perm, Boolean(checked))}
                                       className="mt-0.5"
                                     />
-                                    <div className="flex flex-col min-w-0">
+                                    <div className="flex flex-col min-w-0 gap-0.5">
                                       <Label
                                         htmlFor={`perm-${perm.id}`}
                                         className="font-mono text-xs font-semibold cursor-pointer text-foreground flex items-center gap-1.5"
@@ -598,6 +696,20 @@ export function CreateRoleModal({
                                       <span className="text-[11px] text-muted-foreground line-clamp-1">
                                         {perm.description}
                                       </span>
+                                      {((perm.dependsOn && perm.dependsOn.length > 0) || (perm.implies && perm.implies.length > 0)) && (
+                                        <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                          {perm.dependsOn && perm.dependsOn.length > 0 && (
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20 font-mono">
+                                              requires: {perm.dependsOn.join(", ")}
+                                            </span>
+                                          )}
+                                          {perm.implies && perm.implies.length > 0 && (
+                                            <span className="text-[10px] text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/20 font-mono">
+                                              auto-grants: {perm.implies.join(", ")}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
 

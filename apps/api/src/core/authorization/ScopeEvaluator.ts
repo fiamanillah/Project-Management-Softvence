@@ -154,9 +154,25 @@ export class ScopeEvaluator {
       }
 
       case "OwnDepartment": {
-        if (!resource?.departmentId) return false;
+        let targetDepartmentId = resource?.departmentId;
 
-        // 1. Check if resource.departmentId matches user's role department or descendants
+        // If departmentId is not directly on resource, resolve it from projectId
+        if (!targetDepartmentId && resource?.projectId) {
+          const project = await prisma.project.findUnique({
+            where: { id: resource.projectId },
+            select: {
+              teamAssignments: {
+                where: { unassignedAt: null },
+                select: { team: { select: { departmentId: true } } },
+              },
+            },
+          });
+          targetDepartmentId = project?.teamAssignments?.[0]?.team?.departmentId || undefined;
+        }
+
+        if (!targetDepartmentId) return false;
+
+        // 1. Check if targetDepartmentId matches user's role department or descendants
         let effectiveRoleId = user.roleId;
         if (!effectiveRoleId && user.id) {
           const dbUser = await prisma.user.findUnique({
@@ -173,7 +189,7 @@ export class ScopeEvaluator {
           });
 
           if (role?.departmentId) {
-            if (role.departmentId === resource.departmentId) {
+            if (role.departmentId === targetDepartmentId) {
               return true;
             }
 
@@ -181,13 +197,13 @@ export class ScopeEvaluator {
               role.departmentId,
               prisma,
             );
-            if (descendantIds.includes(resource.departmentId)) {
+            if (descendantIds.includes(targetDepartmentId)) {
               return true;
             }
           }
         }
 
-        // 2. Check if resource.departmentId matches user's designation department or descendants
+        // 2. Check if targetDepartmentId matches user's designation department or descendants
         if (user.designationId) {
           const designation = await prisma.designation.findUnique({
             where: { id: user.designationId },
@@ -195,7 +211,7 @@ export class ScopeEvaluator {
           });
 
           if (designation?.departmentId) {
-            if (designation.departmentId === resource.departmentId) {
+            if (designation.departmentId === targetDepartmentId) {
               return true;
             }
 
@@ -203,7 +219,7 @@ export class ScopeEvaluator {
               designation.departmentId,
               prisma,
             );
-            if (descendantIds.includes(resource.departmentId)) {
+            if (descendantIds.includes(targetDepartmentId)) {
               return true;
             }
           }
@@ -224,11 +240,11 @@ export class ScopeEvaluator {
 
         for (const tm of userTeams) {
           const teamDeptId = tm.team.departmentId;
-          if (teamDeptId === resource.departmentId) {
+          if (teamDeptId === targetDepartmentId) {
             return true;
           }
           const descendantIds = await this.getDepartmentDescendants(teamDeptId, prisma);
-          if (descendantIds.includes(resource.departmentId)) {
+          if (descendantIds.includes(targetDepartmentId)) {
             return true;
           }
         }
@@ -243,14 +259,14 @@ export class ScopeEvaluator {
         });
 
         for (const md of managedDepts) {
-          if (md.departmentId === resource.departmentId) return true;
+          if (md.departmentId === targetDepartmentId) return true;
           const descendantIds = await this.getDepartmentDescendants(md.departmentId, prisma);
-          if (descendantIds.includes(resource.departmentId)) return true;
+          if (descendantIds.includes(targetDepartmentId)) return true;
         }
 
         // 5. Check if user is an active Branch Manager of the branch containing this department
         const targetDept = await prisma.department.findUnique({
-          where: { id: resource.departmentId },
+          where: { id: targetDepartmentId },
           select: { branchId: true },
         });
         if (targetDept?.branchId) {

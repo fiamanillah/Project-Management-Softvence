@@ -10,6 +10,7 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
+  Loader2,
 } from "lucide-react";
 import { ProjectListItem } from "./ProjectListItem";
 import { ProjectSearchFilter, type ProjectFilterCategory } from "./ProjectSearchFilter";
@@ -23,7 +24,39 @@ interface ProjectListSidebarProps {
   onNewProject?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  recentlyUpdatedId?: string | null;
+  hasMoreProjects?: boolean;
+  isLoadingMoreProjects?: boolean;
+  onLoadMoreProjects?: () => void;
   className?: string;
+}
+
+export function sortProjectsByActivity(projectList: ProjectWorkspaceItem[]): ProjectWorkspaceItem[] {
+  return [...projectList].sort((a, b) => {
+    // 1. Pinned projects first
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+
+    // 2. Sort by lastActivityAt (or lastMessage timestamp or createdAt) descending
+    const timeA = a.lastActivityAt
+      ? new Date(a.lastActivityAt).getTime()
+      : a.lastMessage?.createdAt
+      ? new Date(a.lastMessage.createdAt).getTime()
+      : a.createdAt
+      ? new Date(a.createdAt).getTime()
+      : 0;
+    const timeB = b.lastActivityAt
+      ? new Date(b.lastActivityAt).getTime()
+      : b.lastMessage?.createdAt
+      ? new Date(b.lastMessage.createdAt).getTime()
+      : b.createdAt
+      ? new Date(b.createdAt).getTime()
+      : 0;
+
+    if (timeA !== timeB) return timeB - timeA;
+
+    return (a.code || "").localeCompare(b.code || "");
+  });
 }
 
 export function ProjectListSidebar({
@@ -33,26 +66,55 @@ export function ProjectListSidebar({
   onNewProject,
   isCollapsed = false,
   onToggleCollapse,
+  recentlyUpdatedId,
+  hasMoreProjects = false,
+  isLoadingMoreProjects = false,
+  onLoadMoreProjects,
   className,
 }: ProjectListSidebarProps) {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedCategory, setSelectedCategory] = React.useState<ProjectFilterCategory>("all");
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 
-  // Compute category counts
-  const counts = React.useMemo(() => {
+  // Infinite Scroll Trigger for Project List
+  React.useEffect(() => {
+    const viewport = scrollAreaRef.current?.querySelector(
+      "[data-slot='scroll-area-viewport']"
+    ) as HTMLElement | null;
+    if (!viewport) return;
+
+    const handleScroll = () => {
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      if (distanceFromBottom < 100 && hasMoreProjects && !isLoadingMoreProjects) {
+        onLoadMoreProjects?.();
+      }
+    };
+
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", handleScroll);
+  }, [hasMoreProjects, isLoadingMoreProjects, onLoadMoreProjects]);
+
+  // Keep projects sorted by activity
+  const sortedProjects = React.useMemo(() => {
+    return sortProjectsByActivity(projects);
+  }, [projects]);
+
+  // Compute counts for all filter categories
+  const counts = React.useMemo<Record<ProjectFilterCategory, number>>(() => {
     const res: Record<ProjectFilterCategory, number> = {
-      all: projects.length,
-      active: projects.filter((p) => !p.status.isTerminal && p.status.id !== "st-in-review").length,
-      review: projects.filter((p) => p.status.id === "st-in-review" || p.status.name.toLowerCase().includes("review")).length,
-      critical: projects.filter((p) => p.priority.level === 0 || p.priority.name.toLowerCase().includes("critical") || p.priority.name.toLowerCase().includes("high")).length,
-      delivered: projects.filter((p) => p.status.isTerminal || p.status.name.toLowerCase().includes("delivered")).length,
+      all: sortedProjects.length,
+      active: sortedProjects.filter((p) => !p.status.isTerminal && p.status.id !== "st-in-review").length,
+      review: sortedProjects.filter((p) => p.status.id === "st-in-review" || p.status.name.toLowerCase().includes("review")).length,
+      critical: sortedProjects.filter((p) => p.priority.level === 0 || p.priority.name.toLowerCase().includes("critical") || p.priority.name.toLowerCase().includes("high")).length,
+      delivered: sortedProjects.filter((p) => p.status.isTerminal || p.status.name.toLowerCase().includes("delivered")).length,
     };
     return res;
-  }, [projects]);
+  }, [sortedProjects]);
 
   // Filtered projects
   const filteredProjects = React.useMemo(() => {
-    return projects.filter((p) => {
+    return sortedProjects.filter((p) => {
       // Search query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -81,7 +143,7 @@ export function ProjectListSidebar({
 
       return true;
     });
-  }, [projects, searchQuery, selectedCategory]);
+  }, [sortedProjects, searchQuery, selectedCategory]);
 
   const pinnedProjects = filteredProjects.filter((p) => p.isPinned);
   const unpinnedProjects = filteredProjects.filter((p) => !p.isPinned);
@@ -130,6 +192,7 @@ export function ProjectListSidebar({
                   isSelected={selectedProjectId === proj.id}
                   onSelect={onSelectProject}
                   isCollapsed={true}
+                  isRecentlyUpdated={proj.id === recentlyUpdatedId}
                 />
               ))}
             </div>
@@ -186,7 +249,7 @@ export function ProjectListSidebar({
       />
 
       {/* Project Channel List */}
-      <ScrollArea className="flex-1 px-2 py-2">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 px-2 py-2">
         {filteredProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <Sparkles className="size-8 text-muted-foreground/40 mb-2" />
@@ -211,6 +274,7 @@ export function ProjectListSidebar({
                       isSelected={selectedProjectId === proj.id}
                       onSelect={onSelectProject}
                       isCollapsed={false}
+                      isRecentlyUpdated={proj.id === recentlyUpdatedId}
                     />
                   ))}
                 </div>
@@ -233,9 +297,18 @@ export function ProjectListSidebar({
                       isSelected={selectedProjectId === proj.id}
                       onSelect={onSelectProject}
                       isCollapsed={false}
+                      isRecentlyUpdated={proj.id === recentlyUpdatedId}
                     />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Bottom Infinite Loading Spinner */}
+            {isLoadingMoreProjects && (
+              <div className="flex items-center justify-center p-3 text-muted-foreground gap-1.5 text-[11px] font-medium animate-pulse">
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+                <span>Loading more projects...</span>
               </div>
             )}
           </div>

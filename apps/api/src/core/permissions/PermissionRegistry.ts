@@ -96,6 +96,8 @@ export class PermissionRegistry {
                   supportedScopes: item.supportedScopes
                     ? Array.from(item.supportedScopes)
                     : undefined,
+                  implies: item.implies ? Array.from(item.implies) : undefined,
+                  dependsOn: item.dependsOn ? Array.from(item.dependsOn) : undefined,
                 });
               }
             }
@@ -138,6 +140,62 @@ export class PermissionRegistry {
   }
 
   /**
+   * Get list of permission codes that imply the target code (e.g. project.edit implies project.view)
+   */
+  public async getImpliedByCodes(
+    targetCode: string,
+    modulesDir?: string,
+  ): Promise<string[]> {
+    const all = await this.collectAllPermissions(modulesDir);
+    const impliedBy: string[] = [];
+
+    for (const item of all) {
+      if (item.implies && item.implies.includes(targetCode)) {
+        impliedBy.push(item.code);
+      }
+    }
+
+    return impliedBy;
+  }
+
+  /**
+   * Get full transitive closure of prerequisite permissions (implies + dependsOn) required by a code
+   */
+  public async getPrerequisiteCodes(
+    code: string,
+    modulesDir?: string,
+  ): Promise<string[]> {
+    const all = await this.collectAllPermissions(modulesDir);
+    const map = new Map<string, PermissionManifestItem>();
+    for (const p of all) {
+      map.set(p.code, p);
+    }
+
+    const visited = new Set<string>();
+    const queue = [code];
+
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const item = map.get(curr);
+      if (!item) continue;
+
+      const directPrereqs = [
+        ...(item.implies ? Array.from(item.implies) : []),
+        ...(item.dependsOn ? Array.from(item.dependsOn) : []),
+      ];
+
+      for (const p of directPrereqs) {
+        if (!visited.has(p) && p !== code) {
+          visited.add(p);
+          queue.push(p);
+        }
+      }
+    }
+
+    return Array.from(visited);
+  }
+
+  /**
    * Execute permission sync against database
    */
   public async sync(
@@ -177,12 +235,30 @@ export class PermissionRegistry {
           JSON.stringify([...declaredScopes].sort()) !==
           JSON.stringify([...existingScopes].sort());
 
+        const declaredImplies = declared.implies
+          ? Array.from(declared.implies)
+          : [];
+        const existingImplies = existing.implies || [];
+        const impliesChanged =
+          JSON.stringify([...declaredImplies].sort()) !==
+          JSON.stringify([...existingImplies].sort());
+
+        const declaredDependsOn = declared.dependsOn
+          ? Array.from(declared.dependsOn)
+          : [];
+        const existingDependsOn = existing.dependsOn || [];
+        const dependsOnChanged =
+          JSON.stringify([...declaredDependsOn].sort()) !==
+          JSON.stringify([...existingDependsOn].sort());
+
         const needsUpdate =
           existing.description !== (declared.description || null) ||
           existing.module !== declared.module ||
           existing.isActive !== true ||
           existing.deprecatedAt !== null ||
-          scopesChanged;
+          scopesChanged ||
+          impliesChanged ||
+          dependsOnChanged;
 
         if (needsUpdate) {
           toUpdate.push(declared);
@@ -212,6 +288,8 @@ export class PermissionRegistry {
           module: item.module,
           description: item.description || null,
           supportedScopes: item.supportedScopes ? Array.from(item.supportedScopes) : [],
+          implies: item.implies ? Array.from(item.implies) : [],
+          dependsOn: item.dependsOn ? Array.from(item.dependsOn) : [],
           isActive: true,
           deprecatedAt: null,
         },
@@ -225,6 +303,8 @@ export class PermissionRegistry {
           module: item.module,
           description: item.description || null,
           supportedScopes: item.supportedScopes ? Array.from(item.supportedScopes) : [],
+          implies: item.implies ? Array.from(item.implies) : [],
+          dependsOn: item.dependsOn ? Array.from(item.dependsOn) : [],
           isActive: true,
           deprecatedAt: null,
         },

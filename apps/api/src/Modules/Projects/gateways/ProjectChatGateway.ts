@@ -23,29 +23,14 @@ export class ProjectChatGateway extends BaseSocketGateway {
     // 1. Send Project Message
     socket.on("chat:send_message", async (payload: { projectId: string } & CreateProjectMessageDTO, callback) => {
       try {
-        if (!payload.projectId || !payload.text?.trim()) {
-          return callback?.({ success: false, error: "Project ID and message text are required" });
-        }
-
-        const isClientComm = payload.purpose === "CLIENT_COMMUNICATION";
-        const allowed = isClientComm
-          ? await canSocket(socket, "project.chat.send_client", { projectId: payload.projectId })
-          : (await canSocket(socket, "project.chat.send", { projectId: payload.projectId })) ||
-            (await canSocket(socket, "project.view", { projectId: payload.projectId }));
-
-        if (!allowed) {
-          return callback?.({
-            success: false,
-            error: isClientComm
-              ? "Permission denied for client communications"
-              : "Permission denied to send messages in this project",
-          });
+        if (!payload.projectId || (!payload.text?.trim() && (!payload.attachments || payload.attachments.length === 0))) {
+          return callback?.({ success: false, error: "Project ID and message text or attachments are required" });
         }
 
         const message = await this.chatService.sendMessage(payload.projectId, payload, user);
         callback?.({ success: true, data: message });
       } catch (error: any) {
-        this.logger.error("Error in chat:send_message:", { error });
+        this.logger.error("Error in chat:send_message:", { error: error.message || error });
         callback?.({ success: false, error: error.message || "Failed to send message" });
       }
     });

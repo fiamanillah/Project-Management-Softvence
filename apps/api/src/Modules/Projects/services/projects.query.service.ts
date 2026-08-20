@@ -13,6 +13,7 @@ import {
   getProjectResourceContext,
   sanitizeAndDecorateProject,
   findProjectByIdOrCode,
+  buildProjectScopedWhereConditions,
 } from "./projects.capability.helper";
 
 export interface GetProjectsQuery {
@@ -49,74 +50,9 @@ export class ProjectsQueryService {
     };
 
     // Scoped query restriction for non-SuperAdmin users
-    if (actor.systemRole !== "SuperAdmin") {
-      const userPerms = await getUserPermissions(actor);
-      const viewPerm = userPerms["project.view"];
-      const isGlobal = viewPerm?.scope === "Global" || viewPerm?.scope === "Override";
-
-      if (!isGlobal) {
-        // Collect user's assigned teams
-        const userTeams = await this.prisma.teamMember.findMany({
-          where: { userId: actor.id, leftAt: null },
-          select: { teamId: true, team: { select: { departmentId: true } } },
-        });
-
-        const userTeamIds = userTeams.map((t) => t.teamId);
-        const userDeptIds = Array.from(
-          new Set(userTeams.map((t) => t.team.departmentId).filter(Boolean)),
-        );
-
-        const scopedConditions: any[] = [
-          // 1. Direct Project Assignment
-          {
-            userAssignments: {
-              some: {
-                userId: actor.id,
-                unassignedAt: null,
-              },
-            },
-          },
-          // 2. Direct Component Assignment
-          {
-            components: {
-              some: {
-                userAssignments: {
-                  some: {
-                    userId: actor.id,
-                    unassignedAt: null,
-                  },
-                },
-              },
-            },
-          },
-        ];
-
-        // 3. Team Assignment (OwnTeam or higher)
-        if (userTeamIds.length > 0) {
-          scopedConditions.push({
-            teamAssignments: {
-              some: {
-                teamId: { in: userTeamIds },
-                unassignedAt: null,
-              },
-            },
-          });
-        }
-
-        // 4. Department Scope (OwnDepartment)
-        if (viewPerm?.scope === "OwnDepartment" && userDeptIds.length > 0) {
-          scopedConditions.push({
-            teamAssignments: {
-              some: {
-                team: { departmentId: { in: userDeptIds } },
-                unassignedAt: null,
-              },
-            },
-          });
-        }
-
-        where.OR = scopedConditions;
-      }
+    const scopedConditions = await buildProjectScopedWhereConditions(this.prisma, actor);
+    if (scopedConditions && scopedConditions.length > 0) {
+      where.OR = scopedConditions;
     }
 
     // Dynamic Search Filter
@@ -414,71 +350,10 @@ export class ProjectsQueryService {
    * Get project KPI statistics with pipeline value authorization masking.
    */
   public async getProjectStats(actor: AuthenticatedUser): Promise<ProjectStats> {
-    const userPerms = await getUserPermissions(actor);
-    const viewPerm = userPerms["project.view"];
-    const isGlobal =
-      actor.systemRole === "SuperAdmin" ||
-      viewPerm?.scope === "Global" ||
-      viewPerm?.scope === "Override";
-
     const baseWhere: any = { deletedAt: null };
 
-    if (!isGlobal) {
-      const userTeams = await this.prisma.teamMember.findMany({
-        where: { userId: actor.id, leftAt: null },
-        select: { teamId: true, team: { select: { departmentId: true } } },
-      });
-
-      const userTeamIds = userTeams.map((t) => t.teamId);
-      const userDeptIds = Array.from(
-        new Set(userTeams.map((t) => t.team.departmentId).filter(Boolean)),
-      );
-
-      const scopedConditions: any[] = [
-        {
-          userAssignments: {
-            some: {
-              userId: actor.id,
-              unassignedAt: null,
-            },
-          },
-        },
-        {
-          components: {
-            some: {
-              userAssignments: {
-                some: {
-                  userId: actor.id,
-                  unassignedAt: null,
-                },
-              },
-            },
-          },
-        },
-      ];
-
-      if (userTeamIds.length > 0) {
-        scopedConditions.push({
-          teamAssignments: {
-            some: {
-              teamId: { in: userTeamIds },
-              unassignedAt: null,
-            },
-          },
-        });
-      }
-
-      if (viewPerm?.scope === "OwnDepartment" && userDeptIds.length > 0) {
-        scopedConditions.push({
-          teamAssignments: {
-            some: {
-              team: { departmentId: { in: userDeptIds } },
-              unassignedAt: null,
-            },
-          },
-        });
-      }
-
+    const scopedConditions = await buildProjectScopedWhereConditions(this.prisma, actor);
+    if (scopedConditions && scopedConditions.length > 0) {
       baseWhere.OR = scopedConditions;
     }
 

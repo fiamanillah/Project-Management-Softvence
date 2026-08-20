@@ -3,7 +3,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Socket } from "socket.io-client";
-import { getSocketClient, connectSocket, disconnectSocket } from "./socketClient";
+import { connectSocket, disconnectSocket } from "./socketClient";
+import { useAuth } from "@/lib/auth-context";
 
 interface SocketContextValue {
   socket: Socket | null;
@@ -16,28 +17,52 @@ const SocketContext = createContext<SocketContextValue>({
 });
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
+  const { token, user, isLoading } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
 
   useEffect(() => {
-    const client = connectSocket();
+    if (isLoading) return;
+
+    if (!user || !token) {
+      disconnectSocket();
+      setSocket(null);
+      setIsConnected(false);
+      return;
+    }
+
+    const client = connectSocket(token);
     setSocket(client);
 
-    const handleConnect = () => setIsConnected(true);
-    const handleDisconnect = () => setIsConnected(false);
+    const handleConnect = () => {
+      console.log("⚡ [Socket.IO] Connected as", user.email);
+      setIsConnected(true);
+    };
+    const handleDisconnect = (reason: string) => {
+      console.log("🔌 [Socket.IO] Disconnected:", reason);
+      setIsConnected(false);
+    };
+    const handleConnectError = (err: Error) => {
+      console.warn("⚠️ [Socket.IO] Connection error:", err.message);
+      setIsConnected(false);
+    };
 
     client.on("connect", handleConnect);
     client.on("disconnect", handleDisconnect);
+    client.on("connect_error", handleConnectError);
 
     if (client.connected) {
       setIsConnected(true);
+    } else {
+      client.connect();
     }
 
     return () => {
       client.off("connect", handleConnect);
       client.off("disconnect", handleDisconnect);
+      client.off("connect_error", handleConnectError);
     };
-  }, []);
+  }, [token, user, isLoading]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>

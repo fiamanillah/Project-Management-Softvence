@@ -15,24 +15,31 @@ export const teamsPermissions: PermissionManifestItem[] = [
     module: "Teams",
     description: "Create new operational teams",
     supportedScopes: SCOPE_PRESETS.ORG_HIERARCHICAL,
+    implies: ["organization.team.view"],
+    dependsOn: ["organization.department.view"],
   },
   {
     code: "organization.team.edit",
     module: "Teams",
     description: "Update team details, shifts, and department affiliations",
     supportedScopes: SCOPE_PRESETS.ORG_HIERARCHICAL,
+    implies: ["organization.team.view"],
+    dependsOn: ["storage.upload", "storage.view"],
   },
   {
     code: "organization.team.delete",
     module: "Teams",
     description: "Deactivate or delete teams",
     supportedScopes: SCOPE_PRESETS.ORG_HIERARCHICAL,
+    implies: ["organization.team.view"],
   },
   {
     code: "organization.team.manage_members",
     module: "Teams",
     description: "Add, update roles, and remove team members",
     supportedScopes: SCOPE_PRESETS.ORG_HIERARCHICAL,
+    implies: ["organization.team.view"],
+    dependsOn: ["auth.user.view"],
   },
 ];
 

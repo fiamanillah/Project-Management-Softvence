@@ -2,7 +2,7 @@
 
 import type { PrismaClient } from "@workspace/db";
 import { BadRequestError } from "@/core/errors/AppError";
-import { can } from "@/core/authorization/AuthorizationEngine";
+import { can, getUserPermissions } from "@/core/authorization/AuthorizationEngine";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import type {
   ProjectItem,
@@ -117,6 +117,89 @@ export async function validateHierarchyNoCycles(
     });
     currentParentId = parent?.parentId || null;
   }
+}
+
+/**
+ * Builds the scoped WHERE filter for project queries based on the actor's permissions and scope (Rules BE-1, BE-17).
+ * Returns null if user has Global/Override scope or is SuperAdmin, or an array of Prisma OR conditions.
+ */
+export async function buildProjectScopedWhereConditions(
+  prisma: PrismaClient,
+  actor: AuthenticatedUser,
+): Promise<any[] | null> {
+  if (actor.systemRole === "SuperAdmin") {
+    return null;
+  }
+
+  const userPerms = await getUserPermissions(actor);
+  const viewPerm = userPerms["project.view"];
+  const isGlobal = viewPerm?.scope === "Global" || viewPerm?.scope === "Override";
+
+  if (isGlobal) {
+    return null;
+  }
+
+  // Collect user's assigned teams
+  const userTeams = await prisma.teamMember.findMany({
+    where: { userId: actor.id, leftAt: null },
+    select: { teamId: true, team: { select: { departmentId: true } } },
+  });
+
+  const userTeamIds = userTeams.map((t) => t.teamId);
+  const userDeptIds = Array.from(
+    new Set(userTeams.map((t) => t.team.departmentId).filter(Boolean)),
+  );
+
+  const scopedConditions: any[] = [
+    // 1. Direct Project Assignment
+    {
+      userAssignments: {
+        some: {
+          userId: actor.id,
+          unassignedAt: null,
+        },
+      },
+    },
+    // 2. Direct Component Assignment
+    {
+      components: {
+        some: {
+          userAssignments: {
+            some: {
+              userId: actor.id,
+              unassignedAt: null,
+            },
+          },
+        },
+      },
+    },
+  ];
+
+  // 3. Team Assignment (OwnTeam or higher)
+  if (userTeamIds.length > 0) {
+    scopedConditions.push({
+      teamAssignments: {
+        some: {
+          teamId: { in: userTeamIds },
+          unassignedAt: null,
+        },
+      },
+    });
+  }
+
+  // 4. Department Scope (OwnDepartment)
+  if (viewPerm?.scope === "OwnDepartment" && userDeptIds.length > 0) {
+    scopedConditions.push({
+      teamAssignments: {
+        some: {
+          team: { departmentId: { in: userDeptIds } },
+          unassignedAt: null,
+        },
+      },
+    });
+  }
+
+  return scopedConditions;
 }
 
 /**
@@ -360,8 +443,23 @@ export async function sanitizeAndDecorateWorkspaceProject(
         timestamp: new Date(lastMsg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         isRead: true,
         purpose: lastMsg.purpose,
+        createdAt: new Date(lastMsg.createdAt).toISOString(),
       }
     : null;
+
+  const lastActivityAt = lastMsg?.createdAt
+    ? new Date(lastMsg.createdAt).toISOString()
+    : new Date(project.updatedAt || project.createdAt).toISOString();
+
+  // Compute attention type
+  let attentionType: "CLIENT_MESSAGE" | "PENDING_APPROVAL" | "REVISION_REQUESTED" | "NEW_MESSAGE" | null = null;
+  if ((counts?.pendingApprovalsCount || 0) > 0) {
+    attentionType = "PENDING_APPROVAL";
+  } else if (lastMsg && (lastMsg.purpose === "CLIENT_COMMUNICATION" || lastMsg.isFromClient)) {
+    attentionType = "CLIENT_MESSAGE";
+  } else if ((counts?.unreadCount || 0) > 0) {
+    attentionType = "NEW_MESSAGE";
+  }
 
   return {
     id: project.id,
@@ -405,6 +503,9 @@ export async function sanitizeAndDecorateWorkspaceProject(
     links,
     milestones,
     lastMessage,
+    lastActivityAt,
+    createdAt: project.createdAt ? new Date(project.createdAt).toISOString() : null,
+    attentionType,
     _capabilities: capabilities,
   };
 }

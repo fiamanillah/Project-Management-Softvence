@@ -33,6 +33,8 @@ export interface ResolvedRoleGrant {
   permissionId: string;
   resolutionStrategy: ScopeResolutionStrategy;
   scopeTargets: ScopeTargets;
+  implies?: string[];
+  dependsOn?: string[];
 }
 
 export interface ResolvedRoleGrantSet {

@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
+import { api, getErrorMessage } from "@/lib/api";
 import { MessageReplyPreview } from "./MessageReplyPreview";
 import { OUTBOUND_THEMES, INBOUND_THEMES, getMessageTheme } from "../message-theme";
 import {
@@ -41,7 +42,6 @@ import {
   getFileExtension,
   getFileTypeConfig,
   isImageFile,
-  SAMPLE_ATTACHMENTS,
 } from "./attachment-utils";
 import type {
   ChatMessage,
@@ -50,6 +50,7 @@ import type {
   ClientMessageDirection,
   ClientMessageType,
   OutboundMessageType,
+  ProjectCapabilities,
 } from "../types";
 
 export interface MessageTypeOption {
@@ -100,16 +101,20 @@ interface MessageComposerProps {
     replyTo?: { id: string; senderName: string; text: string };
     attachments?: ChatAttachment[];
   }) => void;
+  projectId?: string;
   targetClientName: string;
+  projectCapabilities?: ProjectCapabilities;
 }
 
 const EMOJI_LIST = ["👍", "❤️", "🚀", "🔥", "👏", "🎉", "💯", "👀", "🙌", "✨", "🎯", "💡", "⚡", "☕", "🤩", "🙏"];
 
 export function MessageComposer({
+  projectId,
   replyingTo,
   onCancelReply,
   onSendMessage,
   targetClientName,
+  projectCapabilities,
 }: MessageComposerProps) {
   const [text, setText] = React.useState("");
 
@@ -141,7 +146,6 @@ export function MessageComposer({
   const [emojiMenuOpen, setEmojiMenuOpen] = React.useState(false);
   const [streamModeMenuOpen, setStreamModeMenuOpen] = React.useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = React.useState(false);
-  const [showSamplesMenu, setShowSamplesMenu] = React.useState(false);
 
   const colorInputRef = React.useRef<HTMLInputElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -184,35 +188,62 @@ export function MessageComposer({
     }
   };
 
-  // Upload simulation helper
-  const simulateFileUpload = (attachmentId: string, durationMs = 600) => {
-    const stepInterval = 60;
-    const totalSteps = Math.max(1, Math.floor(durationMs / stepInterval));
-    let currentStep = 0;
+  // Real file upload to backend storage
+  const uploadFileViaStorage = async (attachmentId: string, file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "chat_message");
+      if (projectId) formData.append("entityId", projectId);
+      formData.append("isPublic", "true");
 
-    const interval = setInterval(() => {
-      currentStep++;
-      const currentProgress = Math.min(100, Math.round((currentStep / totalSteps) * 100));
+      // Progressively update visual progress indicator
+      setAttachments((prev) =>
+        prev.map((att) =>
+          att.id === attachmentId ? { ...att, status: "uploading", progress: 35 } : att
+        )
+      );
+
+      const res = await api.upload<{
+        file: {
+          key: string;
+          url: string;
+          publicUrl?: string;
+          contentType?: string;
+          size?: number;
+        };
+      }>("/storage/upload", formData);
+
+      const uploaded = res?.file || (res as any)?.data?.file || res;
+      const realUrl = uploaded?.publicUrl || uploaded?.url || (uploaded?.key ? `/api/v1/storage/stream/${uploaded.key}` : "");
 
       setAttachments((prev) =>
         prev.map((att) => {
           if (att.id === attachmentId) {
-            if (currentProgress >= 100) {
-              return { ...att, status: "ready", progress: 100 };
-            }
-            return { ...att, progress: currentProgress, status: "uploading" };
+            return {
+              ...att,
+              url: realUrl || att.url,
+              thumbnailUrl: att.type === "image" ? realUrl || att.url : undefined,
+              status: "ready",
+              progress: 100,
+              fileSizeBytes: uploaded?.size || file.size,
+              mimeType: uploaded?.contentType || file.type,
+            };
           }
           return att;
         })
       );
+    } catch (err: any) {
+      console.error("Attachment upload failed:", err);
+      const errMsg = getErrorMessage(err, "Failed to upload file");
+      toast.error(`Upload error: ${errMsg}`);
 
-      if (currentProgress >= 100) {
-        clearInterval(interval);
-        uploadIntervalsRef.current.delete(attachmentId);
-      }
-    }, stepInterval);
-
-    uploadIntervalsRef.current.set(attachmentId, interval);
+      setAttachments((prev) =>
+        prev.map((att) =>
+          att.id === attachmentId ? { ...att, status: "error", progress: 0 } : att
+        )
+      );
+    }
   };
 
   // Handle file additions (from native input, drag & drop, or clipboard paste)
@@ -247,7 +278,7 @@ export function MessageComposer({
         extension: ext,
         mimeType: file.type,
         status: "uploading",
-        progress: 10,
+        progress: 15,
         file,
       };
 
@@ -258,41 +289,22 @@ export function MessageComposer({
       setAttachments((prev) => [...prev, ...newAttachments]);
       setAttachMenuOpen(false);
 
-      // Start upload progress for each added file
+      // Trigger real file uploads to StorageModule
       newAttachments.forEach((att) => {
-        simulateFileUpload(att.id, 500 + Math.random() * 400);
+        if (att.file) {
+          uploadFileViaStorage(att.id, att.file);
+        }
       });
 
-      toast.success(
+      toast.info(
         newAttachments.length === 1
-          ? `Added "${newAttachments[0]!.name}"`
-          : `Added ${newAttachments.length} attachments`
+          ? `Uploading "${newAttachments[0]!.name}"...`
+          : `Uploading ${newAttachments.length} attachments...`
       );
     }
   };
 
-  // Handle sample demo file addition
-  const handleAddSample = (sample: (typeof SAMPLE_ATTACHMENTS)[0]) => {
-    const id = `att-sample-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const newAtt: ChatAttachment = {
-      id,
-      name: sample.name,
-      type: sample.type,
-      url: sample.url,
-      size: sample.size,
-      fileSizeBytes: sample.fileSizeBytes,
-      extension: sample.extension,
-      status: "uploading",
-      progress: 25,
-    };
 
-    setAttachments((prev) => [...prev, newAtt]);
-    setAttachMenuOpen(false);
-    setShowSamplesMenu(false);
-
-    simulateFileUpload(id, 400);
-    toast.success(`Attached demo ${sample.type === "image" ? "image" : "document"}: ${sample.name}`);
-  };
 
   // Remove individual attachment
   const handleRemoveAttachment = (attId: string) => {
@@ -462,6 +474,19 @@ export function MessageComposer({
 
   // Calculate total size of attachments
   const totalAttachmentBytes = attachments.reduce((sum, a) => sum + (a.fileSizeBytes || 0), 0);
+
+  // View-only mode for users without project.chat.send permission
+  if (projectCapabilities && projectCapabilities.canChatSend === false) {
+    return (
+      <div className="border-t border-border/60 bg-muted/20 p-3 select-none flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <Lock className="size-3.5 text-muted-foreground/70" />
+        <span>You have view-only access to this project conversation.</span>
+      </div>
+    );
+  }
+
+  const canSendClientMessage = projectCapabilities?.canSendClientMessage !== false;
+  const canManageTypes = projectCapabilities?.canManageTypes !== false;
 
   return (
     <div
@@ -803,16 +828,21 @@ export function MessageComposer({
 
                 <button
                   type="button"
+                  disabled={!canSendClientMessage}
                   onClick={() => {
+                    if (!canSendClientMessage) return;
                     setStreamMode("CLIENT_OUTBOUND");
                     setStreamModeMenuOpen(false);
                   }}
                   className={cn(
-                    "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors cursor-pointer",
-                    streamMode === "CLIENT_OUTBOUND"
-                      ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold"
-                      : "hover:bg-muted text-foreground/90"
+                    "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors",
+                    !canSendClientMessage
+                      ? "opacity-50 cursor-not-allowed text-muted-foreground"
+                      : streamMode === "CLIENT_OUTBOUND"
+                      ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold cursor-pointer"
+                      : "hover:bg-muted text-foreground/90 cursor-pointer"
                   )}
+                  title={!canSendClientMessage ? "Requires client message dispatch permission" : undefined}
                 >
                   <div className="flex items-center gap-2">
                     <ArrowUpRight className="size-3.5 text-sky-500" />
@@ -826,16 +856,21 @@ export function MessageComposer({
 
                 <button
                   type="button"
+                  disabled={!canSendClientMessage}
                   onClick={() => {
+                    if (!canSendClientMessage) return;
                     setStreamMode("CLIENT_INBOUND");
                     setStreamModeMenuOpen(false);
                   }}
                   className={cn(
-                    "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors cursor-pointer",
-                    streamMode === "CLIENT_INBOUND"
-                      ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold"
-                      : "hover:bg-muted text-foreground/90"
+                    "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors",
+                    !canSendClientMessage
+                      ? "opacity-50 cursor-not-allowed text-muted-foreground"
+                      : streamMode === "CLIENT_INBOUND"
+                      ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold cursor-pointer"
+                      : "hover:bg-muted text-foreground/90 cursor-pointer"
                   )}
+                  title={!canSendClientMessage ? "Requires client message permission" : undefined}
                 >
                   <div className="flex items-center gap-2">
                     <ArrowDownLeft className="size-3.5 text-purple-500" />
@@ -1016,7 +1051,7 @@ export function MessageComposer({
                           </Button>
                         </div>
                       </div>
-                    ) : (
+                    ) : canManageTypes ? (
                       <button
                         type="button"
                         onClick={() => setIsAddingCustomType(true)}
@@ -1027,7 +1062,7 @@ export function MessageComposer({
                           + Custom {streamMode === "CLIENT_OUTBOUND" ? "Outbound" : "Inbound"} Type
                         </span>
                       </button>
-                    )}
+                    ) : null}
                   </PopoverContent>
                 </Popover>
               );
@@ -1092,56 +1127,6 @@ export function MessageComposer({
                       <p className="text-[10px] text-muted-foreground truncate">PDF, DOCX, XLSX, ZIP, TXT</p>
                     </div>
                   </button>
-                </div>
-
-                {/* Sample Presets Section */}
-                <div className="pt-1 border-t border-border/50">
-                  <button
-                    type="button"
-                    onClick={() => setShowSamplesMenu((prev) => !prev)}
-                    className="w-full flex items-center justify-between px-2 py-1 rounded-md text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="size-3 text-amber-500" />
-                      <span>Sample Test Attachments</span>
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        "size-3 transition-transform duration-200",
-                        showSamplesMenu ? "rotate-180" : ""
-                      )}
-                    />
-                  </button>
-
-                  {showSamplesMenu && (
-                    <div className="space-y-0.5 mt-1 pt-1 border-t border-border/40 max-h-40 overflow-y-auto">
-                      {SAMPLE_ATTACHMENTS.map((sample) => {
-                        const isImg = sample.type === "image";
-                        return (
-                          <button
-                            key={sample.id}
-                            type="button"
-                            onClick={() => handleAddSample(sample)}
-                            className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md hover:bg-muted text-left text-xs cursor-pointer group"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {isImg ? (
-                                <ImageIcon className="size-3 text-sky-500 shrink-0" />
-                              ) : (
-                                <FileText className="size-3 text-amber-500 shrink-0" />
-                              )}
-                              <span className="truncate text-[11px] font-medium group-hover:text-primary transition-colors">
-                                {sample.name}
-                              </span>
-                            </div>
-                            <span className="text-[9px] font-mono text-muted-foreground shrink-0">
-                              {sample.size}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               </PopoverContent>
             </Popover>

@@ -12,7 +12,7 @@ import type {
   RequestRevisionDTO,
   ApprovalWorkflowItem,
 } from "../ProjectDTO";
-import { getProjectResourceContext } from "./projects.capability.helper";
+import { getProjectResourceContext, findProjectByIdOrCode } from "./projects.capability.helper";
 
 export class ProjectApprovalService {
   private logger = new AppLogger("ProjectApprovalService");
@@ -29,8 +29,11 @@ export class ProjectApprovalService {
     dto: LeadApproveDTO,
     actor: AuthenticatedUser,
   ): Promise<ApprovalWorkflowItem> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    const resolvedProjectId = project?.id || projectId;
+
     const workflow = await this.prisma.messageApprovalWorkflow.findFirst({
-      where: { messageId, message: { projectId } },
+      where: { messageId, message: { projectId: resolvedProjectId } },
       include: {
         message: {
           include: {
@@ -99,11 +102,21 @@ export class ProjectApprovalService {
     const workflowItem = this.formatWorkflowItem(updated);
 
     // Broadcast updated approval workflow state to project room
-    this.realtimeServer.toProject(projectId, "approval:updated", {
-      projectId,
+    this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
+      projectId: resolvedProjectId,
       messageId,
       workflow: workflowItem,
     } as any);
+    if (projectId !== resolvedProjectId) {
+      this.realtimeServer.toProject(projectId, "approval:updated", {
+        projectId: resolvedProjectId,
+        messageId,
+        workflow: workflowItem,
+      } as any);
+    }
+
+    // Broadcast activity bump to assigned users
+    await this.broadcastActivityBump(resolvedProjectId, workflowItem, actor);
 
     this.logger.info(`Lead approval completed for message ${messageId} by user ${actor.id}`);
     return workflowItem;
@@ -118,8 +131,11 @@ export class ProjectApprovalService {
     dto: SalesDispatchDTO,
     actor: AuthenticatedUser,
   ): Promise<ApprovalWorkflowItem> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    const resolvedProjectId = project?.id || projectId;
+
     const workflow = await this.prisma.messageApprovalWorkflow.findFirst({
-      where: { messageId, message: { projectId } },
+      where: { messageId, message: { projectId: resolvedProjectId } },
       include: {
         message: {
           include: {
@@ -190,11 +206,21 @@ export class ProjectApprovalService {
     const workflowItem = this.formatWorkflowItem(updated);
 
     // Broadcast updated approval workflow state to project room
-    this.realtimeServer.toProject(projectId, "approval:updated", {
-      projectId,
+    this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
+      projectId: resolvedProjectId,
       messageId,
       workflow: workflowItem,
     } as any);
+    if (projectId !== resolvedProjectId) {
+      this.realtimeServer.toProject(projectId, "approval:updated", {
+        projectId: resolvedProjectId,
+        messageId,
+        workflow: workflowItem,
+      } as any);
+    }
+
+    // Broadcast activity bump to assigned users
+    await this.broadcastActivityBump(resolvedProjectId, workflowItem, actor);
 
     this.logger.info(`Sales dispatch completed for message ${messageId} by user ${actor.id} via ${dto.dispatchPlatform}`);
     return workflowItem;
@@ -209,8 +235,11 @@ export class ProjectApprovalService {
     dto: RequestRevisionDTO,
     actor: AuthenticatedUser,
   ): Promise<ApprovalWorkflowItem> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    const resolvedProjectId = project?.id || projectId;
+
     const workflow = await this.prisma.messageApprovalWorkflow.findFirst({
-      where: { messageId, message: { projectId } },
+      where: { messageId, message: { projectId: resolvedProjectId } },
       include: {
         message: {
           include: {
@@ -284,14 +313,67 @@ export class ProjectApprovalService {
     const workflowItem = this.formatWorkflowItem(updated);
 
     // Broadcast updated approval workflow state to project room
-    this.realtimeServer.toProject(projectId, "approval:updated", {
-      projectId,
+    this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
+      projectId: resolvedProjectId,
       messageId,
       workflow: workflowItem,
     } as any);
+    if (projectId !== resolvedProjectId) {
+      this.realtimeServer.toProject(projectId, "approval:updated", {
+        projectId: resolvedProjectId,
+        messageId,
+        workflow: workflowItem,
+      } as any);
+    }
+
+    // Broadcast activity bump to assigned users
+    await this.broadcastActivityBump(resolvedProjectId, workflowItem, actor);
 
     this.logger.info(`Revision requested for message ${messageId} by user ${actor.id}`);
     return workflowItem;
+  }
+
+  private async broadcastActivityBump(
+    projectId: string,
+    workflow: ApprovalWorkflowItem,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    try {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: {
+          userAssignments: { where: { unassignedAt: null }, select: { userId: true } },
+          teamAssignments: {
+            where: { unassignedAt: null },
+            select: { team: { select: { members: { where: { leftAt: null }, select: { userId: true } } } } },
+          },
+        },
+      });
+      if (!project) return;
+
+      const teamMemberUserIds = (project.teamAssignments || []).flatMap((ta: any) =>
+        (ta.team?.members || []).map((m: any) => m.userId)
+      );
+      const userAssignmentIds = (project.userAssignments || []).map((ua: any) => ua.userId);
+      const allRecipientUserIds = Array.from(new Set([...teamMemberUserIds, ...userAssignmentIds, actor.id]));
+
+      const attentionType =
+        workflow.status === "PENDING_LEAD" || workflow.status === "PENDING_SALES"
+          ? "PENDING_APPROVAL"
+          : workflow.status === "REVISION_REQUESTED"
+          ? "REVISION_REQUESTED"
+          : null;
+
+      const bumpPayload = {
+        projectId,
+        lastActivityAt: new Date().toISOString(),
+        attentionType,
+      };
+
+      this.realtimeServer.broadcast("project:activity_bump" as any, bumpPayload as any);
+    } catch (err) {
+      this.logger.warn("Failed to broadcast approval activity bump:", { error: err });
+    }
   }
 
   private formatWorkflowItem(wf: any): ApprovalWorkflowItem {

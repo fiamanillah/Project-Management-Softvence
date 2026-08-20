@@ -128,9 +128,9 @@ export class ProjectsService {
 
   // --- Workspace Command Center ---
   public async getWorkspaceProjects(
-    query: { search?: string; statusId?: string; priorityId?: string },
+    query: { search?: string; statusId?: string; priorityId?: string; page?: number | string; limit?: number | string },
     actor: AuthenticatedUser,
-  ): Promise<ProjectWorkspaceItem[]> {
+  ): Promise<{ items: ProjectWorkspaceItem[]; pagination?: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean } } | ProjectWorkspaceItem[]> {
     return this.workspace.getWorkspaceProjects(query, actor);
   }
 

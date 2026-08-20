@@ -22,6 +22,10 @@ import type {
 interface ProjectChatPanelProps {
   project: ProjectWorkspaceItem;
   messages: ChatMessage[];
+  isLoadingMessages?: boolean;
+  hasMoreOlder?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadEarlierMessages?: () => void;
   onSendMessage: (payload: {
     text: string;
     purpose: MessagePurpose;
@@ -34,6 +38,7 @@ interface ProjectChatPanelProps {
   onReact?: (messageId: string, emoji: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
+  onMarkSeen?: (messageIds: string[]) => void;
   onTogglePinMessage?: (messageId: string) => void;
   onBackMobile?: () => void;
   onMobileBack?: () => void;
@@ -48,10 +53,15 @@ interface ProjectChatPanelProps {
 export function ProjectChatPanel({
   project,
   messages,
+  isLoadingMessages = false,
+  hasMoreOlder = false,
+  isLoadingOlder = false,
+  onLoadEarlierMessages,
   onSendMessage,
   onReact,
   onToggleReaction,
   onUpdateApproval,
+  onMarkSeen,
   onTogglePinMessage,
   onBackMobile,
   onMobileBack,
@@ -136,10 +146,15 @@ export function ProjectChatPanel({
       <MessageList
         messages={messages}
         projectCode={project.code}
-        projectCreatedAt="Oct 01, 2026"
+        projectCreatedAt={project.deadline ? `Due: ${project.deadline}` : "Active"}
+        isLoadingMessages={isLoadingMessages}
+        hasMoreOlder={hasMoreOlder}
+        isLoadingOlder={isLoadingOlder}
+        onLoadEarlierMessages={onLoadEarlierMessages}
         onReply={handleReply}
         onReact={handleReact}
         onUpdateApproval={onUpdateApproval}
+        onMarkSeen={onMarkSeen}
         searchFilterQuery={searchQuery}
         channelFilter={activeChannel}
         targetScrollMessageId={effectiveTargetScrollMessageId}
@@ -151,10 +166,12 @@ export function ProjectChatPanel({
 
       {/* 4. Message Composer with Purpose & Client Workflow */}
       <MessageComposer
+        projectId={project.id}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
         onSendMessage={onSendMessage}
         targetClientName={project.client.name}
+        projectCapabilities={project._capabilities}
       />
     </div>
   );

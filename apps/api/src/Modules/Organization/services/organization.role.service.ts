@@ -109,6 +109,58 @@ export class OrganizationRoleService {
     throw new BadRequestError("No valid granter user found to assign permissions.");
   }
 
+  private async expandPrerequisiteAssignments(
+    assignments: SaveRolePermissionsDTO["assignments"] | undefined,
+    tx: any,
+  ): Promise<SaveRolePermissionsDTO["assignments"]> {
+    if (!assignments || assignments.length === 0) return [];
+
+    const allPermissions = await tx.permission.findMany({
+      where: { isActive: true },
+    });
+
+    const idToPerm = new Map<string, (typeof allPermissions)[0]>();
+    const codeToPerm = new Map<string, (typeof allPermissions)[0]>();
+    for (const p of allPermissions) {
+      idToPerm.set(p.id, p);
+      codeToPerm.set(p.code, p);
+    }
+
+    const assignmentMap = new Map<string, (typeof assignments)[0]>();
+    for (const a of assignments) {
+      assignmentMap.set(a.permissionId, { ...a });
+    }
+
+    const queue = [...assignments];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const perm = idToPerm.get(current.permissionId);
+      if (!perm) continue;
+
+      const prereqCodes = [
+        ...(perm.implies || []),
+        ...(perm.dependsOn || []),
+      ];
+
+      for (const pCode of prereqCodes) {
+        const prereqPerm = codeToPerm.get(pCode);
+        if (prereqPerm && !assignmentMap.has(prereqPerm.id)) {
+          const expandedAssignment = {
+            permissionId: prereqPerm.id,
+            scopeTypeId: current.scopeTypeId,
+            targetDepartmentIds: current.targetDepartmentIds ? [...current.targetDepartmentIds] : undefined,
+            targetTeamIds: current.targetTeamIds ? [...current.targetTeamIds] : undefined,
+            targetProjectIds: current.targetProjectIds ? [...current.targetProjectIds] : undefined,
+          };
+          assignmentMap.set(prereqPerm.id, expandedAssignment);
+          queue.push(expandedAssignment);
+        }
+      }
+    }
+
+    return Array.from(assignmentMap.values());
+  }
+
   public async createRole(data: CreateRoleDTO, grantedByUserId?: string, req?: Request) {
     const existing = await this.prisma.role.findUnique({
       where: { code: data.code },
@@ -174,7 +226,9 @@ export class OrganizationRoleService {
           granterId = sysUser.id;
         }
 
-        for (const item of data.assignments) {
+        const resolvedAssignments = await this.expandPrerequisiteAssignments(data.assignments, tx);
+
+        for (const item of resolvedAssignments) {
           const grant = await tx.rolePermission.create({
             data: {
               roleId: createdRole.id,
@@ -309,7 +363,9 @@ export class OrganizationRoleService {
         }
 
         if (granterId) {
-          for (const item of data.assignments) {
+          const resolvedAssignments = await this.expandPrerequisiteAssignments(data.assignments, tx);
+
+          for (const item of resolvedAssignments) {
             const grant = await tx.rolePermission.create({
               data: {
                 roleId,
@@ -488,7 +544,9 @@ export class OrganizationRoleService {
         });
       }
 
-      for (const item of dto.assignments) {
+      const resolvedAssignments = await this.expandPrerequisiteAssignments(dto.assignments, tx);
+
+      for (const item of resolvedAssignments) {
         const grant = await tx.rolePermission.create({
           data: {
             roleId,

@@ -5,6 +5,8 @@ export interface PermissionManifestItem {
   module: string;
   description?: string;
   supportedScopes?: string[] | readonly string[];
+  implies?: string[] | readonly string[];
+  dependsOn?: string[] | readonly string[];
 }
 
 export interface PermissionSyncDiff {

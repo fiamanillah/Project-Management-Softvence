@@ -518,13 +518,13 @@ export interface ProjectLookups {
 // ============================================================================
 
 export const createProjectMessageSchema = z.object({
-  text: z.string().min(1, "Message text cannot be empty"),
+  text: z.string().default(""),
   purpose: z.enum(["INTERNAL_DISCUSSION", "CLIENT_COMMUNICATION"]).default("INTERNAL_DISCUSSION"),
   clientDirection: z.enum(["INBOUND", "OUTBOUND"]).optional().nullable(),
   clientMessageType: z.string().optional().nullable(),
   messageTypeId: z.string().uuid().optional().nullable(),
   variant: z.string().optional().nullable(),
-  replyToMessageId: z.string().uuid().optional().nullable(),
+  replyToMessageId: z.string().optional().nullable(),
   attachments: z
     .array(
       z.object({
@@ -841,6 +841,9 @@ export interface ProjectWorkspaceItem {
     isRead: boolean;
     purpose?: string;
   } | null;
+  lastActivityAt?: string | null;
+  createdAt?: string | null;
+  attentionType?: "CLIENT_MESSAGE" | "PENDING_APPROVAL" | "REVISION_REQUESTED" | "NEW_MESSAGE" | null;
   _capabilities?: ProjectCapabilities;
 }
 

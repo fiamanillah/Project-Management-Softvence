@@ -18,6 +18,13 @@ interface UseProjectSocketOptions {
   onReactionUpdated?: (data: { messageId: string; reactions: MessageReactionItem[] }) => void;
   onSeenReceiptsUpdated?: (data: { messageId: string; seenBy: MessageReadReceiptItem[] }) => void;
   onApprovalUpdated?: (data: { projectId: string; messageId: string; workflow: ApprovalWorkflowItem }) => void;
+  onProjectActivityBump?: (data: {
+    projectId: string;
+    lastActivityAt: string;
+    lastMessage?: any;
+    attentionType?: any;
+    pendingApprovalsCount?: number;
+  }) => void;
   onPresenceSync?: (data: { onlineUserIds: string[] }) => void;
 }
 
@@ -28,37 +35,35 @@ export function useProjectSocket({
   onReactionUpdated,
   onSeenReceiptsUpdated,
   onApprovalUpdated,
+  onProjectActivityBump,
   onPresenceSync,
 }: UseProjectSocketOptions) {
   const { socket, isConnected } = useSocket();
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Join/Leave project room
+  // Join ONLY the active selected project room (zero over-subscription)
   useEffect(() => {
-    if (!socket || !projectId || !isConnected) return;
+    if (!socket || !isConnected || !projectId) return;
 
-    socket.emit("room:join", { room: `project:${projectId}` });
+    const room = `project:${projectId}`;
+    socket.emit("room:join", { room });
 
     return () => {
-      socket.emit("room:leave", { room: `project:${projectId}` });
+      socket.emit("room:leave", { room });
     };
   }, [socket, projectId, isConnected]);
 
   // Event Subscriptions
   useEffect(() => {
-    if (!socket || !projectId) return;
+    if (!socket) return;
 
     const handleNewMessage = (msg: ProjectMessageItem) => {
-      if (msg.projectId === projectId) {
-        onNewMessage?.(msg);
-      }
+      onNewMessage?.(msg);
     };
 
     const handleMessageUpdated = (msg: ProjectMessageItem) => {
-      if (msg.projectId === projectId) {
-        onMessageUpdated?.(msg);
-      }
+      onMessageUpdated?.(msg);
     };
 
     const handleReactionUpdated = (data: { messageId: string; reactions: MessageReactionItem[] }) => {
@@ -70,9 +75,17 @@ export function useProjectSocket({
     };
 
     const handleApprovalUpdated = (data: { projectId: string; messageId: string; workflow: ApprovalWorkflowItem }) => {
-      if (data.projectId === projectId) {
-        onApprovalUpdated?.(data);
-      }
+      onApprovalUpdated?.(data);
+    };
+
+    const handleProjectActivityBump = (data: {
+      projectId: string;
+      lastActivityAt: string;
+      lastMessage?: any;
+      attentionType?: any;
+      pendingApprovalsCount?: number;
+    }) => {
+      onProjectActivityBump?.(data);
     };
 
     const handleUserTyping = (data: { projectId: string; userId: string; userName: string }) => {
@@ -106,6 +119,7 @@ export function useProjectSocket({
     socket.on("chat:reaction_updated" as any, handleReactionUpdated);
     socket.on("chat:seen_receipts_updated" as any, handleSeenReceiptsUpdated);
     socket.on("approval:updated" as any, handleApprovalUpdated);
+    socket.on("project:activity_bump" as any, handleProjectActivityBump);
     socket.on("chat:user_typing" as any, handleUserTyping);
     socket.on("chat:user_stopped_typing" as any, handleUserStoppedTyping);
     socket.on("presence:sync" as any, handlePresenceSync);
@@ -116,6 +130,7 @@ export function useProjectSocket({
       socket.off("chat:reaction_updated" as any, handleReactionUpdated);
       socket.off("chat:seen_receipts_updated" as any, handleSeenReceiptsUpdated);
       socket.off("approval:updated" as any, handleApprovalUpdated);
+      socket.off("project:activity_bump" as any, handleProjectActivityBump);
       socket.off("chat:user_typing" as any, handleUserTyping);
       socket.off("chat:user_stopped_typing" as any, handleUserStoppedTyping);
       socket.off("presence:sync" as any, handlePresenceSync);
@@ -128,6 +143,7 @@ export function useProjectSocket({
     onReactionUpdated,
     onSeenReceiptsUpdated,
     onApprovalUpdated,
+    onProjectActivityBump,
     onPresenceSync,
   ]);
 
@@ -138,14 +154,20 @@ export function useProjectSocket({
         if (!socket || !projectId) {
           return reject(new Error("Socket not connected or no project selected"));
         }
+
+        const timer = setTimeout(() => {
+          reject(new Error("Socket message send timeout"));
+        }, 4000);
+
         socket.emit(
           "chat:send_message",
           { projectId, ...dto },
           (res: { success: boolean; data?: ProjectMessageItem; error?: string }) => {
-            if (res.success && res.data) {
+            clearTimeout(timer);
+            if (res?.success && res.data) {
               resolve(res.data);
             } else {
-              reject(new Error(res.error || "Failed to send message"));
+              reject(new Error(res?.error || "Failed to send message"));
             }
           },
         );
@@ -193,14 +215,20 @@ export function useProjectSocket({
         if (!socket || !projectId) {
           return reject(new Error("Socket not connected or no project selected"));
         }
+
+        const timer = setTimeout(() => {
+          reject(new Error("Socket approval action timeout"));
+        }, 4000);
+
         socket.emit(
           "approval:action",
           { projectId, ...payload },
           (res: { success: boolean; data?: ApprovalWorkflowItem; error?: string }) => {
-            if (res.success && res.data) {
+            clearTimeout(timer);
+            if (res?.success && res.data) {
               resolve(res.data);
             } else {
-              reject(new Error(res.error || "Failed to process approval action"));
+              reject(new Error(res?.error || "Failed to process approval action"));
             }
           },
         );

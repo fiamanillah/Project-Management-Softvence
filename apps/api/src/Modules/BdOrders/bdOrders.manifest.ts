@@ -15,6 +15,7 @@ export const bdOrdersPermissions: PermissionManifestItem[] = [
     module: "BdOrders",
     description: "Create new BD sales orders",
     supportedScopes: SCOPE_PRESETS.BD_SALES,
+    implies: ["bd_order.view"],
   },
 ];
 

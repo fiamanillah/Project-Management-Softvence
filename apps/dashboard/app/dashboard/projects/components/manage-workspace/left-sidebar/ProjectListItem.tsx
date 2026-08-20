@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
-import { Badge } from "@workspace/ui/components/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
-import { Pin, ShieldCheck, Send, CheckCheck, Sparkles, Building2 } from "lucide-react";
+import { Pin, ShieldCheck, Send, AlertTriangle, Building2, Sparkles, MessageSquare } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
 import type { ProjectWorkspaceItem } from "../types";
 
@@ -13,6 +12,7 @@ interface ProjectListItemProps {
   isSelected: boolean;
   onSelect: (project: ProjectWorkspaceItem) => void;
   isCollapsed?: boolean;
+  isRecentlyUpdated?: boolean;
 }
 
 export function ProjectListItem({
@@ -20,6 +20,7 @@ export function ProjectListItem({
   isSelected,
   onSelect,
   isCollapsed = false,
+  isRecentlyUpdated = false,
 }: ProjectListItemProps) {
   const initials = project.name
     .split(" ")
@@ -28,7 +29,14 @@ export function ProjectListItem({
     .join("")
     .toUpperCase();
 
-  // Collapsed Mode with Rich Details Tooltip on Hover
+  const hasPendingApproval =
+    project.attentionType === "PENDING_APPROVAL" ||
+    (project.pendingApprovalsCount !== undefined && project.pendingApprovalsCount > 0);
+  const isRevision = project.attentionType === "REVISION_REQUESTED";
+  const isClientMessage = project.attentionType === "CLIENT_MESSAGE";
+  const hasUnread = (project.unreadCount || 0) > 0 && !isSelected;
+
+  // 1. COLLAPSED VIEW (Slim Rail with Rich Tooltips)
   if (isCollapsed) {
     return (
       <Tooltip>
@@ -41,6 +49,8 @@ export function ProjectListItem({
                 "group relative flex size-10 items-center justify-center rounded-xl transition-all cursor-pointer outline-none mx-auto",
                 isSelected
                   ? "bg-primary/15 text-primary ring-2 ring-primary ring-offset-2 ring-offset-background shadow-xs"
+                  : isRecentlyUpdated
+                  ? "ring-2 ring-primary/60 bg-primary/10 animate-pulse"
                   : "hover:bg-muted/80 text-muted-foreground"
               )}
             >
@@ -62,19 +72,33 @@ export function ProjectListItem({
                 ) : null}
 
                 {/* Unread Count Badge */}
-                {project.unreadCount && project.unreadCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 z-20 flex min-w-3.5 h-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold text-primary-foreground ring-1.5 ring-background shadow-xs">
+                {hasUnread ? (
+                  <span className="absolute -top-1 -right-1 z-20 flex min-w-3.5 h-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold text-primary-foreground ring-1.5 ring-background shadow-xs animate-in zoom-in-75">
                     {project.unreadCount}
                   </span>
                 ) : null}
 
-                {/* Pending Approvals Badge */}
-                {project.pendingApprovalsCount && project.pendingApprovalsCount > 0 ? (
+                {/* Attention Badges */}
+                {isRevision ? (
+                  <span
+                    className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-rose-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs animate-bounce"
+                    title="Revision Requested"
+                  >
+                    <AlertTriangle className="size-2" />
+                  </span>
+                ) : hasPendingApproval ? (
                   <span
                     className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
                     title={`${project.pendingApprovalsCount} pending approvals`}
                   >
                     <ShieldCheck className="size-2" />
+                  </span>
+                ) : isClientMessage ? (
+                  <span
+                    className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-purple-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
+                    title="Client Message"
+                  >
+                    <Send className="size-2" />
                   </span>
                 ) : null}
               </div>
@@ -107,6 +131,24 @@ export function ProjectListItem({
             )}
           </div>
 
+          {/* Attention Tag in Tooltip if any */}
+          {isRevision ? (
+            <div className="flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
+              <AlertTriangle className="size-3 text-rose-500" />
+              <span>Revision feedback submitted</span>
+            </div>
+          ) : hasPendingApproval ? (
+            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+              <ShieldCheck className="size-3 text-amber-500" />
+              <span>{project.pendingApprovalsCount || 1} pending approval(s)</span>
+            </div>
+          ) : isClientMessage ? (
+            <div className="flex items-center gap-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/20">
+              <Send className="size-3 text-purple-500" />
+              <span>New client message received</span>
+            </div>
+          ) : null}
+
           {/* Client & Platform Info */}
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="truncate font-medium text-foreground/80 flex items-center gap-1">
@@ -135,28 +177,30 @@ export function ProjectListItem({
             <span>
               {project.onlineCount ? `${project.onlineCount} online` : "Offline"}
             </span>
-            {project.pendingApprovalsCount && project.pendingApprovalsCount > 0 ? (
-              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5">
-                <ShieldCheck className="size-3" /> {project.pendingApprovalsCount} pending approvals
-              </span>
-            ) : (
-              <span className="text-primary font-semibold">Click to open chat</span>
-            )}
+            <span className="text-primary font-semibold">Click to open chat</span>
           </div>
         </TooltipContent>
       </Tooltip>
     );
   }
 
-  // Expanded Mode
+  // 2. EXPANDED VIEW
   return (
     <button
       type="button"
       onClick={() => onSelect(project)}
       className={cn(
-        "group relative flex w-full items-start gap-3 rounded-xl p-3 text-left transition-all outline-hidden cursor-pointer",
+        "group relative flex w-full items-start gap-3 rounded-xl p-3 text-left transition-all duration-300 outline-hidden cursor-pointer",
         isSelected
-          ? "bg-primary/10 text-foreground ring-1 ring-primary/20 dark:bg-primary/15"
+          ? "bg-primary/10 text-foreground ring-1 ring-primary/25 dark:bg-primary/15 shadow-xs"
+          : isRecentlyUpdated
+          ? "ring-2 ring-primary/50 bg-primary/10 animate-in fade-in-50 slide-in-from-top-1"
+          : isRevision
+          ? "ring-1 ring-rose-500/40 bg-rose-500/5 hover:bg-rose-500/10 text-muted-foreground hover:text-foreground"
+          : hasPendingApproval
+          ? "ring-1 ring-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 text-muted-foreground hover:text-foreground"
+          : isClientMessage
+          ? "ring-1 ring-purple-500/40 bg-purple-500/5 hover:bg-purple-500/10 text-muted-foreground hover:text-foreground"
           : "hover:bg-muted/70 text-muted-foreground hover:text-foreground"
       )}
     >
@@ -195,7 +239,11 @@ export function ProjectListItem({
             <span
               className={cn(
                 "truncate font-semibold text-xs leading-tight tracking-tight",
-                isSelected ? "text-foreground font-bold" : "text-foreground/90 group-hover:text-foreground"
+                isSelected
+                  ? "text-foreground font-bold"
+                  : hasUnread
+                  ? "text-foreground font-bold"
+                  : "text-foreground/90 group-hover:text-foreground"
               )}
             >
               {project.name}
@@ -206,6 +254,24 @@ export function ProjectListItem({
             {project.lastMessage?.timestamp || "Recently"}
           </span>
         </div>
+
+        {/* Attention Banner Pills (C8 Command Center Style) */}
+        {isRevision ? (
+          <div className="flex items-center gap-1 text-[9.5px] font-bold text-rose-700 dark:text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-md w-fit animate-pulse">
+            <AlertTriangle className="size-2.5 text-rose-600 dark:text-rose-400" />
+            <span>Revision Needed</span>
+          </div>
+        ) : hasPendingApproval ? (
+          <div className="flex items-center gap-1 text-[9.5px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-md w-fit">
+            <ShieldCheck className="size-2.5 text-amber-600 dark:text-amber-400" />
+            <span>Needs Review ({project.pendingApprovalsCount || 1})</span>
+          </div>
+        ) : isClientMessage ? (
+          <div className="flex items-center gap-1 text-[9.5px] font-bold text-purple-700 dark:text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded-md w-fit">
+            <Send className="size-2.5 text-purple-600 dark:text-purple-400" />
+            <span>Client Inbound</span>
+          </div>
+        ) : null}
 
         {/* Middle Line: Client & Platform */}
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -219,10 +285,17 @@ export function ProjectListItem({
 
         {/* Bottom Line: Last Message Snippet + Badges */}
         <div className="flex items-center justify-between gap-2 mt-0.5">
-          <p className="truncate text-[11px] leading-snug text-muted-foreground/80 flex-1">
+          <p
+            className={cn(
+              "truncate text-[11px] leading-snug flex-1",
+              hasUnread
+                ? "text-foreground font-semibold"
+                : "text-muted-foreground/80"
+            )}
+          >
             {project.lastMessage ? (
               <>
-                <span className="font-medium text-foreground/80">
+                <span className={hasUnread ? "text-foreground font-bold" : "font-medium text-foreground/80"}>
                   {project.lastMessage.senderName.split(" ")[0]}:{" "}
                 </span>
                 {project.lastMessage.text}
@@ -232,27 +305,16 @@ export function ProjectListItem({
             )}
           </p>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {/* Pending Approvals Badge */}
-            {project.pendingApprovalsCount && project.pendingApprovalsCount > 0 ? (
-              <span
-                className="flex items-center gap-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-1.5 py-0.2 text-[9px] font-bold"
-                title={`${project.pendingApprovalsCount} pending approvals`}
-              >
-                <ShieldCheck className="size-2.5" />
-                {project.pendingApprovalsCount}
-              </span>
-            ) : null}
-
+          <div className="flex items-center gap-1.5 shrink-0">
             {project.isPinned && (
               <Pin className="size-3 text-muted-foreground/70 fill-muted-foreground/30 rotate-45" />
             )}
 
-            {project.unreadCount && project.unreadCount > 0 ? (
-              <span className="flex min-w-4.5 h-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+            {hasUnread && (
+              <span className="flex min-w-4.5 h-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs animate-in zoom-in-95">
                 {project.unreadCount}
               </span>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

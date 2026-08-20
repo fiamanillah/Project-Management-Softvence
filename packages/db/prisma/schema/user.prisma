@@ -157,6 +157,8 @@ model Permission {
   description     String?
   module          String?
   supportedScopes String[]  @default([]) @map("supported_scopes")
+  implies         String[]  @default([]) @map("implies")
+  dependsOn       String[]  @default([]) @map("depends_on")
   isActive        Boolean   @default(true) @map("is_active")
   deprecatedAt    DateTime? @map("deprecated_at")
   createdAt       DateTime  @default(now()) @map("created_at")

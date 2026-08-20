@@ -42,6 +42,8 @@ export interface PermissionCatalogueItem {
   code: string;
   module: string | null;
   description: string | null;
+  implies?: string[];
+  dependsOn?: string[];
   isActive: boolean;
 }
 
@@ -161,7 +163,7 @@ export class AuthorizationEngine {
     }
 
     // -----------------------------------------------------------------
-    // Step 3: Role Grants & Scope Evaluation
+    // Step 3: Role Grants & Scope Evaluation (Direct + Implied Parent Grants)
     // -----------------------------------------------------------------
     let roleId = user.roleId;
     if (!roleId && user.id) {
@@ -174,7 +176,11 @@ export class AuthorizationEngine {
 
     if (roleId) {
       const grants = await this.getRoleGrants(roleId, prisma);
-      const matchingGrants = grants.filter((g) => g.permissionCode === permissionCode);
+      const matchingGrants = grants.filter(
+        (g) =>
+          g.permissionCode === permissionCode ||
+          (g.implies && g.implies.includes(permissionCode)),
+      );
 
       for (const grant of matchingGrants) {
         const allowed = await ScopeEvaluator.evaluate(user, grant, resource, prisma);
@@ -286,10 +292,14 @@ export class AuthorizationEngine {
       }
     }
 
-    // Check delegator role grants
+    // Check delegator role grants (direct + implied)
     if (delegator.roleId) {
       const grants = await this.getRoleGrants(delegator.roleId, prisma);
-      const matchingGrants = grants.filter((g) => g.permissionCode === permissionCode);
+      const matchingGrants = grants.filter(
+        (g) =>
+          g.permissionCode === permissionCode ||
+          (g.implies && g.implies.includes(permissionCode)),
+      );
 
       for (const grant of matchingGrants) {
         const allowed = await ScopeEvaluator.evaluate(delegator, grant, resource, prisma);
@@ -360,6 +370,8 @@ export class AuthorizationEngine {
         code: true,
         module: true,
         description: true,
+        implies: true,
+        dependsOn: true,
         isActive: true,
       },
     });
@@ -431,6 +443,8 @@ export class AuthorizationEngine {
           teamIds,
           projectIds,
         },
+        implies: dg.permission.implies || [],
+        dependsOn: dg.permission.dependsOn || [],
       };
     });
 
@@ -479,7 +493,7 @@ export class AuthorizationEngine {
    * Highly optimized:
    * 1. Checks Redis cache first (sub-millisecond return).
    * 2. SuperAdmin fast-path (O(1) memory mapping, 0 DB queries, 0 audit logs).
-   * 3. Non-SuperAdmin batch query resolver (reduces 300+ sequential queries to 2-3 batch queries).
+   * 3. Non-SuperAdmin batch query resolver with DAG transitive closure resolution.
    */
   public async getUserPermissions(
     user: AuthenticatedUser,
@@ -595,7 +609,7 @@ export class AuthorizationEngine {
       grantsByPermCode.set(g.permissionCode, g);
     }
 
-    // 5. Evaluate all permissions in-memory in O(N)
+    // 5. Evaluate all direct permissions in-memory
     for (const perm of allPermissions) {
       let allowed = false;
       let scope = "None";
@@ -682,7 +696,41 @@ export class AuthorizationEngine {
       };
     }
 
-    // 6. Cache resolved permission map in Redis (30 mins TTL)
+    // 6. Transitive DAG Closure Propagation for Implied and Dependent Permissions
+    // If a user has a higher-order grant (e.g. project.edit, project.chat.send),
+    // propagate implied/required access to child permissions (e.g. project.view, storage.upload).
+    const permMapByCode = new Map<string, PermissionCatalogueItem>();
+    for (const p of allPermissions) {
+      permMapByCode.set(p.code, p);
+    }
+
+    let graphChanged = true;
+    let iteration = 0;
+    while (graphChanged && iteration < 10) {
+      graphChanged = false;
+      iteration++;
+
+      for (const perm of allPermissions) {
+        const currentRes = resultMap[perm.code];
+        if (currentRes && currentRes.allowed) {
+          const targets = [
+            ...(perm.implies || []),
+            ...(perm.dependsOn || []),
+          ];
+
+          for (const targetCode of targets) {
+            const targetEntry = resultMap[targetCode];
+            if (targetEntry && !targetEntry.allowed) {
+              targetEntry.allowed = true;
+              targetEntry.scope = currentRes.scope === "Override" ? "Global" : currentRes.scope;
+              graphChanged = true;
+            }
+          }
+        }
+      }
+    }
+
+    // 7. Cache resolved permission map in Redis (30 mins TTL)
     try {
       await this.cacheManager.set(cacheKey, resultMap, { ttlSeconds: 1800 });
     } catch {}

@@ -211,6 +211,13 @@ export class ProjectsModule extends BaseModule {
     );
 
     this.router.post(
+      "/:id/messages/seen",
+      validateRequest({ body: markMessagesSeenSchema }),
+      requirePermission("project.view", loadProjectResource),
+      controller.markMessagesSeen.bind(controller),
+    );
+
+    this.router.post(
       "/:id/messages/:messageId/seen",
       validateRequest({ body: markMessagesSeenSchema }),
       requirePermission("project.view", loadProjectResource),

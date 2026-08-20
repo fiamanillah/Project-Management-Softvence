@@ -43,8 +43,17 @@ export class ProjectsController extends BaseController {
   // --- Workspace Command Center ---
   public async getWorkspaceProjects(req: Request, res: Response) {
     const actor = getActor(req);
-    const projects = await this.projectsService.getWorkspaceProjects(req.query as any, actor);
-    return this.sendResponse(req, res, "Workspace projects retrieved successfully", 200, projects);
+    const result = await this.projectsService.getWorkspaceProjects(req.query as any, actor);
+    if (result && typeof result === "object" && "items" in result && "pagination" in result) {
+      return this.sendPaginatedResponse(
+        req,
+        res,
+        (result as any).pagination,
+        "Workspace projects retrieved successfully",
+        (result as any).items,
+      );
+    }
+    return this.sendResponse(req, res, "Workspace projects retrieved successfully", 200, result);
   }
 
   // --- Real-time Chat & Messages ---

@@ -15,12 +15,14 @@ export const organizationPermissions: PermissionManifestItem[] = [
     module: "Organization",
     description: "Create, update, and manage branches, sub-branches, and branch managers",
     supportedScopes: SCOPE_PRESETS.BRANCH_HIERARCHICAL,
+    implies: ["organization.branch.view"],
   },
   {
     code: "organization.branch.delete",
     module: "Organization",
     description: "Soft-delete organizational branches",
     supportedScopes: SCOPE_PRESETS.BRANCH_HIERARCHICAL,
+    implies: ["organization.branch.view"],
   },
   {
     code: "organization.department.view",
@@ -33,6 +35,7 @@ export const organizationPermissions: PermissionManifestItem[] = [
     module: "Organization",
     description: "Create, update, and manage departments and managers",
     supportedScopes: SCOPE_PRESETS.ORG_HIERARCHICAL,
+    implies: ["organization.department.view"],
   },
   {
     code: "organization.designation.view",
@@ -45,6 +48,7 @@ export const organizationPermissions: PermissionManifestItem[] = [
     module: "Organization",
     description: "Create designations and manage permission matrix assignments",
     supportedScopes: SCOPE_PRESETS.ORG_HIERARCHICAL,
+    implies: ["organization.designation.view"],
   },
 ];
 

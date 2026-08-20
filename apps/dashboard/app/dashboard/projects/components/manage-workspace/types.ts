@@ -163,6 +163,21 @@ export interface ProjectTeamItem {
   memberCount: number;
 }
 
+export interface ProjectCapabilities {
+  canEdit: boolean;
+  canDelete: boolean;
+  canReassign: boolean;
+  canManageMembers: boolean;
+  canChatView: boolean;
+  canChatSend: boolean;
+  canSendClientMessage: boolean;
+  canLeadApprove: boolean;
+  canSalesDispatch: boolean;
+  canManageTypes: boolean;
+  canPinMessage: boolean;
+  canViewFinancials: boolean;
+}
+
 export interface ProjectWorkspaceItem {
   id: string;
   code: string; // e.g. PRJ-1048 (Main identifier)
@@ -198,6 +213,7 @@ export interface ProjectWorkspaceItem {
   onlineCount?: number;
   pinnedAnnouncement?: ProjectPinnedAnnouncement;
   pinnedAnnouncements?: ProjectPinnedAnnouncement[];
+  _capabilities?: ProjectCapabilities;
   lead: WorkspaceMember;
   teams: ProjectTeamItem[];
   members: WorkspaceMember[];
@@ -212,7 +228,11 @@ export interface ProjectWorkspaceItem {
     timestamp: string;
     isRead: boolean;
     purpose?: MessagePurpose;
+    createdAt?: string;
   };
+  lastActivityAt?: string;
+  createdAt?: string;
+  attentionType?: "CLIENT_MESSAGE" | "PENDING_APPROVAL" | "REVISION_REQUESTED" | "NEW_MESSAGE" | null;
 }
 
 export interface ChatReaction {

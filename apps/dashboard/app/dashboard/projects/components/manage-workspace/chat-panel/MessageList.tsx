@@ -5,16 +5,21 @@ import { MessageGroupItem } from "./MessageGroupItem";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { Button } from "@workspace/ui/components/button";
 import { ArrowDown, Sparkles, Loader2, History } from "lucide-react";
-import { mockHistoricalOlderMessages } from "../mock-data";
+import { useAuth } from "@/lib/auth-context";
 import type { ChatMessage, ApprovalWorkflow } from "../types";
 
 interface MessageListProps {
   messages: ChatMessage[];
   projectCode?: string;
   projectCreatedAt?: string;
+  isLoadingMessages?: boolean;
+  hasMoreOlder?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadEarlierMessages?: () => void;
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
+  onMarkSeen?: (messageIds: string[]) => void;
   searchFilterQuery?: string;
   channelFilter?: "all" | "internal" | "client" | "approvals";
   targetScrollMessageId?: string | null;
@@ -24,28 +29,47 @@ interface MessageListProps {
 export function MessageList({
   messages,
   projectCode,
-  projectCreatedAt = "Oct 01, 2026",
+  projectCreatedAt = "Active",
+  isLoadingMessages = false,
+  hasMoreOlder = false,
+  isLoadingOlder = false,
+  onLoadEarlierMessages,
   onReply,
   onReact,
   onUpdateApproval,
+  onMarkSeen,
   searchFilterQuery = "",
   channelFilter = "all",
   targetScrollMessageId,
   onTargetScrolled,
 }: MessageListProps) {
+  const { user } = useAuth();
   const [highlightedId, setHighlightedId] = React.useState<string | null>(null);
   const [showScrollBottom, setShowScrollBottom] = React.useState(false);
-  const [olderMessages, setOlderMessages] = React.useState<ChatMessage[]>([]);
-  const [hasMoreOlder, setHasMoreOlder] = React.useState(true);
-  const [isLoadingOlder, setIsLoadingOlder] = React.useState(false);
+  const reportedSeenIdsRef = React.useRef<Set<string>>(new Set());
 
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const isLoadingRef = React.useRef(false);
+  const prevScrollHeightRef = React.useRef<number>(0);
 
-  // All combined messages (older prepended)
-  const allMessages = React.useMemo(() => {
-    return [...olderMessages, ...messages];
-  }, [olderMessages, messages]);
+  // Automatic Read Receipts Reporter: Detect unread messages and mark seen
+  React.useEffect(() => {
+    if (!user?.id || !onMarkSeen || messages.length === 0) return;
+
+    const unreadMessageIds = messages
+      .filter((m) => {
+        if (m.isCurrentUser || m.senderId === user.id) return false;
+        if (reportedSeenIdsRef.current.has(m.id)) return false;
+        const alreadySeen = m.seenBy && m.seenBy.some((s) => s.userId === user.id);
+        return !alreadySeen;
+      })
+      .map((m) => m.id);
+
+    if (unreadMessageIds.length > 0) {
+      unreadMessageIds.forEach((id) => reportedSeenIdsRef.current.add(id));
+      onMarkSeen(unreadMessageIds);
+    }
+  }, [messages, user?.id, onMarkSeen]);
 
   // Smooth scroll to target message when requested (e.g. from pinned pill, approvals tab, or quote)
   const scrollToMessage = React.useCallback(
@@ -81,32 +105,35 @@ export function MessageList({
   };
 
   // Load older messages function (with scroll position preservation)
-  const loadOlderMessages = React.useCallback(() => {
-    if (!hasMoreOlder || isLoadingRef.current) return;
+  const handleLoadOlder = React.useCallback(() => {
+    if (!hasMoreOlder || isLoadingOlder || isLoadingRef.current) return;
 
     isLoadingRef.current = true;
-    setIsLoadingOlder(true);
-
     const viewport = scrollAreaRef.current?.querySelector(
       "[data-slot='scroll-area-viewport']"
     ) as HTMLElement | null;
-    const prevScrollHeight = viewport?.scrollHeight || 0;
+    prevScrollHeightRef.current = viewport?.scrollHeight || 0;
 
-    setTimeout(() => {
-      setOlderMessages((prev) => [...mockHistoricalOlderMessages, ...prev]);
-      setHasMoreOlder(false);
-      setIsLoadingOlder(false);
-      isLoadingRef.current = false;
+    onLoadEarlierMessages?.();
+  }, [hasMoreOlder, isLoadingOlder, onLoadEarlierMessages]);
 
-      // Preserve scroll position so content doesn't jump
-      requestAnimationFrame(() => {
-        if (viewport) {
-          const newScrollHeight = viewport.scrollHeight;
-          viewport.scrollTop = newScrollHeight - prevScrollHeight;
+  // Adjust scroll position after older messages prepended
+  React.useLayoutEffect(() => {
+    if (prevScrollHeightRef.current > 0) {
+      const viewport = scrollAreaRef.current?.querySelector(
+        "[data-slot='scroll-area-viewport']"
+      ) as HTMLElement | null;
+      if (viewport) {
+        const newScrollHeight = viewport.scrollHeight;
+        const diff = newScrollHeight - prevScrollHeightRef.current;
+        if (diff > 0) {
+          viewport.scrollTop += diff;
         }
-      });
-    }, 650);
-  }, [hasMoreOlder]);
+      }
+      prevScrollHeightRef.current = 0;
+      isLoadingRef.current = false;
+    }
+  }, [messages]);
 
   // Scroll listener for infinite scroll at top and showing scroll-to-bottom button
   React.useEffect(() => {
@@ -117,8 +144,8 @@ export function MessageList({
 
     const handleScroll = () => {
       // 1. Infinite scroll trigger when user scrolls near top
-      if (viewport.scrollTop < 60 && hasMoreOlder && !isLoadingRef.current) {
-        loadOlderMessages();
+      if (viewport.scrollTop < 60 && hasMoreOlder && !isLoadingOlder && !isLoadingRef.current) {
+        handleLoadOlder();
       }
 
       // 2. Show scroll to bottom button if user scrolled up
@@ -129,11 +156,11 @@ export function MessageList({
 
     viewport.addEventListener("scroll", handleScroll, { passive: true });
     return () => viewport.removeEventListener("scroll", handleScroll);
-  }, [hasMoreOlder, loadOlderMessages]);
+  }, [hasMoreOlder, isLoadingOlder, handleLoadOlder]);
 
   // Filter messages by channel & search query
   const filteredMessages = React.useMemo(() => {
-    return allMessages.filter((m) => {
+    return messages.filter((m) => {
       // Channel Filter
       if (channelFilter === "internal") {
         if (m.purpose === "CLIENT_COMMUNICATION" || m.isFromClient || !!m.approval) return false;
@@ -150,10 +177,10 @@ export function MessageList({
       // Search Filter
       if (searchFilterQuery.trim()) {
         const q = searchFilterQuery.toLowerCase().trim();
-        const matchesText = m.text.toLowerCase().includes(q);
-        const matchesSender = m.senderName.toLowerCase().includes(q);
-        const matchesDeliverable = m.deliverableUpdate?.title.toLowerCase().includes(q);
-        const matchesMeeting = m.meetingSummary?.meetingTitle.toLowerCase().includes(q);
+        const matchesText = (m.text || "").toLowerCase().includes(q);
+        const matchesSender = (m.senderName || "").toLowerCase().includes(q);
+        const matchesDeliverable = (m.deliverableUpdate?.title || "").toLowerCase().includes(q);
+        const matchesMeeting = (m.meetingSummary?.meetingTitle || "").toLowerCase().includes(q);
         if (!matchesText && !matchesSender && !matchesDeliverable && !matchesMeeting) {
           return false;
         }
@@ -161,7 +188,7 @@ export function MessageList({
 
       return true;
     });
-  }, [allMessages, channelFilter, searchFilterQuery]);
+  }, [messages, channelFilter, searchFilterQuery]);
 
   // Group consecutive messages by dateGroup and senderId
   const groupedByDate = React.useMemo(() => {
@@ -203,20 +230,20 @@ export function MessageList({
           {isLoadingOlder ? (
             <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground animate-pulse">
               <Loader2 className="size-4 animate-spin text-primary" />
-              <span className="text-[11px] font-medium">Loading earlier project messages...</span>
+              <span className="text-[11px] font-medium">Loading earlier sprint messages...</span>
             </div>
           ) : hasMoreOlder ? (
             <div className="flex items-center justify-center py-2">
               <button
                 type="button"
-                onClick={loadOlderMessages}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-3 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 shadow-2xs backdrop-blur-md transition-all cursor-pointer"
+                onClick={handleLoadOlder}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-3.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 shadow-2xs backdrop-blur-md transition-all cursor-pointer"
               >
                 <History className="size-3 text-primary" />
                 <span>Load earlier sprint messages</span>
               </button>
             </div>
-          ) : (
+          ) : messages.length > 0 ? (
             <div className="flex flex-col items-center justify-center py-5 text-center text-muted-foreground select-none border-b border-border/30 mb-2">
               <div className="flex size-8 items-center justify-center rounded-xl bg-primary/10 text-primary mb-1.5 shadow-2xs">
                 <Sparkles className="size-4" />
@@ -225,8 +252,16 @@ export function MessageList({
                 Beginning of {projectCode || "Project"} Stream
               </span>
               <span className="text-[10px] text-muted-foreground mt-0.5">
-                Project initiated on {projectCreatedAt} • All historical messages loaded
+                All historical sprint messages loaded
               </span>
+            </div>
+          ) : null}
+
+          {/* Initial Loading Spinner */}
+          {isLoadingMessages && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+              <Loader2 className="size-6 animate-spin text-primary mb-2" />
+              <span className="text-xs font-medium">Loading project conversation...</span>
             </div>
           )}
 
@@ -259,18 +294,22 @@ export function MessageList({
             </div>
           ))}
 
-          {filteredMessages.length === 0 && (
+          {!isLoadingMessages && filteredMessages.length === 0 && (
             <div className="flex h-64 flex-col items-center justify-center text-center p-8 text-muted-foreground">
               <Sparkles className="size-8 text-muted-foreground/40 mb-2" />
               <p className="text-xs font-semibold text-foreground">
                 {channelFilter === "approvals"
                   ? "No pending approvals in this project"
-                  : "No messages match your active filter"}
+                  : messages.length === 0
+                    ? "No messages in this project yet"
+                    : "No messages match your active filter"}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {channelFilter === "approvals"
                   ? "All client communications and deliverables have been approved or dispatched."
-                  : "Try selecting 'All Stream' or adjusting your search term."}
+                  : messages.length === 0
+                    ? "Start the conversation by sending a message below."
+                    : "Try selecting 'All Stream' or adjusting your search term."}
               </p>
             </div>
           )}
@@ -291,3 +330,4 @@ export function MessageList({
     </div>
   );
 }
+

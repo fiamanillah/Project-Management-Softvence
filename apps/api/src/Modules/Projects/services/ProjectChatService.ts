@@ -112,9 +112,8 @@ export class ProjectChatService {
     let nextCursor: string | undefined = undefined;
     let resultItems = messages;
     if (messages.length > limit) {
-      const nextItem = messages.pop();
-      nextCursor = nextItem?.createdAt.toISOString();
-      resultItems = messages;
+      resultItems = messages.slice(0, limit);
+      nextCursor = resultItems[resultItems.length - 1]?.createdAt.toISOString();
     }
 
     // Reverse to chronological order (oldest -> newest for chat stream)
@@ -140,9 +139,20 @@ export class ProjectChatService {
   ): Promise<ProjectMessageItem> {
     const project = await findProjectByIdOrCode(this.prisma, projectId, {
       client: true,
+      userAssignments: {
+        where: { unassignedAt: null },
+        select: { userId: true },
+      },
       teamAssignments: {
         where: { unassignedAt: null },
-        include: { team: { include: { department: true } } },
+        include: {
+          team: {
+            include: {
+              department: true,
+              members: { where: { leftAt: null }, select: { userId: true } },
+            },
+          },
+        },
       },
     });
 
@@ -196,16 +206,27 @@ export class ProjectChatService {
 
     // Database transaction to create message and approval workflow
     const created = await this.prisma.$transaction(async (tx) => {
+      let validReplyToId: string | null = null;
+      if (dto.replyToMessageId) {
+        const existingReply = await tx.projectMessage.findFirst({
+          where: { id: dto.replyToMessageId, projectId: resolvedProjectId, deletedAt: null },
+          select: { id: true },
+        });
+        validReplyToId = existingReply?.id || null;
+      }
+
+      const messageText = dto.text?.trim() || (dto.attachments && dto.attachments.length > 0 ? "Shared attachments" : "");
+
       const msg = await tx.projectMessage.create({
         data: {
-          projectId,
+          projectId: resolvedProjectId,
           senderId: actor.id,
           messageTypeId: messageTypeId || null,
           purpose: dto.purpose,
           clientDirection: dto.clientDirection || null,
-          text: dto.text,
+          text: messageText,
           variant: dto.variant || (isClientInbound ? "tinted" : isClientOutbound ? "outline" : "default"),
-          replyToMessageId: dto.replyToMessageId || null,
+          replyToMessageId: validReplyToId,
           isFromClient: Boolean(isClientInbound),
           metadata: (dto.metadata ?? undefined) as any,
           attachments: dto.attachments && dto.attachments.length > 0
@@ -292,10 +313,55 @@ export class ProjectChatService {
 
     const decorated = await sanitizeAndDecorateMessage(created, actor, project);
 
-    // Broadcast to project room via WebSocket
-    this.realtimeServer.toProject(projectId, "chat:new_message", decorated as any);
+    // 1. Broadcast to active project room via WebSocket
+    this.realtimeServer.toProject(resolvedProjectId, "chat:new_message", decorated as any);
+    if (projectId !== resolvedProjectId) {
+      this.realtimeServer.toProject(projectId, "chat:new_message", decorated as any);
+    }
 
-    this.logger.info(`Message sent in project ${projectId} by user ${actor.id} (msgId=${created.id})`);
+    // 2. Broadcast lightweight activity bump to all assigned project members (zero over-subscription)
+    try {
+      const teamMemberUserIds = ((project as any).teamAssignments || []).flatMap((ta: any) =>
+        (ta.team?.members || []).map((m: any) => m.userId)
+      );
+      const userAssignmentIds = ((project as any).userAssignments || []).map((ua: any) => ua.userId);
+      const allRecipientUserIds = Array.from(new Set([...teamMemberUserIds, ...userAssignmentIds, actor.id]));
+
+      const isClient = created.isFromClient || created.purpose === "CLIENT_COMMUNICATION";
+      const hasApproval =
+        (decorated as any).approval &&
+        ((decorated as any).approval.status === "PENDING_LEAD" || (decorated as any).approval.status === "PENDING_SALES");
+      const isRevision = (decorated as any).approval?.status === "REVISION_REQUESTED";
+
+      const attentionType = hasApproval
+        ? "PENDING_APPROVAL"
+        : isRevision
+        ? "REVISION_REQUESTED"
+        : isClient
+        ? "CLIENT_MESSAGE"
+        : "NEW_MESSAGE";
+
+      const bumpPayload = {
+        projectId: resolvedProjectId,
+        lastActivityAt: new Date().toISOString(),
+        lastMessage: {
+          id: created.id,
+          senderName: (decorated as any).senderName || "User",
+          text: created.text,
+          timestamp: (decorated as any).timestamp || "Just now",
+          purpose: created.purpose,
+          createdAt: created.createdAt.toISOString(),
+        },
+        attentionType,
+      };
+
+      // Broadcast activity bump to all active connections in workspace cluster
+      this.realtimeServer.broadcast("project:activity_bump" as any, bumpPayload as any);
+    } catch (bumpErr) {
+      this.logger.warn("Failed to broadcast project activity bump:", { error: bumpErr });
+    }
+
+    this.logger.info(`Message sent in project ${resolvedProjectId} by user ${actor.id} (msgId=${created.id})`);
     return decorated;
   }
 
@@ -308,8 +374,11 @@ export class ProjectChatService {
     dto: ToggleReactionDTO,
     actor: AuthenticatedUser,
   ): Promise<{ reactions: any[] }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    const resolvedProjectId = project?.id || projectId;
+
     const message = await this.prisma.projectMessage.findFirst({
-      where: { id: messageId, projectId, deletedAt: null },
+      where: { id: messageId, projectId: resolvedProjectId, deletedAt: null },
       include: {
         project: {
           include: {
@@ -375,7 +444,7 @@ export class ProjectChatService {
     }));
 
     // Broadcast reaction update
-    this.realtimeServer.toProject(projectId, "chat:reaction_updated", {
+    this.realtimeServer.toProject(resolvedProjectId, "chat:reaction_updated", {
       messageId,
       reactions: reactionItems,
     } as any);
@@ -391,6 +460,9 @@ export class ProjectChatService {
     dto: MarkMessagesSeenDTO,
     actor: AuthenticatedUser,
   ): Promise<{ success: boolean }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    const resolvedProjectId = project?.id || projectId;
+
     const user = await this.prisma.user.findUnique({
       where: { id: actor.id },
       include: { designation: true },
@@ -431,7 +503,7 @@ export class ProjectChatService {
         seenAt: new Date(r.seenAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       }));
 
-      this.realtimeServer.toProject(projectId, "chat:seen_receipts_updated", {
+      this.realtimeServer.toProject(resolvedProjectId, "chat:seen_receipts_updated", {
         messageId,
         seenBy,
       } as any);
@@ -448,8 +520,11 @@ export class ProjectChatService {
     messageId: string,
     actor: AuthenticatedUser,
   ): Promise<ProjectMessageItem> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    const resolvedProjectId = project?.id || projectId;
+
     const message = await this.prisma.projectMessage.findFirst({
-      where: { id: messageId, projectId, deletedAt: null },
+      where: { id: messageId, projectId: resolvedProjectId, deletedAt: null },
       include: {
         project: {
           include: {

@@ -5,7 +5,10 @@ import { AppLogger } from "@/core/logging/logger";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import { PresenceService } from "@/core/realtime/PresenceService";
 import type { ProjectWorkspaceItem } from "../ProjectDTO";
-import { sanitizeAndDecorateWorkspaceProject } from "./projects.capability.helper";
+import {
+  sanitizeAndDecorateWorkspaceProject,
+  buildProjectScopedWhereConditions,
+} from "./projects.capability.helper";
 
 export class ProjectsWorkspaceService {
   private logger = new AppLogger("ProjectsWorkspaceService");
@@ -15,31 +18,60 @@ export class ProjectsWorkspaceService {
 
   /**
    * Fetches all active projects formatted as workspace items for the command center.
+   * Strictly enforces scoped permissions (Rules BE-1, BE-17).
    */
   public async getWorkspaceProjects(
-    query: { search?: string; statusId?: string; priorityId?: string },
+    query: { search?: string; statusId?: string; priorityId?: string; page?: number | string; limit?: number | string },
     actor: AuthenticatedUser,
-  ): Promise<ProjectWorkspaceItem[]> {
+  ): Promise<{ items: ProjectWorkspaceItem[]; pagination?: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean } } | ProjectWorkspaceItem[]> {
     const where: any = {
       deletedAt: null,
     };
 
-    if (query.statusId) {
+    // Scoped query restriction based on actor permissions
+    const scopedConditions = await buildProjectScopedWhereConditions(this.prisma, actor);
+    if (scopedConditions && scopedConditions.length > 0) {
+      where.OR = scopedConditions;
+    }
+
+    if (query.statusId && query.statusId !== "all") {
       where.statusId = query.statusId;
+    } else if ((query as any).category === "delivered") {
+      where.status = { isTerminal: true };
+    } else if ((query as any).includeTerminal !== "true" && (query as any).includeTerminal !== true) {
+      where.status = { isTerminal: false };
     }
 
-    if (query.search) {
-      where.OR = [
-        { projectName: { contains: query.search, mode: "insensitive" } },
-        { orderId: { contains: query.search, mode: "insensitive" } },
-        { client: { name: { contains: query.search, mode: "insensitive" } } },
+    if (query.search && query.search.trim() !== "") {
+      const search = query.search.trim();
+      const searchConditions = [
+        { projectName: { contains: search, mode: "insensitive" } },
+        { orderId: { contains: search, mode: "insensitive" } },
+        { client: { name: { contains: search, mode: "insensitive" } } },
+        { serviceLine: { name: { contains: search, mode: "insensitive" } } },
       ];
+
+      if (where.OR) {
+        where.AND = [{ OR: searchConditions }];
+      } else {
+        where.OR = searchConditions;
+      }
     }
 
-    const projects = await this.prisma.project.findMany({
-      where,
-      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
-      include: {
+    const hasPagination = Boolean(query.page || query.limit);
+    const pageNumber = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(query.limit) || 15));
+    const skip = hasPagination ? (pageNumber - 1) * pageSize : undefined;
+    const take = hasPagination ? pageSize : undefined;
+
+    const [totalCount, projects] = await Promise.all([
+      hasPagination ? this.prisma.project.count({ where }) : Promise.resolve(0),
+      this.prisma.project.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+        include: {
         client: {
           include: { platform: true },
         },
@@ -93,7 +125,8 @@ export class ProjectsWorkspaceService {
           },
         },
       },
-    });
+    }),
+  ]);
 
     const workspaceItems: ProjectWorkspaceItem[] = await Promise.all(
       projects.map(async (p: any) => {
@@ -136,6 +169,20 @@ export class ProjectsWorkspaceService {
         return decorated;
       }),
     );
+
+    if (hasPagination) {
+      const totalPages = Math.ceil(totalCount / pageSize);
+      return {
+        items: workspaceItems,
+        pagination: {
+          total: totalCount,
+          page: pageNumber,
+          limit: pageSize,
+          totalPages,
+          hasMore: pageNumber < totalPages,
+        },
+      };
+    }
 
     return workspaceItems;
   }
