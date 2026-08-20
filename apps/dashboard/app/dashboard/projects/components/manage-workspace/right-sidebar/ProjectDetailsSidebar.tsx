@@ -2,9 +2,21 @@
 
 import * as React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
 import { Button } from "@workspace/ui/components/button";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
-import { X, Info, Image as ImageIcon, FileText, Link2, CheckSquare, Users, Send } from "lucide-react";
+import { Badge } from "@workspace/ui/components/badge";
+import {
+  X,
+  Info,
+  Image as ImageIcon,
+  FileText,
+  Link2,
+  CheckSquare,
+  Users,
+  Send,
+} from "lucide-react";
+import { cn } from "@workspace/ui/lib/utils";
 import { ProjectProfileHeader } from "./ProjectProfileHeader";
 import { ProjectOverviewSection } from "./ProjectOverviewSection";
 import { ProjectMediaTab } from "./ProjectMediaTab";
@@ -39,128 +51,201 @@ export function ProjectDetailsSidebar({
     return messages.filter((m) => m.approval && m.approval.status !== "NOT_REQUIRED").length;
   }, [messages]);
 
+  const tabsConfig = [
+    {
+      id: "overview",
+      label: "Overview",
+      tooltip: "Project Overview & Details",
+      icon: Info,
+    },
+    {
+      id: "dispatch",
+      label: "Dispatch",
+      tooltip: "Client Outbound & Approvals",
+      icon: Send,
+      count: clientMessagesCount,
+      hasNotification: (project.pendingApprovalsCount ?? 0) > 0,
+    },
+    {
+      id: "milestones",
+      label: "Milestones",
+      tooltip: "Task Milestones & Deliverables",
+      icon: CheckSquare,
+      count: project.milestones?.length,
+    },
+    {
+      id: "files",
+      label: "Files",
+      tooltip: "Documents & Project Files",
+      icon: FileText,
+      count: project.files?.length,
+    },
+    {
+      id: "media",
+      label: "Media",
+      tooltip: "Pictures, Media & Mockups",
+      icon: ImageIcon,
+      count: project.media?.length,
+    },
+    {
+      id: "links",
+      label: "Links",
+      tooltip: "External Links & Resources",
+      icon: Link2,
+      count: project.links?.length,
+    },
+    {
+      id: "members",
+      label: "Team",
+      tooltip: "Project Team Roster",
+      icon: Users,
+      count: project.members?.length,
+    },
+  ];
+
   return (
-    <div className={`flex h-full flex-col bg-card/85 backdrop-blur-md border-l border-border/60 select-none overflow-hidden ${className || ""}`}>
-      {/* Top Bar with Title & Close Button */}
-      <div className="flex h-14 items-center justify-between px-4 border-b border-border/50 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-            {project.code}
-          </span>
-          <h3 className="text-xs font-bold text-foreground tracking-tight">
-            Project Information
-          </h3>
-        </div>
-        {onClose && (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            onClick={onClose}
-            className="size-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
-            title="Close sidebar"
-          >
-            <X className="size-4" />
-          </Button>
+    <TooltipProvider delay={150}>
+      <div
+        className={cn(
+          "flex h-full flex-col bg-card/85 backdrop-blur-md border-l border-border/60 select-none overflow-hidden",
+          className
         )}
-      </div>
+      >
+        {/* Top Header Bar */}
+        <div className="flex h-14 items-center justify-between px-4 border-b border-border/50 bg-card/50 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 shrink-0">
+              {project.code}
+            </span>
+            <h3 className="text-xs font-bold text-foreground tracking-tight truncate">
+              Project Details
+            </h3>
+          </div>
 
-      {/* Shadcn ScrollArea Container for right panel */}
-      <ScrollArea className="flex-1">
-        {/* Profile Card & Action Bar */}
-        <ProjectProfileHeader project={project} />
+          <div className="flex items-center gap-1.5">
+            {project.status && (
+              <Badge
+                variant="outline"
+                className="text-[10px] font-semibold px-2 py-0.5 bg-muted/60 border-border/60"
+              >
+                {project.status.name}
+              </Badge>
+            )}
+            {onClose && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={onClose}
+                      className="size-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer hover:bg-muted/80 ml-1"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="left" sideOffset={6}>
+                  Close sidebar
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
 
-        {/* Assets & Details Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="px-3 pt-3 border-b border-border/40 bg-muted/10 sticky top-0 z-10 backdrop-blur-md">
-            <TabsList className="grid grid-cols-7 h-9 p-0.5 bg-muted/60 rounded-xl">
-              <TabsTrigger
-                value="overview"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs"
-                title="Overview & Team"
-              >
-                <Info className="size-3.5" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="dispatch"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs relative"
-                title="Client Outbound & Approvals"
-              >
-                <Send className="size-3.5 text-sky-500" />
-                {project.pendingApprovalsCount && project.pendingApprovalsCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 size-2 rounded-full bg-amber-500 ring-2 ring-card" />
-                ) : null}
-              </TabsTrigger>
-              <TabsTrigger
-                value="milestones"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs"
-                title="Milestones & Deliverables"
-              >
-                <CheckSquare className="size-3.5" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="files"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs"
-                title="Documents & Files"
-              >
-                <FileText className="size-3.5" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="media"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs"
-                title="Media & Mockups"
-              >
-                <ImageIcon className="size-3.5" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="links"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs"
-                title="External Links & Tools"
-              >
-                <Link2 className="size-3.5" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="members"
-                className="rounded-lg text-[11px] font-medium p-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-2xs"
-                title="Full Team Roster"
-              >
-                <Users className="size-3.5" />
-              </TabsTrigger>
+        {/* Main Tabs Container */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
+          {/* Profile Card & Quick Actions (Fixed at Top) */}
+          <div className="shrink-0">
+            <ProjectProfileHeader project={project} />
+          </div>
+
+          {/* Fixed Tab Navigation Bar (Completely separate from ScrollArea and scrollbars) */}
+          <div className="px-3 py-2 border-b border-border/40 bg-card/95 backdrop-blur-md shadow-2xs shrink-0">
+            <TabsList className="w-full h-9 p-1 grid grid-cols-7 gap-1 bg-muted/70 dark:bg-muted/40 rounded-xl border border-border/40">
+              {tabsConfig.map((tab) => {
+                const isActive = activeTab === tab.id;
+                const Icon = tab.icon;
+
+                return (
+                  <Tooltip key={tab.id}>
+                    <TooltipTrigger
+                      render={
+                        <TabsTrigger
+                          value={tab.id}
+                          className={cn(
+                            "relative flex size-full h-7 items-center justify-center rounded-lg transition-all duration-200 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            isActive
+                              ? "bg-background text-primary shadow-xs font-semibold"
+                              : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              "size-3.5 shrink-0 transition-colors",
+                              isActive
+                                ? "text-primary"
+                                : "text-muted-foreground group-hover:text-foreground"
+                            )}
+                          />
+
+                          {/* Notification Dot for Dispatch / Approvals */}
+                          {tab.hasNotification && (
+                            <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-card animate-pulse" />
+                          )}
+                        </TabsTrigger>
+                      }
+                    />
+                    <TooltipContent side="bottom" sideOffset={6} className="text-xs font-medium">
+                      <p className="font-semibold">{tab.tooltip}</p>
+                      {tab.count !== undefined && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {tab.count} {tab.count === 1 ? "item" : "items"}
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
             </TabsList>
           </div>
 
-          <TabsContent value="overview" className="mt-0">
-            <ProjectOverviewSection project={project} />
-          </TabsContent>
+          {/* Scrollable Tab Contents Container (Scrollbar starts below the tabs bar) */}
+          <ScrollArea className="flex-1 min-h-0">
+            <TabsContent value="overview" className="mt-0 outline-none">
+              <ProjectOverviewSection project={project} />
+            </TabsContent>
 
-          <TabsContent value="dispatch" className="mt-0">
-            <ProjectClientDispatchTab
-              messages={messages}
-              onUpdateApproval={onUpdateApproval}
-              onScrollToMessage={onScrollToMessage}
-            />
-          </TabsContent>
+            <TabsContent value="dispatch" className="mt-0 outline-none">
+              <ProjectClientDispatchTab
+                messages={messages}
+                onUpdateApproval={onUpdateApproval}
+                onScrollToMessage={onScrollToMessage}
+              />
+            </TabsContent>
 
-          <TabsContent value="milestones" className="mt-0">
-            <ProjectMilestonesTab milestones={project.milestones || []} />
-          </TabsContent>
+            <TabsContent value="milestones" className="mt-0 outline-none">
+              <ProjectMilestonesTab milestones={project.milestones || []} />
+            </TabsContent>
 
-          <TabsContent value="files" className="mt-0">
-            <ProjectFilesTab files={project.files || []} />
-          </TabsContent>
+            <TabsContent value="files" className="mt-0 outline-none">
+              <ProjectFilesTab files={project.files || []} />
+            </TabsContent>
 
-          <TabsContent value="media" className="mt-0">
-            <ProjectMediaTab media={project.media || []} />
-          </TabsContent>
+            <TabsContent value="media" className="mt-0 outline-none">
+              <ProjectMediaTab media={project.media || []} />
+            </TabsContent>
 
-          <TabsContent value="links" className="mt-0">
-            <ProjectLinksTab links={project.links || []} />
-          </TabsContent>
+            <TabsContent value="links" className="mt-0 outline-none">
+              <ProjectLinksTab links={project.links || []} />
+            </TabsContent>
 
-          <TabsContent value="members" className="mt-0">
-            <ProjectMembersTab members={project.members || []} />
-          </TabsContent>
+            <TabsContent value="members" className="mt-0 outline-none">
+              <ProjectMembersTab members={project.members || []} />
+            </TabsContent>
+          </ScrollArea>
         </Tabs>
-      </ScrollArea>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

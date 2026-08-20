@@ -4,8 +4,10 @@ import * as React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Pin, Bell, Share2, Building2, ExternalLink, Shield } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
+import { Pin, Bell, BellOff, Share2, Building2, Globe2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@workspace/ui/lib/utils";
 import type { ProjectWorkspaceItem } from "../types";
 
 interface ProjectProfileHeaderProps {
@@ -40,36 +42,38 @@ export function ProjectProfileHeader({ project, onEdit }: ProjectProfileHeaderPr
   };
 
   return (
-    <div className="flex flex-col items-center p-5 text-center border-b border-border/50 bg-muted/20">
+    <div className="flex flex-col items-center p-3.5 text-center border-b border-border/50 bg-gradient-to-b from-muted/30 to-card/40">
       {/* Large Project Avatar with Online Indicator */}
-      <div className="relative mb-3">
-        <Avatar className="size-18 rounded-2xl ring-2 ring-primary/20 shadow-md">
+      <div className="relative mb-2">
+        <Avatar className="size-13 rounded-2xl ring-2 ring-primary/25 shadow-md">
           <AvatarImage src={project.client.avatar} alt={project.name} />
-          <AvatarFallback className="rounded-2xl bg-primary/10 text-primary text-xl font-bold font-mono">
+          <AvatarFallback className="rounded-2xl bg-primary/10 text-primary text-base font-bold font-mono">
             {initials}
           </AvatarFallback>
         </Avatar>
-        <span className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+        <span className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-emerald-500 ring-2 ring-background shadow-xs" />
       </div>
 
-      {/* PRIMARY AUTO-GENERATED PROJECT CODE */}
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className="font-mono text-sm font-extrabold text-primary bg-primary/10 border border-primary/25 px-2.5 py-0.5 rounded-lg">
+      {/* Primary Auto-Generated Project Code & Platform */}
+      <div className="flex items-center gap-1.5 mb-1 flex-wrap justify-center">
+        <span className="font-mono text-xs font-extrabold text-primary bg-primary/10 border border-primary/25 px-2 py-0.5 rounded-md shadow-2xs">
           {project.code}
         </span>
         {project.client.platform && (
-          <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
+          <Badge variant="secondary" className="text-[10px] font-semibold px-1.5 py-0.2 gap-1">
+            <Globe2 className="size-2.5 text-muted-foreground" />
             {project.client.platform}
-          </span>
+          </Badge>
         )}
       </div>
 
-      {/* Project Title & Client Account */}
-      <h3 className="font-bold text-sm text-foreground tracking-tight max-w-[260px] mt-1">
+      {/* Project Title */}
+      <h3 className="font-bold text-xs text-foreground tracking-tight max-w-[260px]">
         {project.name}
       </h3>
 
-      <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground font-medium">
+      {/* Client Organization */}
+      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground font-medium">
         <Building2 className="size-3 text-muted-foreground shrink-0" />
         <span className="truncate">{project.client.name}</span>
         {project.client.company && (
@@ -77,41 +81,77 @@ export function ProjectProfileHeader({ project, onEdit }: ProjectProfileHeaderPr
         )}
       </div>
 
-      <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed max-w-[280px]">
-        {project.description}
-      </p>
+      {/* Description */}
+      {project.description && (
+        <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed max-w-[280px] line-clamp-2">
+          {project.description}
+        </p>
+      )}
 
-      {/* Quick Action Controls */}
-      <div className="flex items-center justify-center gap-2 mt-4">
-        <Button
-          size="sm"
-          variant={isPinned ? "secondary" : "outline"}
-          onClick={handleTogglePin}
-          className="h-8 text-xs gap-1.5 px-3 rounded-xl cursor-pointer"
-        >
-          <Pin className="size-3.5 rotate-45" />
-          {isPinned ? "Pinned" : "Pin"}
-        </Button>
+      {/* Quick Action Controls with Tooltips */}
+      <div className="flex items-center justify-center gap-2 mt-3">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="xs"
+                variant={isPinned ? "secondary" : "outline"}
+                onClick={handleTogglePin}
+                className={cn(
+                  "h-7 text-xs gap-1.5 px-2.5 rounded-lg cursor-pointer transition-all",
+                  isPinned && "bg-primary/10 text-primary border-primary/20 font-semibold"
+                )}
+              >
+                <Pin className={cn("size-3 rotate-45", isPinned && "text-primary fill-primary/20")} />
+                {isPinned ? "Pinned" : "Pin"}
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom" sideOffset={5} className="text-xs">
+            {isPinned ? "Unpin project from top" : "Pin project to top"}
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          size="sm"
-          variant={isMuted ? "secondary" : "outline"}
-          onClick={handleToggleMute}
-          className="h-8 text-xs gap-1.5 px-3 rounded-xl cursor-pointer"
-        >
-          <Bell className="size-3.5" />
-          {isMuted ? "Muted" : "Mute"}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="xs"
+                variant={isMuted ? "secondary" : "outline"}
+                onClick={handleToggleMute}
+                className={cn(
+                  "h-7 text-xs gap-1.5 px-2.5 rounded-lg cursor-pointer transition-all",
+                  isMuted && "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold"
+                )}
+              >
+                {isMuted ? <BellOff className="size-3" /> : <Bell className="size-3" />}
+                {isMuted ? "Muted" : "Mute"}
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom" sideOffset={5} className="text-xs">
+            {isMuted ? "Unmute notifications" : "Mute notifications"}
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleShare}
-          className="h-8 text-xs gap-1.5 px-3 rounded-xl cursor-pointer"
-        >
-          <Share2 className="size-3.5" />
-          Share
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={handleShare}
+                className="h-7 text-xs gap-1.5 px-2.5 rounded-lg cursor-pointer hover:bg-muted/80"
+              >
+                <Share2 className="size-3 text-muted-foreground" />
+                Share
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom" sideOffset={5} className="text-xs">
+            Copy project link
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );

@@ -4,23 +4,15 @@ import * as React from "react";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
 import {
   Send,
   Clock,
   CheckCircle2,
   AlertTriangle,
-  History,
   Eye,
-  Check,
-  X,
-  RotateCcw,
-  Sparkles,
   ExternalLink,
-  Building2,
-  Calendar,
 } from "lucide-react";
-import { toast } from "sonner";
-import { cn } from "@workspace/ui/lib/utils";
 import { ClientDispatchModal } from "../chat-panel/ClientDispatchModal";
 import type { ChatMessage, ApprovalWorkflow } from "../types";
 
@@ -49,9 +41,11 @@ export function ProjectClientDispatchTab({
   if (clientMessages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
-        <Send className="size-8 text-muted-foreground/40 mb-2" />
+        <div className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 mb-2">
+          <Send className="size-6 text-muted-foreground/60" />
+        </div>
         <p className="text-xs font-semibold text-foreground">No Client Dispatch Messages</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-[220px]">
           Messages drafted with the "Client Outbound" purpose will appear here for review and dispatch tracking.
         </p>
       </div>
@@ -92,7 +86,7 @@ export function ProjectClientDispatchTab({
             <div
               key={msg.id}
               onClick={() => setSelectedMessage(msg)}
-              className="rounded-xl border border-border/80 bg-card/80 p-3 shadow-2xs space-y-2 text-xs cursor-pointer hover:border-primary/40 hover:bg-muted/40 transition-all"
+              className="rounded-xl border border-border/80 bg-card/80 p-3 shadow-2xs space-y-2 text-xs cursor-pointer hover:border-primary/40 hover:bg-muted/40 transition-all group"
             >
               {/* Header */}
               <div className="flex items-center justify-between gap-1.5">
@@ -163,17 +157,26 @@ export function ProjectClientDispatchTab({
                 </span>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onScrollToMessage?.(msg.id);
-                    }}
-                    className="h-6 text-[10px] gap-1 text-primary hover:text-primary/90 cursor-pointer"
-                  >
-                    Jump to Chat <ExternalLink className="size-2.5" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onScrollToMessage?.(msg.id);
+                          }}
+                          className="h-6 text-[10px] gap-1 text-primary hover:text-primary/90 cursor-pointer hover:bg-primary/10"
+                        >
+                          Jump to Chat <ExternalLink className="size-2.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="left" className="text-xs">
+                      Scroll to message in chat
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             </div>

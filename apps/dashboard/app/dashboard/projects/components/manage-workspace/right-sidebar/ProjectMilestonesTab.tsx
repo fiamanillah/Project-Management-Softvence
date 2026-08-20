@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, Circle, Clock, CheckSquare, Calendar } from "lucide-react";
+import { CheckCircle2, Circle, Calendar, CheckSquare, Sparkles } from "lucide-react";
+import { Progress } from "@workspace/ui/components/progress";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
 import type { ProjectMilestoneItem } from "../types";
@@ -29,9 +30,11 @@ export function ProjectMilestonesTab({ milestones: initialMilestones }: ProjectM
   if (milestones.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
-        <CheckSquare className="size-8 text-muted-foreground/40 mb-2" />
+        <div className="flex size-12 items-center justify-center rounded-2xl bg-muted/60 mb-2">
+          <CheckSquare className="size-6 text-muted-foreground/60" />
+        </div>
         <p className="text-xs font-semibold text-foreground">No milestones defined</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-[200px]">
           Project sprint deliverables and milestones will appear here.
         </p>
       </div>
@@ -39,37 +42,41 @@ export function ProjectMilestonesTab({ milestones: initialMilestones }: ProjectM
   }
 
   const completedCount = milestones.filter((m) => m.isCompleted).length;
+  const progressPercent = Math.round((completedCount / milestones.length) * 100);
 
   return (
     <div className="p-3 space-y-3">
-      {/* Progress banner */}
-      <div className="flex items-center justify-between text-xs px-1">
-        <span className="font-semibold text-muted-foreground text-[11px]">
-          Completed {completedCount} of {milestones.length} milestones
-        </span>
-        <span className="font-bold text-primary text-[11px]">
-          {Math.round((completedCount / milestones.length) * 100)}%
-        </span>
+      {/* Progress banner card */}
+      <div className="rounded-xl border border-border/60 bg-card/70 p-3 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-foreground flex items-center gap-1.5 text-[11px]">
+            <Sparkles className="size-3 text-primary" /> Deliverables Progress
+          </span>
+          <span className="font-bold text-primary font-mono text-[11px]">
+            {completedCount} / {milestones.length} ({progressPercent}%)
+          </span>
+        </div>
+        <Progress value={progressPercent} className="h-1.5" />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {milestones.map((ms) => (
           <button
             key={ms.id}
             type="button"
             onClick={() => toggleMilestone(ms.id)}
             className={cn(
-              "flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-all cursor-pointer",
+              "flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-all cursor-pointer group",
               ms.isCompleted
                 ? "border-emerald-500/30 bg-emerald-500/5 text-muted-foreground"
-                : "border-border/60 bg-card/60 hover:bg-muted/40 text-foreground shadow-2xs"
+                : "border-border/60 bg-card/60 hover:bg-muted/40 text-foreground shadow-2xs hover:border-border"
             )}
           >
             <div className="mt-0.5 shrink-0">
               {ms.isCompleted ? (
                 <CheckCircle2 className="size-4 text-emerald-500" />
               ) : (
-                <Circle className="size-4 text-muted-foreground/60" />
+                <Circle className="size-4 text-muted-foreground/60 group-hover:text-primary transition-colors" />
               )}
             </div>
 
@@ -77,7 +84,7 @@ export function ProjectMilestonesTab({ milestones: initialMilestones }: ProjectM
               <p
                 className={cn(
                   "text-xs font-semibold leading-snug",
-                  ms.isCompleted ? "line-through text-muted-foreground" : "text-foreground"
+                  ms.isCompleted ? "line-through text-muted-foreground" : "text-foreground group-hover:text-primary transition-colors"
                 )}
               >
                 {ms.title}

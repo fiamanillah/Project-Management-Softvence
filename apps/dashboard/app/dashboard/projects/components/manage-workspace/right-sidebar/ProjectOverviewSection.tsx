@@ -2,20 +2,15 @@
 
 import * as React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
-import { Badge } from "@workspace/ui/components/badge";
 import { Progress } from "@workspace/ui/components/progress";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
 import {
   Calendar,
-  DollarSign,
-  Building2,
-  UsersRound,
   Sparkles,
   Crown,
-  Clock,
-  Mail,
   Send,
-  CheckCircle2,
-  User,
+  Building2,
+  Users,
 } from "lucide-react";
 import type { ProjectWorkspaceItem } from "../types";
 
@@ -24,12 +19,7 @@ interface ProjectOverviewSectionProps {
 }
 
 export function ProjectOverviewSection({ project }: ProjectOverviewSectionProps) {
-  const leadInitials = project.lead.name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
+  const onlineMembersCount = project.members.filter((m) => m.isOnline).length;
 
   return (
     <div className="space-y-4 p-4 text-xs">
@@ -89,7 +79,7 @@ export function ProjectOverviewSection({ project }: ProjectOverviewSectionProps)
         </div>
       </div>
 
-      {/* 3. Assigned Teams Stack (Inspired by ProjectTeamsAndAssignees) */}
+      {/* 3. Assigned Teams Stack */}
       {project.teams && project.teams.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-card/70 p-3 space-y-2">
           <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
@@ -125,14 +115,14 @@ export function ProjectOverviewSection({ project }: ProjectOverviewSectionProps)
         </div>
       )}
 
-      {/* 4. Active Assignees & Roster (Inspired by ProjectTeamsAndAssignees) */}
+      {/* 4. Active Assignees & Roster */}
       <div className="rounded-xl border border-border/60 bg-card/70 p-3 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
             Project Assignees ({project.members.length})
           </span>
           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-            {project.members.filter((m) => m.isOnline).length} online
+            {onlineMembersCount} online
           </span>
         </div>
 
@@ -171,13 +161,31 @@ export function ProjectOverviewSection({ project }: ProjectOverviewSectionProps)
                         {member.name}
                       </p>
                       {member.role === "Tech Lead" || member.role === "Admin" ? (
-                        <span title={member.role} className="inline-flex">
-                          <Crown className="size-3 text-amber-500 shrink-0" />
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <span className="inline-flex">
+                                <Crown className="size-3 text-amber-500 shrink-0" />
+                              </span>
+                            }
+                          />
+                          <TooltipContent side="top" className="text-xs">
+                            {member.role}
+                          </TooltipContent>
+                        </Tooltip>
                       ) : member.role === "Sales Lead" ? (
-                        <span title="Sales Lead" className="inline-flex">
-                          <Send className="size-2.5 text-blue-500 shrink-0" />
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <span className="inline-flex">
+                                <Send className="size-2.5 text-blue-500 shrink-0" />
+                              </span>
+                            }
+                          />
+                          <TooltipContent side="top" className="text-xs">
+                            Sales Lead
+                          </TooltipContent>
+                        </Tooltip>
                       ) : null}
                     </div>
 
