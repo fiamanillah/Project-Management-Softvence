@@ -64,6 +64,54 @@ export const projectsPermissions: PermissionManifestItem[] = [
     description: "Modify project contract values and internal order sheet URLs",
     supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
   },
+  {
+    code: "project.chat.view",
+    module: "Projects",
+    description: "View project internal discussions and communication history",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.chat.send",
+    module: "Projects",
+    description: "Send internal discussion messages, voice notes, and reactions",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.chat.send_client",
+    module: "Projects",
+    description: "Draft outbound client communications and relay inbound client messages",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.chat.pin",
+    module: "Projects",
+    description: "Pin and unpin important messages to the project banner",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.chat.manage_types",
+    module: "Projects",
+    description: "Create and configure custom message types for project conversations",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.approval.lead_review",
+    module: "Projects",
+    description: "Review and approve/reject drafted outbound client communications as Lead",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.approval.sales_dispatch",
+    module: "Projects",
+    description: "Dispatch approved client messages to external platforms (Fiverr, Upwork, Slack, etc.)",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
+  {
+    code: "project.collateral.manage",
+    module: "Projects",
+    description: "Create, update, and manage project milestones, links, and collateral files",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+  },
 ];
 
 export default projectsPermissions;

@@ -1,5 +1,5 @@
 // ==========================================
-// INTERNAL PROJECT GROUP CHAT
+// INTERNAL PROJECT GROUP CHAT (LEGACY)
 // ==========================================
 
 model ProjectGroup {
@@ -64,4 +64,147 @@ model ChatMessageRead {
 
   @@unique([chatMessageId, userId])
   @@map("chat_message_reads")
+}
+
+// ==========================================
+// UNIFIED PROJECT CONVERSATION & WORKFLOWS
+// ==========================================
+
+model ProjectMessage {
+  id               String                     @id @default(uuid()) @db.Uuid
+  projectId        String                     @map("project_id") @db.Uuid
+  senderId         String                     @map("sender_id") @db.Uuid
+  messageTypeId    String?                    @map("message_type_id") @db.Uuid
+
+  purpose          String                     @default("INTERNAL_DISCUSSION") @map("purpose")
+  clientDirection  String?                    @map("client_direction")
+  text             String                     @db.Text
+  variant          String?                    @default("default")
+  replyToMessageId String?                    @map("reply_to_message_id") @db.Uuid
+  isPinned         Boolean                    @default(false) @map("is_pinned")
+  pinnedAt         DateTime?                  @map("pinned_at")
+  pinnedById       String?                    @map("pinned_by_id") @db.Uuid
+  isFromClient     Boolean                    @default(false) @map("is_from_client")
+  metadata         Json?                      @map("metadata")
+
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime?                  @map("updated_at")
+  deletedAt        DateTime?                  @map("deleted_at")
+
+  project          Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sender           User                       @relation("ProjectMessageSender", fields: [senderId], references: [id])
+  pinnedBy         User?                      @relation("ProjectMessagePinnedBy", fields: [pinnedById], references: [id])
+  messageType      MessageType?               @relation(fields: [messageTypeId], references: [id])
+  replyTo          ProjectMessage?            @relation("MessageThreadReplies", fields: [replyToMessageId], references: [id])
+  replies          ProjectMessage[]           @relation("MessageThreadReplies")
+
+  approvalWorkflow MessageApprovalWorkflow?
+  attachments      ProjectMessageAttachment[]
+  reactions        ProjectMessageReaction[]
+  reads            ProjectMessageReadReceipt[]
+
+  @@index([projectId, createdAt])
+  @@index([projectId, purpose])
+  @@index([projectId, isPinned])
+  @@index([senderId])
+  @@map("project_messages")
+}
+
+model MessageApprovalWorkflow {
+  id                  String               @id @default(uuid()) @db.Uuid
+  messageId           String               @unique @map("message_id") @db.Uuid
+  statusId            String               @map("status_id") @db.Uuid
+  requestedById       String               @map("requested_by_id") @db.Uuid
+  targetClientName    String               @map("target_client_name")
+  slaTargetMinutes    Int                  @default(30) @map("sla_target_minutes")
+  slaStatus           String               @default("ON_TRACK") @map("sla_status")
+  
+  leadApprovedById    String?              @map("lead_approved_by_id") @db.Uuid
+  leadApprovedAt      DateTime?            @map("lead_approved_at")
+  salesDispatchedById String?              @map("sales_dispatched_by_id") @db.Uuid
+  salesDispatchedAt   DateTime?            @map("sales_dispatched_at")
+  dispatchPlatform    String?              @map("dispatch_platform")
+  dispatchReferenceId String?              @map("dispatch_reference_id")
+  rejectedById        String?              @map("rejected_by_id") @db.Uuid
+  rejectedAt          DateTime?            @map("rejected_at")
+  rejectionReason     String?              @db.Text @map("rejection_reason")
+
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime?            @map("updated_at")
+
+  message             ProjectMessage       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  status              ApprovalStatusLookup @relation(fields: [statusId], references: [id])
+  requestedBy         User                 @relation("WorkflowRequestedBy", fields: [requestedById], references: [id])
+  leadApprover        User?                @relation("WorkflowLeadApprover", fields: [leadApprovedById], references: [id])
+  salesDispatcher     User?                @relation("WorkflowSalesDispatcher", fields: [salesDispatchedById], references: [id])
+  rejector            User?                @relation("WorkflowRejector", fields: [rejectedById], references: [id])
+  auditTrail          ApprovalStageAudit[]
+
+  @@index([statusId])
+  @@map("message_approval_workflows")
+}
+
+model ApprovalStageAudit {
+  id              String                  @id @default(uuid()) @db.Uuid
+  workflowId      String                  @map("workflow_id") @db.Uuid
+  stageKey        String                  @map("stage_key")
+  stageName       String                  @map("stage_name")
+  actorId         String                  @map("actor_id") @db.Uuid
+  actorRole       String                  @map("actor_role")
+  durationMinutes Int?                    @map("duration_minutes")
+  notes           String?                 @db.Text
+  createdAt       DateTime                @default(now()) @map("created_at")
+
+  workflow        MessageApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  actor           User                    @relation(fields: [actorId], references: [id])
+
+  @@index([workflowId])
+  @@map("approval_stage_audits")
+}
+
+model ProjectMessageAttachment {
+  id            String         @id @default(uuid()) @db.Uuid
+  messageId     String         @map("message_id") @db.Uuid
+  name          String
+  type          String
+  url           String
+  thumbnailUrl  String?        @map("thumbnail_url")
+  fileSizeBytes Int?           @map("file_size_bytes")
+  extension     String?
+  mimeType      String?        @map("mime_type")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  message       ProjectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("project_message_attachments")
+}
+
+model ProjectMessageReaction {
+  id        String         @id @default(uuid()) @db.Uuid
+  messageId String         @map("message_id") @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  emoji     String
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  message   ProjectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("project_message_reactions")
+}
+
+model ProjectMessageReadReceipt {
+  id        String         @id @default(uuid()) @db.Uuid
+  messageId String         @map("message_id") @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  seenAt    DateTime       @default(now()) @map("seen_at")
+
+  message   ProjectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@map("project_message_read_receipts")
 }

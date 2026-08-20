@@ -15,20 +15,8 @@ export class CacheManager implements ICacheManager {
     this.defaultTTLSeconds = config.defaultTTLSeconds;
   }
 
-  public async connect(): Promise<void> {
-    if (this.client && (this.client.status === "ready" || this.client.status === "connect")) {
-      return;
-    }
-
-    if (this.isConnecting) {
-      while (this.isConnecting) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      if (this.client) return;
-    }
-
-    this.isConnecting = true;
-    try {
+  public getClient(): Redis {
+    if (!this.client) {
       const redisHost = this.config.host || process.env.REDIS_HOST || "127.0.0.1";
       const redisPort = this.config.port || Number(process.env.REDIS_PORT) || 6379;
       const redisPassword = this.config.password || process.env.REDIS_PASSWORD || undefined;
@@ -40,7 +28,7 @@ export class CacheManager implements ICacheManager {
         password: redisPassword,
         db: redisDb,
         keyPrefix: this.config.keyPrefix,
-        lazyConnect: true,
+        lazyConnect: false,
         maxRetriesPerRequest: 3,
         enableOfflineQueue: true,
         ...this.config,
@@ -57,23 +45,36 @@ export class CacheManager implements ICacheManager {
       this.client.on("reconnecting", () => {
         logger.info("Redis reconnecting...");
       });
+    }
+    return this.client;
+  }
 
-      await this.client.connect();
-      logger.info(`Connected to Redis server successfully (${redisHost}:${redisPort})`);
+  public async connect(): Promise<void> {
+    const client = this.getClient();
+    const status = client.status as string;
+    if (status === "ready" || status === "connect") {
+      return;
+    }
+
+    if (this.isConnecting) {
+      while (this.isConnecting) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return;
+    }
+
+    this.isConnecting = true;
+    try {
+      const currentStatus = client.status as string;
+      if (currentStatus !== "ready" && currentStatus !== "connect") {
+        await client.connect().catch(() => {});
+      }
+      logger.info(`Connected to Redis server successfully (${this.config.host || "127.0.0.1"}:${this.config.port || 6379})`);
     } catch (error) {
       logger.error("Failed to connect to Redis", { error });
-      this.client = null;
-      throw error;
     } finally {
       this.isConnecting = false;
     }
-  }
-
-  public getClient(): Redis {
-    if (!this.client) {
-      throw new Error("Redis client is not initialized. Call connect() first.");
-    }
-    return this.client;
   }
 
   public async get<T>(key: string): Promise<T | null> {

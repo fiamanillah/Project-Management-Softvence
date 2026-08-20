@@ -1,3 +1,4 @@
+// apps/dashboard/app/dashboard/projects/components/manage-workspace/ManageProjectWorkspace.tsx
 "use client";
 
 import * as React from "react";
@@ -10,8 +11,6 @@ import {
   mockMessagesByProjectId,
   mockCurrentUser,
   project1,
-  memberSarah,
-  memberMarcus,
 } from "./mock-data";
 import type {
   ProjectWorkspaceItem,
@@ -22,9 +21,9 @@ import type {
   ClientMessageType,
   OutboundMessageType,
   ApprovalWorkflow,
-  ApprovalStageAudit,
-  ClientInboundRelay,
 } from "./types";
+import { api } from "@/lib/api";
+import { useProjectSocket } from "@/lib/socket/useProjectSocket";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
 
@@ -48,6 +47,7 @@ export function ManageProjectWorkspace({
 
   const [messagesByProject, setMessagesByProject] =
     React.useState<Record<string, ChatMessage[]>>(mockMessagesByProjectId);
+  const [isLoadingMessages, setIsLoadingMessages] = React.useState<boolean>(false);
 
   // Desktop left sidebar collapsed state
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = React.useState(false);
@@ -66,9 +66,125 @@ export function ManageProjectWorkspace({
 
   // Selected project object
   const selectedProject: ProjectWorkspaceItem =
-    projects.find((p) => p.id === selectedProjectId) ?? project1;
+    projects.find((p) => p.id === selectedProjectId) ?? projects[0] ?? project1;
 
   const currentMessages = messagesByProject[selectedProject.id] ?? [];
+
+  // 1. Fetch live projects from backend API
+  React.useEffect(() => {
+    let isMounted = true;
+    async function loadWorkspaceProjects() {
+      try {
+        const liveProjects = await api.get<ProjectWorkspaceItem[]>("/projects/workspace");
+        if (isMounted && Array.isArray(liveProjects) && liveProjects.length > 0) {
+          setProjects(liveProjects);
+          if (initialProjectId && liveProjects.some((p) => p.id === initialProjectId)) {
+            setSelectedProjectId(initialProjectId);
+          } else if (liveProjects[0] && (!selectedProjectId || selectedProjectId.startsWith("prj-") || !liveProjects.some((p) => p.id === selectedProjectId))) {
+            setSelectedProjectId(liveProjects[0].id);
+          }
+        }
+      } catch {
+        // Graceful fallback to mock projects in offline / mock dev mode
+      }
+    }
+    loadWorkspaceProjects();
+    return () => {
+      isMounted = false;
+    };
+  }, [initialProjectId]);
+
+  // 2. Fetch live messages when selectedProjectId changes
+  React.useEffect(() => {
+    let isMounted = true;
+    async function loadProjectMessages() {
+      if (!selectedProjectId || selectedProjectId.startsWith("prj-")) return;
+      setIsLoadingMessages(true);
+      try {
+        const res = await api.get<{ messages: any[] }>(`/projects/${selectedProjectId}/messages`);
+        if (isMounted && res && Array.isArray(res.messages)) {
+          setMessagesByProject((prev) => ({
+            ...prev,
+            [selectedProjectId]: res.messages as any,
+          }));
+        }
+      } catch {
+        // Fallback to existing memory messages
+      } finally {
+        if (isMounted) setIsLoadingMessages(false);
+      }
+    }
+    loadProjectMessages();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProjectId]);
+
+  // 3. Real-Time WebSocket Hook Integration
+  const socketClient = useProjectSocket({
+    projectId: selectedProjectId,
+    onNewMessage: (newMsg: any) => {
+      setMessagesByProject((prev) => {
+        const existing = prev[newMsg.projectId] || [];
+        if (existing.some((m) => m.id === newMsg.id)) return prev;
+        return {
+          ...prev,
+          [newMsg.projectId]: [...existing, newMsg],
+        };
+      });
+
+      // Update snippet in projects list
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === newMsg.projectId
+            ? {
+                ...p,
+                lastMessage: {
+                  id: newMsg.id,
+                  senderName: newMsg.senderName,
+                  text: newMsg.text,
+                  timestamp: newMsg.timestamp,
+                  isRead: true,
+                  purpose: newMsg.purpose,
+                },
+              }
+            : p
+        )
+      );
+    },
+    onMessageUpdated: (updatedMsg: any) => {
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [updatedMsg.projectId]: (prev[updatedMsg.projectId] || []).map((m) =>
+          m.id === updatedMsg.id ? updatedMsg : m
+        ),
+      }));
+    },
+    onReactionUpdated: ({ messageId, reactions }: any) => {
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [selectedProjectId]: (prev[selectedProjectId] || []).map((m) =>
+          m.id === messageId ? { ...m, reactions } : m
+        ),
+      }));
+    },
+    onSeenReceiptsUpdated: ({ messageId, seenBy }: any) => {
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [selectedProjectId]: (prev[selectedProjectId] || []).map((m) =>
+          m.id === messageId ? { ...m, seenBy } : m
+        ),
+      }));
+    },
+    onApprovalUpdated: ({ projectId, messageId, workflow }: any) => {
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [projectId]: (prev[projectId] || []).map((m) =>
+          m.id === messageId ? { ...m, approval: workflow } : m
+        ),
+      }));
+    },
+  });
 
   // Handle selecting a project
   const handleSelectProject = (project: ProjectWorkspaceItem) => {
@@ -82,7 +198,7 @@ export function ManageProjectWorkspace({
   };
 
   // Handle sending a message with purpose & approval
-  const handleSendMessage = (payload: {
+  const handleSendMessage = async (payload: {
     text: string;
     purpose: MessagePurpose;
     clientDirection?: ClientMessageDirection;
@@ -91,324 +207,171 @@ export function ManageProjectWorkspace({
     replyTo?: { id: string; senderName: string; text: string };
     attachments?: ChatAttachment[];
   }) => {
-    const newMsgId = `msg-${Date.now()}`;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-    const isClientOutbound =
-      payload.purpose === "CLIENT_COMMUNICATION" && payload.clientDirection === "OUTBOUND";
-    const isClientInbound =
-      payload.purpose === "CLIENT_COMMUNICATION" && payload.clientDirection === "INBOUND";
-
-    // 1. If Client Outbound (to client) -> requires lead approval & sales dispatch
-    let approvalWorkflow: ApprovalWorkflow | undefined = undefined;
-    if (isClientOutbound) {
-      const initialAudit: ApprovalStageAudit = {
-        id: `aud-${Date.now()}`,
-        stageName: "Draft Created",
-        stageKey: "DRAFTED",
-        actorName: mockCurrentUser.name,
-        actorRole: mockCurrentUser.designation || "Author",
-        timestamp,
-        durationMinutes: 0,
-        notes: `Drafted client communication (${payload.clientMessageType || "General"}) for ${selectedProject.client.name}.`,
-      };
-
-      approvalWorkflow = {
-        id: `appr-${Date.now()}`,
-        status: "PENDING_LEAD",
-        clientMessageType: payload.clientMessageType || payload.outboundType || "GENERAL_NOTICE",
-        outboundType: payload.outboundType || payload.clientMessageType || "GENERAL_NOTICE",
-        requestedBy: mockCurrentUser.name,
-        requestedAt: timestamp,
-        targetClient: selectedProject.client.name,
-        currentStageDwellMinutes: 1,
-        slaTargetMinutes: 30,
-        slaStatus: "ON_TRACK",
-        auditTrail: [initialAudit],
-      };
-    }
-
-    // 2. If Client Inbound (relayed from external client channel by sales)
-    let inboundRelay: ClientInboundRelay | undefined = undefined;
-    if (isClientInbound) {
-      inboundRelay = {
-        clientName: selectedProject.client.name,
-        clientAvatar: selectedProject.client.avatar,
-        clientCompany: selectedProject.client.company,
-        platform: selectedProject.client.platform === "Fiverr Pro" ? "Fiverr" : selectedProject.client.platform === "Upwork Enterprise" ? "Upwork" : "Direct Portal",
-        relayedBySalesName: mockCurrentUser.name,
-        relayedAt: timestamp,
-      };
-    }
-
-    const newMsg: ChatMessage = {
-      id: newMsgId,
-      projectId: selectedProject.id,
-      projectCode: selectedProject.code,
-      senderId: isClientInbound ? "client-inbound" : mockCurrentUser.id,
-      senderName: isClientInbound ? selectedProject.client.name : mockCurrentUser.name,
-      senderAvatar: isClientInbound ? (selectedProject.client.avatar || "") : mockCurrentUser.avatar,
-      senderDesignation: isClientInbound ? "Client Account" : mockCurrentUser.designation,
-      senderRole: isClientInbound ? "Member" : mockCurrentUser.role,
-      isCurrentUser: !isClientInbound,
-      isFromClient: isClientInbound,
-      text: payload.text,
-      timestamp,
-      dateGroup: "Today",
-      purpose: payload.purpose,
-      clientDirection: payload.clientDirection,
-      clientMessageType: payload.clientMessageType,
-      outboundType: payload.outboundType || payload.clientMessageType,
-      variant: isClientInbound ? "tinted" : isClientOutbound ? "outline" : "default",
-      approval: approvalWorkflow,
-      clientInboundRelay: inboundRelay,
-      seenBy: [
-        {
-          userId: mockCurrentUser.id,
-          userName: mockCurrentUser.name,
-          userAvatar: mockCurrentUser.avatar,
-          userDesignation: mockCurrentUser.designation,
-          seenAt: timestamp,
-        },
-      ],
-      replyTo: payload.replyTo,
-      attachments: payload.attachments,
-    };
-
-    setMessagesByProject((prev) => ({
-      ...prev,
-      [selectedProject.id]: [...(prev[selectedProject.id] || []), newMsg],
-    }));
-
-    // Update project last message snippet & pending approvals
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === selectedProject.id
-          ? {
-              ...p,
-              pendingApprovalsCount:
-                isClientOutbound
-                  ? (p.pendingApprovalsCount || 0) + 1
-                  : p.pendingApprovalsCount,
-              lastMessage: {
-                id: newMsgId,
-                senderName: isClientInbound ? selectedProject.client.name : mockCurrentUser.name,
-                text: payload.text || "Sent an attachment",
-                timestamp,
-                isRead: true,
-                purpose: payload.purpose,
-              },
-            }
-          : p
-      )
-    );
-
-    // Simulated acknowledgement reply from team member if it's an internal note
-    if (payload.purpose === "INTERNAL_DISCUSSION") {
-      setTimeout(() => {
-        const responder =
-          selectedProject.members.find((m) => m.isOnline && m.id !== mockCurrentUser.id) ??
-          memberSarah;
-        const replyMsgId = `msg-reply-${Date.now()}`;
-        const replyTimestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-        const autoReply: ChatMessage = {
-          id: replyMsgId,
-          projectId: selectedProject.id,
-          projectCode: selectedProject.code,
-          senderId: responder.id,
-          senderName: responder.name,
-          senderAvatar: responder.avatar,
-          senderDesignation: responder.designation,
-          senderRole: responder.role,
-          isCurrentUser: false,
-          text: `Acknowledged for #${selectedProject.code}. Testing team is syncing now. 👍`,
-          timestamp: replyTimestamp,
-          dateGroup: "Today",
-          purpose: "INTERNAL_DISCUSSION",
-          variant: "secondary",
-          seenBy: [
-            {
-              userId: responder.id,
-              userName: responder.name,
-              userAvatar: responder.avatar,
-              userDesignation: responder.designation,
-              seenAt: replyTimestamp,
-            },
-            {
-              userId: mockCurrentUser.id,
-              userName: mockCurrentUser.name,
-              userAvatar: mockCurrentUser.avatar,
-              userDesignation: mockCurrentUser.designation,
-              seenAt: replyTimestamp,
-            },
-          ],
-          replyTo: {
-            id: newMsgId,
-            senderName: mockCurrentUser.name,
-            text: payload.text.slice(0, 45) + "...",
-          },
-          reactions: [{ emoji: "👍", count: 1, reactedByMe: false }],
-        };
-
-        setMessagesByProject((prev) => ({
-          ...prev,
-          [selectedProject.id]: [...(prev[selectedProject.id] || []), autoReply],
-        }));
-
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === selectedProject.id
-              ? {
-                  ...p,
-                  lastMessage: {
-                    id: replyMsgId,
-                    senderName: responder.name,
-                    text: autoReply.text,
-                    timestamp: replyTimestamp,
-                    isRead: false,
-                    purpose: "INTERNAL_DISCUSSION",
-                  },
-                }
-              : p
-          )
-        );
-      }, 1600);
+    try {
+      // Attempt WebSocket emission
+      await socketClient.sendMessage({
+        text: payload.text,
+        purpose: payload.purpose,
+        clientDirection: payload.clientDirection,
+        clientMessageType: payload.clientMessageType || payload.outboundType,
+        replyToMessageId: payload.replyTo?.id,
+        attachments: payload.attachments?.map((att) => ({
+          name: att.name,
+          type: att.type,
+          url: att.url || "",
+          thumbnailUrl: att.thumbnailUrl || null,
+          fileSizeBytes: att.fileSizeBytes || null,
+          extension: att.extension || null,
+          mimeType: att.mimeType || null,
+        })),
+      });
+    } catch {
+      // Fallback to REST API if socket is temporarily offline
+      try {
+        const res = await api.post(`/projects/${selectedProjectId}/messages`, {
+          text: payload.text,
+          purpose: payload.purpose,
+          clientDirection: payload.clientDirection,
+          clientMessageType: payload.clientMessageType || payload.outboundType,
+          replyToMessageId: payload.replyTo?.id,
+          attachments: payload.attachments,
+        });
+        if (res) {
+          setMessagesByProject((prev) => ({
+            ...prev,
+            [selectedProjectId]: [...(prev[selectedProjectId] || []), res],
+          }));
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Failed to send message");
+      }
     }
   };
 
   // Handle updating an approval workflow state
-  const handleUpdateApproval = (messageId: string, workflow: ApprovalWorkflow) => {
-    setMessagesByProject((prev) => {
-      const list = prev[selectedProject.id] || [];
-      const updated = list.map((msg) =>
-        msg.id === messageId ? { ...msg, approval: workflow } : msg
-      );
-      return { ...prev, [selectedProject.id]: updated };
-    });
-
-    // Update pending approvals counter on project
-    setProjects((prev) =>
-      prev.map((p) => {
-        if (p.id !== selectedProject.id) return p;
-        const currentList = messagesByProject[p.id] || [];
-        const count = currentList.filter(
-          (m) =>
-            m.approval &&
-            (m.id === messageId
-              ? workflow.status === "PENDING_LEAD" || workflow.status === "PENDING_SALES"
-              : m.approval.status === "PENDING_LEAD" || m.approval.status === "PENDING_SALES")
-        ).length;
-        return { ...p, pendingApprovalsCount: count };
-      })
-    );
-  };
-
-  // Handle scrolling to message
-  const handleScrollToMessage = (msgId: string) => {
-    setTargetScrollMessageId(msgId);
-    if (mobileActiveScreen === "list") {
-      setMobileActiveScreen("chat");
+  const handleUpdateApproval = async (messageId: string, updatedWorkflow: ApprovalWorkflow) => {
+    try {
+      if (updatedWorkflow.status === "PENDING_SALES") {
+        await socketClient.dispatchApprovalAction({
+          messageId,
+          action: "LEAD_APPROVE",
+          notes: "Approved internally by Tech Lead",
+        });
+      } else if (updatedWorkflow.status === "DISPATCHED") {
+        await socketClient.dispatchApprovalAction({
+          messageId,
+          action: "SALES_DISPATCH",
+          dispatchPlatform: updatedWorkflow.dispatchPlatform || "Direct Portal",
+          dispatchReferenceId: updatedWorkflow.dispatchReferenceId,
+        });
+      } else if (updatedWorkflow.status === "REVISION_REQUESTED") {
+        await socketClient.dispatchApprovalAction({
+          messageId,
+          action: "REVISION_REQUESTED",
+          rejectionReason: updatedWorkflow.rejectionReason || "Revision requested",
+        });
+      }
+    } catch {
+      // Local optimistic update fallback
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [selectedProject.id]: (prev[selectedProject.id] || []).map((m) =>
+          m.id === messageId ? { ...m, approval: updatedWorkflow } : m
+        ),
+      }));
     }
   };
 
-  // Handle adding or toggling an emoji reaction
-  const handleReact = (messageId: string, emoji: string) => {
-    setMessagesByProject((prev) => {
-      const list = prev[selectedProject.id] || [];
-      const updated = list.map((msg) => {
-        if (msg.id !== messageId) return msg;
-
-        const existingReactions = msg.reactions || [];
-        const found = existingReactions.find((r) => r.emoji === emoji);
-
-        let newReactions;
-        if (found) {
-          if (found.reactedByMe) {
-            newReactions = existingReactions
-              .map((r) =>
-                r.emoji === emoji
-                  ? { ...r, count: r.count - 1, reactedByMe: false }
-                  : r
-              )
-              .filter((r) => r.count > 0);
-          } else {
-            newReactions = existingReactions.map((r) =>
-              r.emoji === emoji
-                ? { ...r, count: r.count + 1, reactedByMe: true }
-                : r
-            );
-          }
-        } else {
-          newReactions = [...existingReactions, { emoji, count: 1, reactedByMe: true }];
-        }
-
-        return { ...msg, reactions: newReactions };
-      });
-
-      return {
-        ...prev,
-        [selectedProject.id]: updated,
-      };
-    });
+  // Handle toggling reaction
+  const handleToggleReaction = (messageId: string, emoji: string) => {
+    socketClient.sendReaction(messageId, emoji);
   };
 
-  // Responsive sidebar toggling
-  const handleToggleSidebar = () => {
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      setMobileDrawerOpen(true);
-    } else {
-      setIsRightSidebarOpen((prev) => !prev);
+  // Handle scrolling to a pinned message or announcement
+  const handleScrollToMessage = (messageId: string) => {
+    setTargetScrollMessageId(messageId);
+  };
+
+  // Handle pinning/unpinning a message
+  const handleTogglePinMessage = async (messageId: string) => {
+    try {
+      const updated = await api.post(`/projects/${selectedProjectId}/messages/${messageId}/pin`);
+      if (updated) {
+        setMessagesByProject((prev) => ({
+          ...prev,
+          [selectedProjectId]: (prev[selectedProjectId] || []).map((m) =>
+            m.id === messageId ? updated : m
+          ),
+        }));
+        toast.success(updated.isPinned ? "Message pinned to banner!" : "Message unpinned");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to toggle pin status");
     }
   };
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-background flex flex-1 min-h-0">
-      {/* 1. Left Project List Sidebar */}
+    <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-background text-foreground select-none">
+      {/* 1. Desktop Left Sidebar: Projects List */}
       <div
         className={cn(
-          "shrink-0 h-full transition-all duration-300",
-          mobileActiveScreen === "list" ? "w-full block" : "hidden md:block",
-          isLeftSidebarCollapsed ? "w-16 xl:w-[68px]" : "w-full md:w-80 lg:w-84 xl:w-88"
+          "hidden md:flex flex-col border-r border-border/80 bg-card transition-all duration-300 ease-in-out shrink-0",
+          isLeftSidebarCollapsed ? "w-[68px]" : "w-80 lg:w-88"
         )}
       >
         <ProjectListSidebar
           projects={projects}
-          selectedProjectId={selectedProject.id}
+          selectedProjectId={selectedProjectId}
           onSelectProject={handleSelectProject}
-          onNewProject={onNewProject}
           isCollapsed={isLeftSidebarCollapsed}
           onToggleCollapse={() => setIsLeftSidebarCollapsed((prev) => !prev)}
+          onNewProject={onNewProject}
         />
       </div>
 
-      {/* 2. Middle Centralized Communication & Approval Chat Panel */}
+      {/* 2. Mobile Left Sidebar (Full screen when in "list" mode) */}
       <div
-        className={`flex-1 min-w-0 max-w-full h-full flex flex-col overflow-hidden ${
-          mobileActiveScreen === "chat" ? "flex" : "hidden md:flex"
-        }`}
-      >
-        {selectedProject ? (
-          <ProjectChatPanel
-            project={selectedProject}
-            messages={currentMessages}
-            onSendMessage={handleSendMessage}
-            onReact={handleReact}
-            onUpdateApproval={handleUpdateApproval}
-            onBackMobile={() => setMobileActiveScreen("list")}
-            isRightSidebarOpen={isRightSidebarOpen}
-            onToggleRightSidebar={handleToggleSidebar}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground text-xs">
-            Select a project to view conversations and approvals
-          </div>
+        className={cn(
+          "flex md:hidden flex-col w-full bg-card shrink-0",
+          mobileActiveScreen === "list" ? "flex" : "hidden"
         )}
+      >
+        <ProjectListSidebar
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          onSelectProject={handleSelectProject}
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+          onNewProject={onNewProject}
+        />
       </div>
 
-      {/* 3. Right Project Details Sidebar (Desktop) */}
+      {/* 3. Center Chat Panel (or Mobile Chat Screen) */}
+      <div
+        className={cn(
+          "flex-1 flex flex-col min-w-0 bg-muted/20 relative h-full",
+          mobileActiveScreen === "chat" ? "flex" : "hidden md:flex"
+        )}
+      >
+        <ProjectChatPanel
+          project={selectedProject}
+          messages={currentMessages}
+          onSendMessage={handleSendMessage}
+          onUpdateApproval={handleUpdateApproval}
+          onToggleReaction={handleToggleReaction}
+          onTogglePinMessage={handleTogglePinMessage}
+          onToggleRightSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
+          isRightSidebarOpen={isRightSidebarOpen}
+          targetScrollMessageId={targetScrollMessageId}
+          onClearScrollTarget={() => setTargetScrollMessageId(null)}
+          onMobileBack={() => setMobileActiveScreen("list")}
+          onOpenMobileDetails={() => setMobileDrawerOpen(true)}
+        />
+      </div>
+
+      {/* 4. Desktop Right Sidebar: Project Meta, Milestones & Dispatch Hub */}
       {isRightSidebarOpen && (
-        <div className="hidden lg:block w-84 xl:w-92 shrink-0 h-full transition-all">
+        <div className="hidden xl:flex flex-col w-84 2xl:w-96 border-l border-border/80 bg-card shrink-0 transition-all duration-200">
           <ProjectDetailsSidebar
             project={selectedProject}
             messages={currentMessages}
@@ -419,16 +382,16 @@ export function ManageProjectWorkspace({
         </div>
       )}
 
-      {/* 4. Right Project Details Drawer (Mobile & Tablet) */}
+      {/* 5. Mobile / Tablet Drawer for Right Sidebar */}
       <Sheet open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
-        <SheetContent side="right" className="p-0 w-full sm:max-w-md bg-card">
+        <SheetContent side="right" className="w-full sm:max-w-md p-0 bg-card">
           <ProjectDetailsSidebar
             project={selectedProject}
             messages={currentMessages}
             onUpdateApproval={handleUpdateApproval}
             onScrollToMessage={(msgId) => {
-              handleScrollToMessage(msgId);
               setMobileDrawerOpen(false);
+              handleScrollToMessage(msgId);
             }}
             onClose={() => setMobileDrawerOpen(false)}
           />

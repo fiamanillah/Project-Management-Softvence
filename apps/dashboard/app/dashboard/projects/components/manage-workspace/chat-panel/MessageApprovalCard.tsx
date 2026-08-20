@@ -27,12 +27,18 @@ interface MessageApprovalCardProps {
   workflow: ApprovalWorkflow;
   onUpdateApproval: (updated: ApprovalWorkflow) => void;
   isCurrentUser: boolean;
+  canLeadApprove?: boolean;
+  canSalesDispatch?: boolean;
+  canRequestRevision?: boolean;
 }
 
 export function MessageApprovalCard({
   workflow,
   onUpdateApproval,
   isCurrentUser,
+  canLeadApprove = true,
+  canSalesDispatch = true,
+  canRequestRevision = true,
 }: MessageApprovalCardProps) {
   const [dispatchDialogOpen, setDispatchDialogOpen] = React.useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = React.useState(false);
@@ -211,49 +217,60 @@ export function MessageApprovalCard({
       )}
 
       {/* Interactive Action Buttons */}
-      <div className="flex items-center justify-end gap-2 mt-2.5 pt-2 border-t border-border/50">
-        {workflow.status === "PENDING_LEAD" && (
-          <>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => setRejectDialogOpen(true)}
-              className="text-xs text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10 cursor-pointer h-7"
-            >
-              <X className="size-3 mr-1" /> Request Revision
-            </Button>
-            <Button
-              size="xs"
-              variant="default"
-              onClick={handleLeadApprove}
-              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer h-7 shadow-xs"
-            >
-              <Check className="size-3 mr-1" /> Approve for Client
-            </Button>
-          </>
-        )}
+      {((workflow.status === "PENDING_LEAD" && (canLeadApprove || canRequestRevision)) ||
+        (workflow.status === "PENDING_SALES" && (canSalesDispatch || canRequestRevision))) && (
+        <div className="flex items-center justify-end gap-2 mt-2.5 pt-2 border-t border-border/50">
+          {workflow.status === "PENDING_LEAD" && (
+            <>
+              {canRequestRevision && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => setRejectDialogOpen(true)}
+                  className="text-xs text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10 cursor-pointer h-7"
+                >
+                  <X className="size-3 mr-1" /> Request Revision
+                </Button>
+              )}
+              {canLeadApprove && (
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={handleLeadApprove}
+                  className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer h-7 shadow-xs"
+                >
+                  <Check className="size-3 mr-1" /> Approve for Client
+                </Button>
+              )}
+            </>
+          )}
 
-        {workflow.status === "PENDING_SALES" && (
-          <>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => setRejectDialogOpen(true)}
-              className="text-xs text-muted-foreground hover:bg-muted cursor-pointer h-7"
-            >
-              <RotateCcw className="size-3 mr-1" /> Return for Edits
-            </Button>
-            <Button
-              size="xs"
-              variant="default"
-              onClick={() => setDispatchDialogOpen(true)}
-              className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer h-7 shadow-xs gap-1"
-            >
-              <Send className="size-3" /> Confirm Dispatched to Client
-            </Button>
-          </>
-        )}
-      </div>
+          {workflow.status === "PENDING_SALES" && (
+            <>
+              {canRequestRevision && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => setRejectDialogOpen(true)}
+                  className="text-xs text-muted-foreground hover:bg-muted cursor-pointer h-7"
+                >
+                  <RotateCcw className="size-3 mr-1" /> Return for Edits
+                </Button>
+              )}
+              {canSalesDispatch && (
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => setDispatchDialogOpen(true)}
+                  className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer h-7 shadow-xs gap-1"
+                >
+                  <Send className="size-3" /> Confirm Dispatched to Client
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Dispatch Confirmation Dialog */}
       <Dialog open={dispatchDialogOpen} onOpenChange={setDispatchDialogOpen}>

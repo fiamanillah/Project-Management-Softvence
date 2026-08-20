@@ -60,6 +60,17 @@ model User {
   madeDelegations             Delegation[]                     @relation("Delegator")
   receivedDelegations         Delegation[]                     @relation("Delegatee")
   createdDelegations          Delegation[]                     @relation("DelegationCreator")
+  sentProjectMessages         ProjectMessage[]                 @relation("ProjectMessageSender")
+  pinnedProjectMessages       ProjectMessage[]                 @relation("ProjectMessagePinnedBy")
+  requestedApprovalWorkflows  MessageApprovalWorkflow[]        @relation("WorkflowRequestedBy")
+  leadApprovedWorkflows       MessageApprovalWorkflow[]        @relation("WorkflowLeadApprover")
+  salesDispatchedWorkflows    MessageApprovalWorkflow[]        @relation("WorkflowSalesDispatcher")
+  rejectedWorkflows           MessageApprovalWorkflow[]        @relation("WorkflowRejector")
+  approvalStageAudits         ApprovalStageAudit[]
+  projectMessageReactions     ProjectMessageReaction[]
+  projectMessageReadReceipts  ProjectMessageReadReceipt[]
+  assignedProjectMilestones   ProjectMilestone[]               @relation("ProjectMilestoneAssignee")
+  addedProjectLinks           ProjectLink[]                    @relation("ProjectLinkAdder")
 
   @@index([email])
   @@index([roleId])

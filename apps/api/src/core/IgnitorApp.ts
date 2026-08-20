@@ -12,6 +12,7 @@ import { notFoundHandler } from "@/middleware/notFound";
 import { setupGlobalMiddlewares } from "@/middleware/globalMiddlewares";
 import { sortModulesByDependencies } from "@/utils/moduleSorter";
 import { Server } from "http";
+import { RealtimeServer } from "./realtime/RealtimeServer";
 
 export class IgnitorApp {
   private app: Express;
@@ -85,13 +86,16 @@ export class IgnitorApp {
 
       // 5. Start the server
       this.logger.info("🙭 Starting server...");
-      const server = this.app.listen(port, () => {
+      const server = this.app.listen(port, async () => {
         this.logger.info(
           `🗲 Ignitor Server running on port ${port} in ${config.server.env} mode`,
         );
       });
 
-      // 6. Setup Event Listeners for crash and shutdown safety
+      // 6. Attach Realtime Engine (Socket.IO + Redis Adapter)
+      await RealtimeServer.getInstance().attach(server);
+
+      // 7. Setup Event Listeners for crash and shutdown safety
       this.setupServerEvents(server, port);
       this.setupGracefulShutdown(server);
 
@@ -145,7 +149,14 @@ export class IgnitorApp {
   public async shutdown(): Promise<void> {
     this.logger.info("🙭 Shutting down application...");
 
-    // 1. Shutdown modules in reverse order
+    // 1. Shutdown real-time engine
+    try {
+      await RealtimeServer.getInstance().shutdown();
+    } catch (error) {
+      this.logger.error("Error shutting down RealtimeServer:", { error });
+    }
+
+    // 2. Shutdown modules in reverse order
     for (let i = this.modules.length - 1; i >= 0; i--) {
       const module = this.modules[i];
       if (module.onShutdown) {
@@ -160,7 +171,7 @@ export class IgnitorApp {
       }
     }
 
-    // 2. Shutdown infrastructure (Disconnect Prisma, Redis, etc.)
+    // 3. Shutdown infrastructure (Disconnect Prisma, Redis, etc.)
     await this.context.shutdown();
     this.logger.info("✔ Application shutdown complete");
   }

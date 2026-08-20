@@ -1,3 +1,4 @@
+// apps/dashboard/app/dashboard/projects/components/manage-workspace/chat-panel/ProjectChatPanel.tsx
 "use client";
 
 import * as React from "react";
@@ -30,9 +31,15 @@ interface ProjectChatPanelProps {
     replyTo?: { id: string; senderName: string; text: string };
     attachments?: ChatAttachment[];
   }) => void;
-  onReact: (messageId: string, emoji: string) => void;
+  onReact?: (messageId: string, emoji: string) => void;
+  onToggleReaction?: (messageId: string, emoji: string) => void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
+  onTogglePinMessage?: (messageId: string) => void;
   onBackMobile?: () => void;
+  onMobileBack?: () => void;
+  onOpenMobileDetails?: () => void;
+  targetScrollMessageId?: string | null;
+  onClearScrollTarget?: () => void;
   isRightSidebarOpen: boolean;
   onToggleRightSidebar: () => void;
   className?: string;
@@ -43,8 +50,14 @@ export function ProjectChatPanel({
   messages,
   onSendMessage,
   onReact,
+  onToggleReaction,
   onUpdateApproval,
+  onTogglePinMessage,
   onBackMobile,
+  onMobileBack,
+  onOpenMobileDetails,
+  targetScrollMessageId: externalTargetScrollMessageId,
+  onClearScrollTarget,
   isRightSidebarOpen,
   onToggleRightSidebar,
   className,
@@ -53,7 +66,13 @@ export function ProjectChatPanel({
   const [isSearchActive, setIsSearchActive] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [activeChannel, setActiveChannel] = React.useState<ChannelFilterMode>("all");
-  const [targetScrollMessageId, setTargetScrollMessageId] = React.useState<string | null>(null);
+  const [internalTargetScrollMessageId, setInternalTargetScrollMessageId] = React.useState<string | null>(null);
+
+  const effectiveTargetScrollMessageId = externalTargetScrollMessageId || internalTargetScrollMessageId;
+
+  // React handler fallback
+  const handleReact = onToggleReaction || onReact || (() => {});
+  const handleMobileBack = onMobileBack || onBackMobile;
 
   // Compute pending approvals count
   const pendingApprovalsCount = React.useMemo(() => {
@@ -70,7 +89,7 @@ export function ProjectChatPanel({
 
   const handleScrollToMessage = (messageId: string) => {
     if (messageId) {
-      setTargetScrollMessageId(messageId);
+      setInternalTargetScrollMessageId(messageId);
     }
   };
 
@@ -79,7 +98,7 @@ export function ProjectChatPanel({
       {/* 1. Chat Header with Project Code & Consolidated Channel Filter + Pinned Dropdown Sub-bar */}
       <ProjectChatHeader
         project={project}
-        onBackMobile={onBackMobile}
+        onBackMobile={handleMobileBack}
         isRightSidebarOpen={isRightSidebarOpen}
         onToggleRightSidebar={onToggleRightSidebar}
         onSearchClick={() => setIsSearchActive((prev) => !prev)}
@@ -119,15 +138,18 @@ export function ProjectChatPanel({
         projectCode={project.code}
         projectCreatedAt="Oct 01, 2026"
         onReply={handleReply}
-        onReact={onReact}
+        onReact={handleReact}
         onUpdateApproval={onUpdateApproval}
         searchFilterQuery={searchQuery}
         channelFilter={activeChannel}
-        targetScrollMessageId={targetScrollMessageId}
-        onTargetScrolled={() => setTargetScrollMessageId(null)}
+        targetScrollMessageId={effectiveTargetScrollMessageId}
+        onTargetScrolled={() => {
+          setInternalTargetScrollMessageId(null);
+          onClearScrollTarget?.();
+        }}
       />
 
-      {/* 5. Message Composer with Purpose & Client Workflow */}
+      {/* 4. Message Composer with Purpose & Client Workflow */}
       <MessageComposer
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}

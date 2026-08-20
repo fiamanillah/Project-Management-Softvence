@@ -9,6 +9,17 @@ import type {
   UpdateProjectDTO,
   CreateProjectComponentDTO,
   UpdateProjectComponentDTO,
+  CreateProjectMessageDTO,
+  ToggleReactionDTO,
+  MarkMessagesSeenDTO,
+  LeadApproveDTO,
+  SalesDispatchDTO,
+  RequestRevisionDTO,
+  CreateMessageTypeDTO,
+  UpdateMessageTypeDTO,
+  CreateProjectMilestoneDTO,
+  UpdateProjectMilestoneDTO,
+  CreateProjectLinkDTO,
 } from "./ProjectDTO";
 
 function getActor(req: Request): AuthenticatedUser {
@@ -17,6 +28,7 @@ function getActor(req: Request): AuthenticatedUser {
     email: (req.user as any)?.email || "",
     systemRole: req.user?.systemRole || "Staff",
     roleId: (req.user as any)?.roleId || "",
+    branchId: (req.user as any)?.branchId || null,
     designationId: req.user?.designationId,
     ipAddress: req.ip || (req.headers["x-forwarded-for"] as string),
     userAgent: req.headers["user-agent"],
@@ -28,6 +40,154 @@ export class ProjectsController extends BaseController {
     super();
   }
 
+  // --- Workspace Command Center ---
+  public async getWorkspaceProjects(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projects = await this.projectsService.getWorkspaceProjects(req.query as any, actor);
+    return this.sendResponse(req, res, "Workspace projects retrieved successfully", 200, projects);
+  }
+
+  // --- Real-time Chat & Messages ---
+  public async getProjectMessages(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const result = await this.projectsService.getProjectMessages(projectId, req.query as any, actor);
+    return this.sendResponse(req, res, "Project messages retrieved successfully", 200, result);
+  }
+
+  public async sendMessage(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const dto = req.validatedBody as CreateProjectMessageDTO;
+    const message = await this.projectsService.sendMessage(projectId, dto, actor);
+    return this.sendCreatedResponse(req, res, message, "Message sent successfully");
+  }
+
+  public async toggleReaction(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const dto = req.validatedBody as ToggleReactionDTO;
+    const result = await this.projectsService.toggleReaction(projectId, messageId, dto, actor);
+    return this.sendResponse(req, res, "Reaction updated successfully", 200, result);
+  }
+
+  public async markMessagesSeen(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const dto = req.validatedBody as MarkMessagesSeenDTO;
+    const result = await this.projectsService.markMessagesSeen(projectId, dto, actor);
+    return this.sendResponse(req, res, "Read receipts recorded successfully", 200, result);
+  }
+
+  public async togglePinMessage(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const updated = await this.projectsService.togglePinMessage(projectId, messageId, actor);
+    return this.sendResponse(req, res, "Message pin status updated", 200, updated);
+  }
+
+  // --- Approval State Machine ---
+  public async leadApprove(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const dto = req.validatedBody as LeadApproveDTO;
+    const workflow = await this.projectsService.leadApprove(projectId, messageId, dto, actor);
+    return this.sendResponse(req, res, "Message approved internally by Tech Lead", 200, workflow);
+  }
+
+  public async salesDispatch(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const dto = req.validatedBody as SalesDispatchDTO;
+    const workflow = await this.projectsService.salesDispatch(projectId, messageId, dto, actor);
+    return this.sendResponse(req, res, "Message confirmed dispatched to client", 200, workflow);
+  }
+
+  public async requestRevision(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const dto = req.validatedBody as RequestRevisionDTO;
+    const workflow = await this.projectsService.requestRevision(projectId, messageId, dto, actor);
+    return this.sendResponse(req, res, "Revision requested from message author", 200, workflow);
+  }
+
+  // --- Dynamic Message Types ---
+  public async getMessageTypes(req: Request, res: Response) {
+    const actor = getActor(req);
+    const direction = req.query.direction as string | undefined;
+    const types = await this.projectsService.getMessageTypes(direction, actor);
+    return this.sendResponse(req, res, "Message types retrieved successfully", 200, types);
+  }
+
+  public async createMessageType(req: Request, res: Response) {
+    const actor = getActor(req);
+    const dto = req.validatedBody as CreateMessageTypeDTO;
+    const created = await this.projectsService.createMessageType(dto, actor);
+    return this.sendCreatedResponse(req, res, created, "Message type created successfully");
+  }
+
+  public async updateMessageType(req: Request, res: Response) {
+    const actor = getActor(req);
+    const id = req.params.id as string;
+    const dto = req.validatedBody as UpdateMessageTypeDTO;
+    const updated = await this.projectsService.updateMessageType(id, dto, actor);
+    return this.sendResponse(req, res, "Message type updated successfully", 200, updated);
+  }
+
+  public async deleteMessageType(req: Request, res: Response) {
+    const actor = getActor(req);
+    const id = req.params.id as string;
+    const result = await this.projectsService.deleteMessageType(id, actor);
+    return this.sendResponse(req, res, "Message type deactivated successfully", 200, result);
+  }
+
+  // --- Milestones ---
+  public async getMilestones(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const milestones = await this.projectsService.getMilestones(projectId, actor);
+    return this.sendResponse(req, res, "Project milestones retrieved successfully", 200, milestones);
+  }
+
+  public async createMilestone(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const dto = req.validatedBody as CreateProjectMilestoneDTO;
+    const created = await this.projectsService.createMilestone(projectId, dto, actor);
+    return this.sendCreatedResponse(req, res, created, "Milestone created successfully");
+  }
+
+  public async updateMilestone(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const milestoneId = req.params.milestoneId as string;
+    const dto = req.validatedBody as UpdateProjectMilestoneDTO;
+    const updated = await this.projectsService.updateMilestone(projectId, milestoneId, dto, actor);
+    return this.sendResponse(req, res, "Milestone updated successfully", 200, updated);
+  }
+
+  // --- Collateral Links ---
+  public async getLinks(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const links = await this.projectsService.getLinks(projectId, actor);
+    return this.sendResponse(req, res, "Project links retrieved successfully", 200, links);
+  }
+
+  public async createLink(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const dto = req.validatedBody as CreateProjectLinkDTO;
+    const created = await this.projectsService.createLink(projectId, dto, actor);
+    return this.sendCreatedResponse(req, res, created, "Link added successfully");
+  }
+
+  // --- Project CRUD ---
   public async getProjects(req: Request, res: Response) {
     const actor = getActor(req);
     const result = await this.projectsService.getProjects(req.query as any, actor);
@@ -122,7 +282,6 @@ export class ProjectsController extends BaseController {
     return this.sendResponse(req, res, "Component deleted successfully", 200, updated);
   }
 
-  // Lookup Handlers
   public async getClients(req: Request, res: Response) {
     const actor = getActor(req);
     const result = await this.projectsService.getClients(req.query as any, actor);
@@ -131,43 +290,37 @@ export class ProjectsController extends BaseController {
 
   public async createClient(req: Request, res: Response) {
     const actor = getActor(req);
-    const dto = req.validatedBody;
-    const created = await this.projectsService.createClient(dto, actor);
-    return this.sendCreatedResponse(req, res, created, "Client created successfully");
+    const result = await this.projectsService.createClient(req.body, actor);
+    return this.sendCreatedResponse(req, res, result, "Client created successfully");
   }
 
   public async createProfile(req: Request, res: Response) {
     const actor = getActor(req);
-    const dto = req.validatedBody;
-    const created = await this.projectsService.createProfile(dto, actor);
-    return this.sendCreatedResponse(req, res, created, "Profile created successfully");
+    const result = await this.projectsService.createProfile(req.body, actor);
+    return this.sendCreatedResponse(req, res, result, "Profile created successfully");
   }
 
   public async createPlatform(req: Request, res: Response) {
     const actor = getActor(req);
-    const dto = req.validatedBody;
-    const created = await this.projectsService.createPlatform(dto, actor);
-    return this.sendCreatedResponse(req, res, created, "Platform created successfully");
+    const result = await this.projectsService.createPlatform(req.body, actor);
+    return this.sendCreatedResponse(req, res, result, "Platform created successfully");
   }
 
   public async createServiceLine(req: Request, res: Response) {
     const actor = getActor(req);
-    const dto = req.validatedBody;
-    const created = await this.projectsService.createServiceLine(dto, actor);
-    return this.sendCreatedResponse(req, res, created, "Service Line created successfully");
+    const result = await this.projectsService.createServiceLine(req.body, actor);
+    return this.sendCreatedResponse(req, res, result, "Service line created successfully");
   }
 
   public async createStatus(req: Request, res: Response) {
     const actor = getActor(req);
-    const dto = req.validatedBody;
-    const created = await this.projectsService.createStatus(dto, actor);
-    return this.sendCreatedResponse(req, res, created, "Project Status created successfully");
+    const result = await this.projectsService.createStatus(req.body, actor);
+    return this.sendCreatedResponse(req, res, result, "Status created successfully");
   }
 
   public async createOrderSource(req: Request, res: Response) {
     const actor = getActor(req);
-    const dto = req.validatedBody;
-    const created = await this.projectsService.createOrderSource(dto, actor);
-    return this.sendCreatedResponse(req, res, created, "Order Source created successfully");
+    const result = await this.projectsService.createOrderSource(req.body, actor);
+    return this.sendCreatedResponse(req, res, result, "Order source created successfully");
   }
 }

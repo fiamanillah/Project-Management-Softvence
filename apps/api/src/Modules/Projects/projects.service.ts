@@ -16,11 +16,28 @@ import type {
   CreateQuickServiceLineDTO,
   CreateQuickStatusDTO,
   CreateQuickOrderSourceDTO,
+  CreateProjectMessageDTO,
+  ToggleReactionDTO,
+  MarkMessagesSeenDTO,
+  LeadApproveDTO,
+  SalesDispatchDTO,
+  RequestRevisionDTO,
+  CreateMessageTypeDTO,
+  UpdateMessageTypeDTO,
+  CreateProjectMilestoneDTO,
+  UpdateProjectMilestoneDTO,
+  CreateProjectLinkDTO,
   ProjectItem,
   ProjectDetailItem,
   ProjectCapabilities,
   ProjectStats,
   ProjectLookups,
+  ProjectWorkspaceItem,
+  ProjectMessageItem,
+  MessageTypeItem,
+  ProjectMilestoneItem,
+  ProjectLinkItem,
+  ApprovalWorkflowItem,
 } from "./ProjectDTO";
 import {
   ProjectsQueryService,
@@ -30,12 +47,19 @@ import { ProjectsMutationService } from "./services/projects.mutation.service";
 import { ProjectsAssignmentService } from "./services/projects.assignment.service";
 import { ProjectsComponentService } from "./services/projects.component.service";
 import { ProjectsLookupService } from "./services/projects.lookup.service";
+import { ProjectChatService } from "./services/ProjectChatService";
+import { ProjectApprovalService } from "./services/ProjectApprovalService";
+import { ProjectMessageTypeService } from "./services/ProjectMessageTypeService";
+import { ProjectCollateralService } from "./services/ProjectCollateralService";
+import { ProjectsWorkspaceService } from "./services/projects.workspace.service";
 import {
   getProjectResourceContext,
   generateProjectCode,
   validateHierarchyNoCycles,
   computeProjectCapabilities,
   sanitizeAndDecorateProject,
+  sanitizeAndDecorateWorkspaceProject,
+  sanitizeAndDecorateMessage,
 } from "./services/projects.capability.helper";
 
 export type { GetProjectsQuery };
@@ -45,16 +69,23 @@ export {
   ProjectsAssignmentService,
   ProjectsComponentService,
   ProjectsLookupService,
+  ProjectChatService,
+  ProjectApprovalService,
+  ProjectMessageTypeService,
+  ProjectCollateralService,
+  ProjectsWorkspaceService,
   getProjectResourceContext,
   generateProjectCode,
   validateHierarchyNoCycles,
   computeProjectCapabilities,
   sanitizeAndDecorateProject,
+  sanitizeAndDecorateWorkspaceProject,
+  sanitizeAndDecorateMessage,
 };
 
 /**
  * ProjectsService Facade Orchestrator
- * Composes specialized query, mutation, assignment, component, and lookup sub-services.
+ * Composes specialized query, mutation, assignment, component, lookup, chat, approval, and workspace sub-services.
  */
 export class ProjectsService {
   private logger = new AppLogger("ProjectsService");
@@ -64,6 +95,11 @@ export class ProjectsService {
   public readonly assignment: ProjectsAssignmentService;
   public readonly component: ProjectsComponentService;
   public readonly lookup: ProjectsLookupService;
+  public readonly chat: ProjectChatService;
+  public readonly approval: ProjectApprovalService;
+  public readonly messageType: ProjectMessageTypeService;
+  public readonly collateral: ProjectCollateralService;
+  public readonly workspace: ProjectsWorkspaceService;
 
   constructor(private readonly prisma: PrismaClient) {
     this.query = new ProjectsQueryService(prisma);
@@ -71,6 +107,11 @@ export class ProjectsService {
     this.assignment = new ProjectsAssignmentService(prisma, this.query);
     this.component = new ProjectsComponentService(prisma, this.query);
     this.lookup = new ProjectsLookupService(prisma);
+    this.chat = new ProjectChatService(prisma);
+    this.approval = new ProjectApprovalService(prisma);
+    this.messageType = new ProjectMessageTypeService(prisma);
+    this.collateral = new ProjectCollateralService(prisma);
+    this.workspace = new ProjectsWorkspaceService(prisma);
   }
 
   // --- Capability & Helpers ---
@@ -83,6 +124,14 @@ export class ProjectsService {
     actor: AuthenticatedUser,
   ): Promise<ProjectItem> {
     return sanitizeAndDecorateProject(project, actor);
+  }
+
+  // --- Workspace Command Center ---
+  public async getWorkspaceProjects(
+    query: { search?: string; statusId?: string; priorityId?: string },
+    actor: AuthenticatedUser,
+  ): Promise<ProjectWorkspaceItem[]> {
+    return this.workspace.getWorkspaceProjects(query, actor);
   }
 
   // --- Query & Reporting ---
@@ -165,6 +214,114 @@ export class ProjectsService {
     actor: AuthenticatedUser,
   ): Promise<ProjectDetailItem> {
     return this.component.deleteComponent(projectId, componentId, actor);
+  }
+
+  // --- Real-time Chat & Messages ---
+  public async getProjectMessages(
+    projectId: string,
+    query: { limit?: number; cursor?: string; search?: string; purpose?: string },
+    actor: AuthenticatedUser,
+  ): Promise<{ messages: ProjectMessageItem[]; nextCursor?: string }> {
+    return this.chat.getProjectMessages(projectId, query, actor);
+  }
+
+  public async sendMessage(
+    projectId: string,
+    dto: CreateProjectMessageDTO,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageItem> {
+    return this.chat.sendMessage(projectId, dto, actor);
+  }
+
+  public async toggleReaction(
+    projectId: string,
+    messageId: string,
+    dto: ToggleReactionDTO,
+    actor: AuthenticatedUser,
+  ) {
+    return this.chat.toggleReaction(projectId, messageId, dto, actor);
+  }
+
+  public async markMessagesSeen(
+    projectId: string,
+    dto: MarkMessagesSeenDTO,
+    actor: AuthenticatedUser,
+  ) {
+    return this.chat.markMessagesSeen(projectId, dto, actor);
+  }
+
+  public async togglePinMessage(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageItem> {
+    return this.chat.togglePinMessage(projectId, messageId, actor);
+  }
+
+  // --- Approval Workflows ---
+  public async leadApprove(
+    projectId: string,
+    messageId: string,
+    dto: LeadApproveDTO,
+    actor: AuthenticatedUser,
+  ): Promise<ApprovalWorkflowItem> {
+    return this.approval.leadApprove(projectId, messageId, dto, actor);
+  }
+
+  public async salesDispatch(
+    projectId: string,
+    messageId: string,
+    dto: SalesDispatchDTO,
+    actor: AuthenticatedUser,
+  ): Promise<ApprovalWorkflowItem> {
+    return this.approval.salesDispatch(projectId, messageId, dto, actor);
+  }
+
+  public async requestRevision(
+    projectId: string,
+    messageId: string,
+    dto: RequestRevisionDTO,
+    actor: AuthenticatedUser,
+  ): Promise<ApprovalWorkflowItem> {
+    return this.approval.requestRevision(projectId, messageId, dto, actor);
+  }
+
+  // --- Dynamic Message Types ---
+  public async getMessageTypes(direction?: string, actor?: AuthenticatedUser): Promise<MessageTypeItem[]> {
+    return this.messageType.getMessageTypes(direction, actor);
+  }
+
+  public async createMessageType(dto: CreateMessageTypeDTO, actor: AuthenticatedUser): Promise<MessageTypeItem> {
+    return this.messageType.createMessageType(dto, actor);
+  }
+
+  public async updateMessageType(id: string, dto: UpdateMessageTypeDTO, actor: AuthenticatedUser): Promise<MessageTypeItem> {
+    return this.messageType.updateMessageType(id, dto, actor);
+  }
+
+  public async deleteMessageType(id: string, actor: AuthenticatedUser) {
+    return this.messageType.deleteMessageType(id, actor);
+  }
+
+  // --- Milestones & Collateral Links ---
+  public async getMilestones(projectId: string, actor: AuthenticatedUser): Promise<ProjectMilestoneItem[]> {
+    return this.collateral.getMilestones(projectId, actor);
+  }
+
+  public async createMilestone(projectId: string, dto: CreateProjectMilestoneDTO, actor: AuthenticatedUser): Promise<ProjectMilestoneItem> {
+    return this.collateral.createMilestone(projectId, dto, actor);
+  }
+
+  public async updateMilestone(projectId: string, milestoneId: string, dto: UpdateProjectMilestoneDTO, actor: AuthenticatedUser): Promise<ProjectMilestoneItem> {
+    return this.collateral.updateMilestone(projectId, milestoneId, dto, actor);
+  }
+
+  public async getLinks(projectId: string, actor: AuthenticatedUser): Promise<ProjectLinkItem[]> {
+    return this.collateral.getLinks(projectId, actor);
+  }
+
+  public async createLink(projectId: string, dto: CreateProjectLinkDTO, actor: AuthenticatedUser): Promise<ProjectLinkItem> {
+    return this.collateral.createLink(projectId, dto, actor);
   }
 
   // --- Lookups & Dynamic Lookups Creation ---

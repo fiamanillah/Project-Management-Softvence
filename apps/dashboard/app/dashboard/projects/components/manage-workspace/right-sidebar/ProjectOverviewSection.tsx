@@ -60,14 +60,16 @@ export function ProjectOverviewSection({ project }: ProjectOverviewSectionProps)
           </p>
         </div>
 
-        <div className="rounded-xl border border-border/60 bg-card/70 p-2.5">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-            Budget
-          </span>
-          <p className="font-semibold text-foreground mt-0.5 text-xs font-mono">
-            {project.budget}
-          </p>
-        </div>
+        {project.budget !== null && project.budget !== undefined && (
+          <div className="rounded-xl border border-border/60 bg-card/70 p-2.5">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+              Budget
+            </span>
+            <p className="font-semibold text-foreground mt-0.5 text-xs font-mono">
+              {typeof project.budget === "number" ? `$${project.budget.toLocaleString()}` : project.budget}
+            </p>
+          </div>
+        )}
 
         <div className="rounded-xl border border-border/60 bg-card/70 p-2.5">
           <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">

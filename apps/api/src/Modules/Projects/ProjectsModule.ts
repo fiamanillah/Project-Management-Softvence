@@ -3,6 +3,8 @@
 import { BaseModule } from "@/core/BaseModule";
 import { ProjectsService } from "./projects.service";
 import { ProjectsController } from "./projects.controller";
+import { ProjectChatGateway } from "./gateways/ProjectChatGateway";
+import { RealtimeServer } from "@/core/realtime/RealtimeServer";
 import { validateRequest } from "@/middleware/validation";
 import { authenticate } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/requirePermission";
@@ -18,7 +20,19 @@ import {
   createQuickServiceLineSchema,
   createQuickStatusSchema,
   createQuickOrderSourceSchema,
+  createProjectMessageSchema,
+  toggleReactionSchema,
+  markMessagesSeenSchema,
+  leadApproveSchema,
+  salesDispatchSchema,
+  requestRevisionSchema,
+  createMessageTypeSchema,
+  updateMessageTypeSchema,
+  createProjectMilestoneSchema,
+  updateProjectMilestoneSchema,
+  createProjectLinkSchema,
 } from "./ProjectDTO";
+import { findProjectByIdOrCode } from "./services/projects.capability.helper";
 
 export class ProjectsModule extends BaseModule {
   public name: string = "ProjectsModule";
@@ -29,7 +43,12 @@ export class ProjectsModule extends BaseModule {
 
   protected async setupUseCases(): Promise<void> {
     const prisma = this.context.getService("prisma") as PrismaClient;
-    this.registerService("ProjectsService", new ProjectsService(prisma));
+    const projectsService = new ProjectsService(prisma);
+    this.registerService("ProjectsService", projectsService);
+
+    // Register WebSocket Gateway
+    const chatGateway = new ProjectChatGateway(projectsService.chat, projectsService.approval);
+    RealtimeServer.getInstance().registerGateway(chatGateway);
   }
 
   protected async setupControllers(): Promise<void> {
@@ -45,9 +64,11 @@ export class ProjectsModule extends BaseModule {
     const loadProjectResource = async (req: any) => {
       const projectId = req.params?.id;
       if (!projectId) return undefined;
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-        select: {
+      const project = await findProjectByIdOrCode(
+        prisma,
+        projectId,
+        undefined,
+        {
           id: true,
           profileId: true,
           teamAssignments: {
@@ -58,10 +79,10 @@ export class ProjectsModule extends BaseModule {
             },
           },
         },
-      });
+      );
 
       if (!project) return undefined;
-      const primaryAssignment = project.teamAssignments?.[0];
+      const primaryAssignment = (project as any).teamAssignments?.[0];
       return {
         projectId: project.id,
         teamId: primaryAssignment?.teamId,
@@ -72,7 +93,41 @@ export class ProjectsModule extends BaseModule {
 
     this.router.use(authenticate);
 
-    // Overview Stats & Lookups
+    // --- Workspace Command Center ---
+    this.router.get(
+      "/workspace",
+      requirePermission("project.view"),
+      controller.getWorkspaceProjects.bind(controller),
+    );
+
+    // --- Dynamic Message Types ---
+    this.router.get(
+      "/message-types",
+      requirePermission("project.view"),
+      controller.getMessageTypes.bind(controller),
+    );
+
+    this.router.post(
+      "/message-types",
+      validateRequest({ body: createMessageTypeSchema }),
+      requirePermission("project.chat.manage_types"),
+      controller.createMessageType.bind(controller),
+    );
+
+    this.router.patch(
+      "/message-types/:id",
+      validateRequest({ body: updateMessageTypeSchema }),
+      requirePermission("project.chat.manage_types"),
+      controller.updateMessageType.bind(controller),
+    );
+
+    this.router.delete(
+      "/message-types/:id",
+      requirePermission("project.chat.manage_types"),
+      controller.deleteMessageType.bind(controller),
+    );
+
+    // --- Overview Stats & Lookups ---
     this.router.get(
       "/stats",
       requirePermission("project.view"),
@@ -134,7 +189,97 @@ export class ProjectsModule extends BaseModule {
       controller.createOrderSource.bind(controller),
     );
 
-    // Project CRUD
+    // --- Project Real-Time Messages & Chat ---
+    this.router.get(
+      "/:id/messages",
+      requirePermission("project.view", loadProjectResource),
+      controller.getProjectMessages.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/messages",
+      validateRequest({ body: createProjectMessageSchema }),
+      requirePermission("project.view", loadProjectResource),
+      controller.sendMessage.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/messages/:messageId/react",
+      validateRequest({ body: toggleReactionSchema }),
+      requirePermission("project.view", loadProjectResource),
+      controller.toggleReaction.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/messages/:messageId/seen",
+      validateRequest({ body: markMessagesSeenSchema }),
+      requirePermission("project.view", loadProjectResource),
+      controller.markMessagesSeen.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/messages/:messageId/pin",
+      requirePermission("project.chat.pin", loadProjectResource),
+      controller.togglePinMessage.bind(controller),
+    );
+
+    // --- Approval State Machine ---
+    this.router.post(
+      "/:id/messages/:messageId/approval/lead-approve",
+      validateRequest({ body: leadApproveSchema }),
+      requirePermission("project.approval.lead_review", loadProjectResource),
+      controller.leadApprove.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/messages/:messageId/approval/sales-dispatch",
+      validateRequest({ body: salesDispatchSchema }),
+      requirePermission("project.approval.sales_dispatch", loadProjectResource),
+      controller.salesDispatch.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/messages/:messageId/approval/reject",
+      validateRequest({ body: requestRevisionSchema }),
+      requirePermission("project.approval.lead_review", loadProjectResource),
+      controller.requestRevision.bind(controller),
+    );
+
+    // --- Milestones & Collateral ---
+    this.router.get(
+      "/:id/milestones",
+      requirePermission("project.view", loadProjectResource),
+      controller.getMilestones.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/milestones",
+      validateRequest({ body: createProjectMilestoneSchema }),
+      requirePermission("project.collateral.manage", loadProjectResource),
+      controller.createMilestone.bind(controller),
+    );
+
+    this.router.patch(
+      "/:id/milestones/:milestoneId",
+      validateRequest({ body: updateProjectMilestoneSchema }),
+      requirePermission("project.collateral.manage", loadProjectResource),
+      controller.updateMilestone.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/links",
+      requirePermission("project.view", loadProjectResource),
+      controller.getLinks.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/links",
+      validateRequest({ body: createProjectLinkSchema }),
+      requirePermission("project.collateral.manage", loadProjectResource),
+      controller.createLink.bind(controller),
+    );
+
+    // --- Project CRUD ---
     this.router.get(
       "/",
       requirePermission("project.view"),

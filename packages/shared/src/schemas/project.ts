@@ -226,6 +226,15 @@ export interface ProjectCapabilities {
   canViewClient: boolean;
   canViewFinancials: boolean;
   canEditFinancials: boolean;
+  canChatView?: boolean;
+  canChatSend?: boolean;
+  canSendClientMessage?: boolean;
+  canPinMessage?: boolean;
+  canManageTypes?: boolean;
+  canLeadApprove?: boolean;
+  canSalesDispatch?: boolean;
+  canRequestRevision?: boolean;
+  canManageCollateral?: boolean;
 }
 
 export interface ProjectStatusItem {
@@ -503,3 +512,335 @@ export interface ProjectLookups {
     };
   }[];
 }
+
+// ============================================================================
+// REAL-TIME MESSAGING, APPROVAL & WORKSPACE SCHEMAS
+// ============================================================================
+
+export const createProjectMessageSchema = z.object({
+  text: z.string().min(1, "Message text cannot be empty"),
+  purpose: z.enum(["INTERNAL_DISCUSSION", "CLIENT_COMMUNICATION"]).default("INTERNAL_DISCUSSION"),
+  clientDirection: z.enum(["INBOUND", "OUTBOUND"]).optional().nullable(),
+  clientMessageType: z.string().optional().nullable(),
+  messageTypeId: z.string().uuid().optional().nullable(),
+  variant: z.string().optional().nullable(),
+  replyToMessageId: z.string().uuid().optional().nullable(),
+  attachments: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.string(),
+        url: z.string(),
+        thumbnailUrl: z.string().optional().nullable(),
+        fileSizeBytes: z.number().optional().nullable(),
+        extension: z.string().optional().nullable(),
+        mimeType: z.string().optional().nullable(),
+      }),
+    )
+    .optional(),
+  metadata: z.record(z.string(), z.any()).optional().nullable(),
+});
+
+export const toggleReactionSchema = z.object({
+  emoji: z.string().min(1, "Emoji is required"),
+});
+
+export const markMessagesSeenSchema = z.object({
+  messageIds: z.array(z.string().uuid("Invalid message ID format")).min(1),
+});
+
+export const leadApproveSchema = z.object({
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+export const salesDispatchSchema = z.object({
+  dispatchPlatform: z.string().min(1, "Dispatch platform is required"),
+  dispatchReferenceId: z.string().max(100).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+export const requestRevisionSchema = z.object({
+  rejectionReason: z.string().min(1, "Revision feedback is required").max(1000),
+});
+
+export const createMessageTypeSchema = z.object({
+  code: z.string().min(1, "Code is required").max(50),
+  label: z.string().min(1, "Label is required").max(100),
+  direction: z.enum(["INTERNAL", "OUTBOUND", "INBOUND"]).default("OUTBOUND"),
+  colorHex: z.string().regex(/^#([0-9a-fA-F]{3}){1,2}$/, "Must be a valid hex color code").default("#10b981"),
+  description: z.string().max(255).optional().nullable(),
+  icon: z.string().max(50).optional().nullable(),
+  requiresApproval: z.boolean().default(false),
+  sortOrder: z.number().default(0),
+});
+
+export const updateMessageTypeSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  colorHex: z.string().regex(/^#([0-9a-fA-F]{3}){1,2}$/).optional(),
+  description: z.string().max(255).optional().nullable(),
+  icon: z.string().max(50).optional().nullable(),
+  requiresApproval: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().optional(),
+});
+
+export const createProjectMilestoneSchema = z.object({
+  title: z.string().min(1, "Milestone title is required").max(200),
+  dueDate: z.string().datetime("Must be a valid ISO date-time"),
+  assignedToUserId: z.string().uuid().optional().nullable(),
+  deliverableCount: z.number().min(0).default(0),
+});
+
+export const updateProjectMilestoneSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  dueDate: z.string().datetime().optional(),
+  isCompleted: z.boolean().optional(),
+  assignedToUserId: z.string().uuid().optional().nullable(),
+  deliverableCount: z.number().min(0).optional(),
+});
+
+export const createProjectLinkSchema = z.object({
+  title: z.string().min(1, "Link title is required").max(150),
+  url: z.string().url("Must be a valid URL"),
+  category: z.string().default("Other"),
+  description: z.string().max(500).optional().nullable(),
+});
+
+// ============================================================================
+// REAL-TIME MESSAGING, APPROVAL & WORKSPACE TYPES
+// ============================================================================
+
+export type CreateProjectMessageDTO = z.infer<typeof createProjectMessageSchema>;
+export type ToggleReactionDTO = z.infer<typeof toggleReactionSchema>;
+export type MarkMessagesSeenDTO = z.infer<typeof markMessagesSeenSchema>;
+export type LeadApproveDTO = z.infer<typeof leadApproveSchema>;
+export type SalesDispatchDTO = z.infer<typeof salesDispatchSchema>;
+export type RequestRevisionDTO = z.infer<typeof requestRevisionSchema>;
+export type CreateMessageTypeDTO = z.infer<typeof createMessageTypeSchema>;
+export type UpdateMessageTypeDTO = z.infer<typeof updateMessageTypeSchema>;
+export type CreateProjectMilestoneDTO = z.infer<typeof createProjectMilestoneSchema>;
+export type UpdateProjectMilestoneDTO = z.infer<typeof updateProjectMilestoneSchema>;
+export type CreateProjectLinkDTO = z.infer<typeof createProjectLinkSchema>;
+
+export interface MessageReactionItem {
+  emoji: string;
+  count: number;
+  reactedByMe?: boolean;
+}
+
+export interface MessageReadReceiptItem {
+  userId: string;
+  userName: string;
+  userAvatar?: string | null;
+  userDesignation?: string | null;
+  seenAt: string;
+}
+
+export interface ApprovalStageAuditItem {
+  id: string;
+  stageName: string;
+  stageKey: "DRAFTED" | "LEAD_REVIEW" | "SALES_DISPATCH" | "DISPATCHED" | "REVISION_REQUESTED";
+  actorName: string;
+  actorAvatar?: string | null;
+  actorRole: string;
+  timestamp: string;
+  durationMinutes?: number | null;
+  notes?: string | null;
+}
+
+export interface ApprovalWorkflowItem {
+  id: string;
+  status: "PENDING_LEAD" | "PENDING_SALES" | "DISPATCHED" | "REVISION_REQUESTED" | "NOT_REQUIRED";
+  clientMessageType?: string | null;
+  requestedBy: string;
+  requestedAt: string;
+  targetClient: string;
+  slaTargetMinutes: number;
+  slaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED";
+  auditTrail: ApprovalStageAuditItem[];
+  leadApprovedBy?: string | null;
+  leadApprovedAt?: string | null;
+  salesDispatchedBy?: string | null;
+  salesDispatchedAt?: string | null;
+  dispatchPlatform?: string | null;
+  dispatchReferenceId?: string | null;
+  rejectionReason?: string | null;
+  rejectedBy?: string | null;
+  rejectedAt?: string | null;
+}
+
+export interface ProjectMessageAttachmentItem {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  thumbnailUrl?: string | null;
+  fileSizeBytes?: number | null;
+  extension?: string | null;
+  mimeType?: string | null;
+}
+
+export interface ProjectMessageCapabilities {
+  canLeadApprove?: boolean;
+  canSalesDispatch?: boolean;
+  canRequestRevision?: boolean;
+  canPin?: boolean;
+  canDelete?: boolean;
+  canEdit?: boolean;
+}
+
+export interface ProjectMessageItem {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string | null;
+  senderDesignation?: string | null;
+  senderRole?: string | null;
+  isCurrentUser: boolean;
+  isFromClient: boolean;
+  text: string;
+  timestamp: string;
+  dateGroup: string;
+  purpose: "INTERNAL_DISCUSSION" | "CLIENT_COMMUNICATION";
+  clientDirection?: "INBOUND" | "OUTBOUND" | null;
+  clientMessageType?: string | null;
+  variant?: string | null;
+  replyTo?: {
+    id: string;
+    senderName: string;
+    text: string;
+  } | null;
+  attachments?: ProjectMessageAttachmentItem[];
+  reactions?: MessageReactionItem[];
+  seenBy?: MessageReadReceiptItem[];
+  approval?: ApprovalWorkflowItem | null;
+  metadata?: Record<string, any> | null;
+  isPinned?: boolean;
+  _capabilities?: ProjectMessageCapabilities;
+}
+
+export interface MessageTypeItem {
+  id: string;
+  code: string;
+  label: string;
+  direction: "INTERNAL" | "OUTBOUND" | "INBOUND";
+  colorHex: string;
+  description?: string | null;
+  icon?: string | null;
+  requiresApproval: boolean;
+  isSystem: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface ProjectMilestoneItem {
+  id: string;
+  projectId: string;
+  title: string;
+  dueDate: string;
+  isCompleted: boolean;
+  assignedTo?: string | null;
+  assignedToUser?: {
+    id: string;
+    name: string;
+    avatar?: string | null;
+  } | null;
+  deliverableCount?: number;
+  completedAt?: string | null;
+}
+
+export interface ProjectLinkItem {
+  id: string;
+  projectId: string;
+  title: string;
+  url: string;
+  category: "Figma" | "GitHub" | "Jira" | "Docs" | "Staging" | "Other" | string;
+  description?: string | null;
+  addedAt: string;
+  addedBy?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface WorkspaceMemberItem {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string | null;
+  designation?: string | null;
+  role: string;
+  isOnline: boolean;
+  department?: string | null;
+  shift?: string | null;
+  lastSeen?: string | null;
+}
+
+export interface ProjectTeamSummaryItem {
+  id: string;
+  name: string;
+  departmentName?: string | null;
+  leadName?: string | null;
+  memberCount: number;
+}
+
+export interface ProjectWorkspaceItem {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  client: {
+    name: string;
+    email?: string | null;
+    company?: string | null;
+    avatar?: string | null;
+    platform?: string | null;
+  };
+  status: {
+    id: string;
+    name: string;
+    color?: string | null;
+    isTerminal?: boolean;
+  };
+  priority: {
+    id: string;
+    name: string;
+    level: number;
+    color?: string | null;
+  };
+  serviceLine?: string | null;
+  orderSource?: string | null;
+  budget?: string | number | null;
+  deadline?: string | null;
+  progress: number;
+  isPinned?: boolean;
+  unreadCount?: number;
+  pendingApprovalsCount?: number;
+  onlineCount?: number;
+  pinnedAnnouncements?: {
+    id: string;
+    messageId: string;
+    message: string;
+    author: string;
+    authorAvatar?: string | null;
+    authorDesignation?: string | null;
+    timestamp: string;
+  }[];
+  lead?: WorkspaceMemberItem | null;
+  teams: ProjectTeamSummaryItem[];
+  members: WorkspaceMemberItem[];
+  links: ProjectLinkItem[];
+  milestones: ProjectMilestoneItem[];
+  lastMessage?: {
+    id: string;
+    senderName: string;
+    text: string;
+    timestamp: string;
+    isRead: boolean;
+    purpose?: string;
+  } | null;
+  _capabilities?: ProjectCapabilities;
+}
+

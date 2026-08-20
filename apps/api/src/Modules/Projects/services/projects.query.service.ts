@@ -12,6 +12,7 @@ import type {
 import {
   getProjectResourceContext,
   sanitizeAndDecorateProject,
+  findProjectByIdOrCode,
 } from "./projects.capability.helper";
 
 export interface GetProjectsQuery {
@@ -297,9 +298,7 @@ export class ProjectsQueryService {
     id: string,
     actor: AuthenticatedUser,
   ): Promise<ProjectDetailItem> {
-    const project = await this.prisma.project.findFirst({
-      where: { id, deletedAt: null },
-      include: {
+    const project = await findProjectByIdOrCode(this.prisma, id, {
         parentProject: {
           include: {
             status: true,
@@ -381,7 +380,7 @@ export class ProjectsQueryService {
           },
         },
       },
-    });
+    );
 
     if (!project) {
       throw new NotFoundError("Project not found");
@@ -396,11 +395,11 @@ export class ProjectsQueryService {
 
     const baseSanitized = await sanitizeAndDecorateProject(project, actor);
 
-    const activeTeams = project.teamAssignments.filter((ta) => !ta.unassignedAt);
-    const pastTeams = project.teamAssignments.filter((ta) => ta.unassignedAt !== null);
+    const activeTeams = ((project as any).teamAssignments || []).filter((ta: any) => !ta.unassignedAt);
+    const pastTeams = ((project as any).teamAssignments || []).filter((ta: any) => ta.unassignedAt !== null);
 
-    const activeMembers = project.userAssignments.filter((ua) => !ua.unassignedAt);
-    const pastMembers = project.userAssignments.filter((ua) => ua.unassignedAt !== null);
+    const activeMembers = ((project as any).userAssignments || []).filter((ua: any) => !ua.unassignedAt);
+    const pastMembers = ((project as any).userAssignments || []).filter((ua: any) => ua.unassignedAt !== null);
 
     return {
       ...baseSanitized,

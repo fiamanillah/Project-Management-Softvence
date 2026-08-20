@@ -24,6 +24,10 @@ model Project {
   remarks       String?   @db.Text
   startDate     DateTime? @map("start_date")
   deliveryDate  DateTime? @map("delivery_date")
+  progress      Int       @default(0)
+  budget        Decimal   @default(0) @db.Decimal
+  deadline      DateTime? @map("deadline")
+  isPinned      Boolean   @default(false) @map("is_pinned")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime? @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
@@ -48,6 +52,9 @@ model Project {
   group                  ProjectGroup?
   scopeTargets           RolePermissionScopeTarget[]
   permissionOverrides    UserPermissionOverride[]
+  milestones             ProjectMilestone[]
+  links                  ProjectLink[]
+  projectMessages        ProjectMessage[]
 
   @@index([parentId])
   @@index([parentOrderId])
@@ -149,3 +156,40 @@ model ComponentAssignment {
   @@index([roleId])
   @@map("component_assignments")
 }
+
+model ProjectMilestone {
+  id               String    @id @default(uuid()) @db.Uuid
+  projectId        String    @map("project_id") @db.Uuid
+  title            String
+  dueDate          DateTime  @map("due_date")
+  isCompleted      Boolean   @default(false) @map("is_completed")
+  assignedToUserId String?   @map("assigned_to_user_id") @db.Uuid
+  deliverableCount Int       @default(0) @map("deliverable_count")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime? @map("updated_at")
+
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedTo       User?     @relation("ProjectMilestoneAssignee", fields: [assignedToUserId], references: [id])
+
+  @@index([projectId, isCompleted])
+  @@map("project_milestones")
+}
+
+model ProjectLink {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  title       String
+  url         String
+  category    String   // "Figma" | "GitHub" | "Jira" | "Docs" | "Staging" | "Other"
+  description String?
+  addedById   String   @map("added_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  addedBy     User     @relation("ProjectLinkAdder", fields: [addedById], references: [id])
+
+  @@index([projectId])
+  @@map("project_links")
+}
+
