@@ -9,6 +9,7 @@ describe("DAG Permission Dependency & Auto-Cascading Resolution", () => {
   let testUserId: string;
   let granterUserId: string;
   let scopeTypeIdGlobal: string;
+  let scopeTypeIdOwnProject: string;
   let permProjectViewId: string;
   let permProjectEditId: string;
   let permProjectLeadReviewId: string;
@@ -81,6 +82,15 @@ describe("DAG Permission Dependency & Auto-Cascading Resolution", () => {
       },
     });
     scopeTypeIdGlobal = scopeGlobal.id;
+
+    const scopeOwnProject = await prisma.permissionScopeType.create({
+      data: {
+        code: "OWN_PROJECT",
+        name: "Own Project",
+        resolutionStrategy: "OwnProject",
+      },
+    });
+    scopeTypeIdOwnProject = scopeOwnProject.id;
 
     // Seed Permissions with Implies & DependsOn
     const pView = await prisma.permission.create({
@@ -251,4 +261,174 @@ describe("DAG Permission Dependency & Auto-Cascading Resolution", () => {
     expect(grantedCodes).toContain("project.view");
     expect(grantedCodes).toContain("storage.upload");
   });
+
+  it("Runtime: Container gating prevents user with project.chat.view (Global) from accessing unassigned project when project.view is OwnProject", async () => {
+    // Grant project.view with OwnProject scope
+    await prisma.rolePermission.create({
+      data: {
+        roleId: testRoleId,
+        permissionId: permProjectViewId,
+        scopeTypeId: scopeTypeIdOwnProject,
+        grantedBy: granterUserId,
+      },
+    });
+
+    // Grant project.chat.view with Global scope
+    await prisma.rolePermission.create({
+      data: {
+        roleId: testRoleId,
+        permissionId: permChatViewId,
+        scopeTypeId: scopeTypeIdGlobal,
+        grantedBy: granterUserId,
+      },
+    });
+
+    // Create prerequisite Platform, Profile, Client, and Status
+    const platform = await prisma.platform.create({
+      data: { code: `PLAT-${Date.now()}`, name: "Upwork" },
+    });
+
+    const client = await prisma.client.create({
+      data: { name: "Test Client", platformId: platform.id },
+    });
+
+    const profile = await prisma.profile.create({
+      data: { username: "softvence_agency", platformId: platform.id },
+    });
+
+    const status = await prisma.projectStatus.create({
+      data: { code: `STATUS-${Date.now()}`, name: "In Progress" },
+    });
+
+    // Create 2 projects
+    const projectAssigned = await prisma.project.create({
+      data: {
+        orderId: `ORD-${Date.now()}-1`,
+        projectName: "Assigned Alpha",
+        clientId: client.id,
+        profileId: profile.id,
+        statusId: status.id,
+        value: 1000,
+      },
+    });
+
+    const projectUnassigned = await prisma.project.create({
+      data: {
+        orderId: `ORD-${Date.now()}-2`,
+        projectName: "Unassigned Beta",
+        clientId: client.id,
+        profileId: profile.id,
+        statusId: status.id,
+        value: 2000,
+      },
+    });
+
+    // Create assignment role and assign user to projectAssigned
+    const assignmentRole = await prisma.assignmentRole.create({
+      data: {
+        code: `DEV-${Date.now()}`,
+        name: "Developer",
+      },
+    });
+
+    await prisma.projectAssignment.create({
+      data: {
+        userId: testUserId,
+        projectId: projectAssigned.id,
+        roleId: assignmentRole.id,
+      },
+    });
+
+    const staffUser = {
+      id: testUserId,
+      systemRole: "Staff",
+      roleId: testRoleId,
+    };
+
+    // User can view assigned project chat
+    const canViewAssignedChat = await can(staffUser, "project.chat.view", {
+      projectId: projectAssigned.id,
+    });
+    expect(canViewAssignedChat).toBe(true);
+
+    // User CANNOT view unassigned project chat (container gate blocks access even though chat grant was Global!)
+    const canViewUnassignedChat = await can(staffUser, "project.chat.view", {
+      projectId: projectUnassigned.id,
+    });
+    expect(canViewUnassignedChat).toBe(false);
+  });
+
+  it("Runtime: getUserPermissions clamps child scope when parent container scope is narrower", async () => {
+    // Grant project.view with OwnProject scope
+    await prisma.rolePermission.create({
+      data: {
+        roleId: testRoleId,
+        permissionId: permProjectViewId,
+        scopeTypeId: scopeTypeIdOwnProject,
+        grantedBy: granterUserId,
+      },
+    });
+
+    // Grant project.chat.view with Global scope
+    await prisma.rolePermission.create({
+      data: {
+        roleId: testRoleId,
+        permissionId: permChatViewId,
+        scopeTypeId: scopeTypeIdGlobal,
+        grantedBy: granterUserId,
+      },
+    });
+
+    const staffUser = {
+      id: testUserId,
+      systemRole: "Staff",
+      roleId: testRoleId,
+    };
+
+    const permMap = await getUserPermissions(staffUser);
+
+    expect(permMap["project.view"].allowed).toBe(true);
+    expect(permMap["project.view"].scope).toBe("OwnProject");
+
+    // project.chat.view should have its effective scope clamped to OwnProject
+    expect(permMap["project.chat.view"].allowed).toBe(true);
+    expect(permMap["project.chat.view"].scope).toBe("OwnProject");
+  });
+
+  it("Service: Scope monotonicity automatically clamps child scope to match container parent scope on save", async () => {
+    const roleService = new OrganizationRoleService(prisma);
+
+    // Save with project.view = OwnProject and project.chat.send = Global
+    await roleService.saveRolePermissions(
+      testRoleId,
+      {
+        assignments: [
+          {
+            permissionId: permProjectViewId,
+            scopeTypeId: scopeTypeIdOwnProject,
+          },
+          {
+            permissionId: permChatSendId,
+            scopeTypeId: scopeTypeIdGlobal,
+          },
+        ],
+      },
+      granterUserId,
+    );
+
+    const persisted = await prisma.rolePermission.findMany({
+      where: { roleId: testRoleId },
+      include: { permission: true, scopeType: true },
+    });
+
+    const chatSendGrant = persisted.find((p) => p.permission.code === "project.chat.send");
+    const chatViewGrant = persisted.find((p) => p.permission.code === "project.chat.view");
+    const projectViewGrant = persisted.find((p) => p.permission.code === "project.view");
+
+    expect(projectViewGrant?.scopeType.code).toBe("OWN_PROJECT");
+    // Child scopes should be clamped to match container parent scope OWN_PROJECT
+    expect(chatSendGrant?.scopeType.code).toBe("OWN_PROJECT");
+    expect(chatViewGrant?.scopeType.code).toBe("OWN_PROJECT");
+  });
 });
+

@@ -49,7 +49,7 @@ export class ProjectChatService {
 
     const resourceContext = getProjectResourceContext(project);
     const [hasViewPermission, canLead, canSales, canEdit] = await Promise.all([
-      (await can(actor, "project.chat.view", resourceContext)) || (await can(actor, "project.view", resourceContext)),
+      can(actor, "project.chat.view", resourceContext),
       can(actor, "project.approval.lead_review", resourceContext),
       can(actor, "project.approval.sales_dispatch", resourceContext),
       can(actor, "project.edit", resourceContext),
@@ -208,8 +208,7 @@ export class ProjectChatService {
     const isClientComm = dto.purpose === "CLIENT_COMMUNICATION";
     const hasPermission = isClientComm
       ? await can(actor, "project.chat.send_client", resourceContext)
-      : (await can(actor, "project.chat.send", resourceContext)) ||
-        (await can(actor, "project.view", resourceContext));
+      : await can(actor, "project.chat.send", resourceContext);
 
     if (!hasPermission) {
       throw new ForbiddenError(
@@ -488,9 +487,7 @@ export class ProjectChatService {
     }
 
     const resourceContext = getProjectResourceContext(message.project);
-    const hasPermission =
-      (await can(actor, "project.chat.send", resourceContext)) ||
-      (await can(actor, "project.view", resourceContext));
+    const hasPermission = await can(actor, "project.chat.send", resourceContext);
     if (!hasPermission) {
       throw new ForbiddenError("You do not have permission to react to messages in this project");
     }
@@ -953,9 +950,7 @@ export class ProjectChatService {
     }
 
     const resourceContext = getProjectResourceContext(project);
-    const hasViewPermission =
-      (await can(actor, "project.chat.view", resourceContext)) ||
-      (await can(actor, "project.view", resourceContext));
+    const hasViewPermission = await can(actor, "project.chat.view", resourceContext);
     if (!hasViewPermission) {
       throw new ForbiddenError("You do not have permission to view this project conversation");
     }

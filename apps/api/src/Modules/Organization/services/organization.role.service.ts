@@ -5,6 +5,7 @@ import { AppLogger } from "@/core/logging/logger";
 import { NotFoundError, ConflictError, BadRequestError } from "@/core/errors/AppError";
 import { AuditLogService } from "@/core/audit/audit.service";
 import { AuthorizationEngine, can } from "@/core/authorization/AuthorizationEngine";
+import { getScopeWeight } from "@/core/permissions/scopePresets";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import type { Request } from "express";
 import type {
@@ -157,6 +158,50 @@ export class OrganizationRoleService {
         }
       }
     }
+
+    // Enforce Scope Monotonicity & Container Clamping
+    // A child/sub-resource permission's scope must not exceed its container root's scope.
+    const allScopeTypes = await tx.permissionScopeType.findMany({
+      where: { isActive: true },
+    });
+    const idToScopeType = new Map<string, (typeof allScopeTypes)[0]>();
+    for (const st of allScopeTypes) {
+      idToScopeType.set(st.id, st);
+    }
+
+    const clampContainerScope = (containerCode: string, prefix: string) => {
+      const containerPerm = codeToPerm.get(containerCode);
+      if (!containerPerm) return;
+      const containerAssignment = assignmentMap.get(containerPerm.id);
+      if (!containerAssignment) return;
+
+      const parentScopeType = idToScopeType.get(containerAssignment.scopeTypeId);
+      const parentWeight = getScopeWeight(parentScopeType?.resolutionStrategy);
+
+      for (const [permId, assignment] of assignmentMap.entries()) {
+        const p = idToPerm.get(permId);
+        if (p && p.code.startsWith(prefix) && p.code !== containerCode) {
+          const childScopeType = idToScopeType.get(assignment.scopeTypeId);
+          const childWeight = getScopeWeight(childScopeType?.resolutionStrategy);
+          if (childWeight > parentWeight) {
+            assignment.scopeTypeId = containerAssignment.scopeTypeId;
+            assignment.targetDepartmentIds = containerAssignment.targetDepartmentIds
+              ? [...containerAssignment.targetDepartmentIds]
+              : undefined;
+            assignment.targetTeamIds = containerAssignment.targetTeamIds
+              ? [...containerAssignment.targetTeamIds]
+              : undefined;
+            assignment.targetProjectIds = containerAssignment.targetProjectIds
+              ? [...containerAssignment.targetProjectIds]
+              : undefined;
+          }
+        }
+      }
+    };
+
+    clampContainerScope("project.view", "project.");
+    clampContainerScope("organization.department.view", "organization.department.");
+    clampContainerScope("organization.branch.view", "organization.branch.");
 
     return Array.from(assignmentMap.values());
   }

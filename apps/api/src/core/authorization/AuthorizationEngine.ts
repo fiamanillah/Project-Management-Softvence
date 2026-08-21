@@ -7,6 +7,7 @@ import { AppLogger } from "@/core/logging/logger";
 import { config } from "@/core/config";
 import { AuditLogService } from "@/core/audit/audit.service";
 import { ScopeEvaluator } from "./ScopeEvaluator";
+import { getScopeWeight } from "@/core/permissions/scopePresets";
 import type {
   AuthenticatedUser,
   AuthorizationResourceContext,
@@ -125,6 +126,40 @@ export class AuthorizationEngine {
     }
 
     // -----------------------------------------------------------------
+    // Step 1.5: Container Prerequisite Gating (Containment Boundary Invariant)
+    // Sub-resource actions within a specific container require active access
+    // to the container root (e.g. project.view for any project sub-feature).
+    // -----------------------------------------------------------------
+    if (resource?.projectId && permissionCode.startsWith("project.") && permissionCode !== "project.view") {
+      const hasContainerAccess = await this.can(user, "project.view", resource, prisma);
+      if (!hasContainerAccess) {
+        return false;
+      }
+    }
+
+    if (
+      resource?.departmentId &&
+      permissionCode.startsWith("organization.department.") &&
+      permissionCode !== "organization.department.view"
+    ) {
+      const hasDeptAccess = await this.can(user, "organization.department.view", resource, prisma);
+      if (!hasDeptAccess) {
+        return false;
+      }
+    }
+
+    if (
+      resource?.branchId &&
+      permissionCode.startsWith("organization.branch.") &&
+      permissionCode !== "organization.branch.view"
+    ) {
+      const hasBranchAccess = await this.can(user, "organization.branch.view", resource, prisma);
+      if (!hasBranchAccess) {
+        return false;
+      }
+    }
+
+    // -----------------------------------------------------------------
     // Step 2: Explicit Overrides (user_permission_overrides)
     // Deny override always short-circuits and wins over grant override.
     // -----------------------------------------------------------------
@@ -176,13 +211,35 @@ export class AuthorizationEngine {
 
     if (roleId) {
       const grants = await this.getRoleGrants(roleId, prisma);
-      const matchingGrants = grants.filter(
+      const directGrants = grants.filter((g) => g.permissionCode === permissionCode);
+      const impliedGrants = grants.filter(
         (g) =>
-          g.permissionCode === permissionCode ||
-          (g.implies && g.implies.includes(permissionCode)),
+          g.permissionCode !== permissionCode &&
+          g.implies &&
+          g.implies.includes(permissionCode),
       );
 
-      for (const grant of matchingGrants) {
+      // 1. Evaluate Direct Grants
+      for (const grant of directGrants) {
+        const allowed = await ScopeEvaluator.evaluate(user, grant, resource, prisma);
+        if (allowed) {
+          return true;
+        }
+      }
+
+      // 2. If explicit direct grants exist for this container permission but failed on this resource,
+      // sub-resource implied grants cannot escalate or bypass the explicit container boundary.
+      const isContainerRoot =
+        permissionCode === "project.view" ||
+        permissionCode === "organization.department.view" ||
+        permissionCode === "organization.branch.view";
+
+      if (directGrants.length > 0 && isContainerRoot && resource) {
+        return false;
+      }
+
+      // 3. Evaluate Implied Grants
+      for (const grant of impliedGrants) {
         const allowed = await ScopeEvaluator.evaluate(user, grant, resource, prisma);
         if (allowed) {
           return true;
@@ -295,13 +352,29 @@ export class AuthorizationEngine {
     // Check delegator role grants (direct + implied)
     if (delegator.roleId) {
       const grants = await this.getRoleGrants(delegator.roleId, prisma);
-      const matchingGrants = grants.filter(
+      const directGrants = grants.filter((g) => g.permissionCode === permissionCode);
+      const impliedGrants = grants.filter(
         (g) =>
-          g.permissionCode === permissionCode ||
-          (g.implies && g.implies.includes(permissionCode)),
+          g.permissionCode !== permissionCode &&
+          g.implies &&
+          g.implies.includes(permissionCode),
       );
 
-      for (const grant of matchingGrants) {
+      for (const grant of directGrants) {
+        const allowed = await ScopeEvaluator.evaluate(delegator, grant, resource, prisma);
+        if (allowed) return true;
+      }
+
+      const isContainerRoot =
+        permissionCode === "project.view" ||
+        permissionCode === "organization.department.view" ||
+        permissionCode === "organization.branch.view";
+
+      if (directGrants.length > 0 && isContainerRoot && resource) {
+        return false;
+      }
+
+      for (const grant of impliedGrants) {
         const allowed = await ScopeEvaluator.evaluate(delegator, grant, resource, prisma);
         if (allowed) return true;
       }
@@ -724,6 +797,81 @@ export class AuthorizationEngine {
               targetEntry.allowed = true;
               targetEntry.scope = currentRes.scope === "Override" ? "Global" : currentRes.scope;
               graphChanged = true;
+            }
+          }
+        }
+      }
+    }
+
+    // 6.5. Effective Scope Monotonicity Clamping
+    // A child/sub-resource capability (e.g. project.chat.view) cannot retain an effective scope
+    // broader than its container parent permission (e.g. project.view).
+    const projectViewRes = resultMap["project.view"];
+    if (
+      projectViewRes &&
+      projectViewRes.allowed &&
+      projectViewRes.scope &&
+      projectViewRes.scope !== "Global" &&
+      projectViewRes.scope !== "Override"
+    ) {
+      const parentWeight = getScopeWeight(projectViewRes.scope);
+      for (const perm of allPermissions) {
+        if (perm.code.startsWith("project.") && perm.code !== "project.view") {
+          const childRes = resultMap[perm.code];
+          if (childRes && childRes.allowed) {
+            const childWeight = getScopeWeight(childRes.scope);
+            if (childWeight > parentWeight) {
+              childRes.scope = projectViewRes.scope;
+            }
+          }
+        }
+      }
+    }
+
+    const deptViewRes = resultMap["organization.department.view"];
+    if (
+      deptViewRes &&
+      deptViewRes.allowed &&
+      deptViewRes.scope &&
+      deptViewRes.scope !== "Global" &&
+      deptViewRes.scope !== "Override"
+    ) {
+      const parentWeight = getScopeWeight(deptViewRes.scope);
+      for (const perm of allPermissions) {
+        if (
+          perm.code.startsWith("organization.department.") &&
+          perm.code !== "organization.department.view"
+        ) {
+          const childRes = resultMap[perm.code];
+          if (childRes && childRes.allowed) {
+            const childWeight = getScopeWeight(childRes.scope);
+            if (childWeight > parentWeight) {
+              childRes.scope = deptViewRes.scope;
+            }
+          }
+        }
+      }
+    }
+
+    const branchViewRes = resultMap["organization.branch.view"];
+    if (
+      branchViewRes &&
+      branchViewRes.allowed &&
+      branchViewRes.scope &&
+      branchViewRes.scope !== "Global" &&
+      branchViewRes.scope !== "Override"
+    ) {
+      const parentWeight = getScopeWeight(branchViewRes.scope);
+      for (const perm of allPermissions) {
+        if (
+          perm.code.startsWith("organization.branch.") &&
+          perm.code !== "organization.branch.view"
+        ) {
+          const childRes = resultMap[perm.code];
+          if (childRes && childRes.allowed) {
+            const childWeight = getScopeWeight(childRes.scope);
+            if (childWeight > parentWeight) {
+              childRes.scope = branchViewRes.scope;
             }
           }
         }

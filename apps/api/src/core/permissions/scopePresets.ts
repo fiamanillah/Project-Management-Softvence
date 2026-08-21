@@ -61,3 +61,33 @@ export const SCOPE_PRESETS = {
 } as const;
 
 export type ScopePresetKey = keyof typeof SCOPE_PRESETS;
+
+export const SCOPE_WEIGHTS: Record<string, number> = {
+  Global: 50,
+  GLOBAL: 50,
+  ExplicitBranches: 40,
+  EXPLICIT_BRANCHES: 40,
+  OwnBranch: 40,
+  OWN_BRANCH: 40,
+  ExplicitDepartments: 30,
+  EXPLICIT_DEPARTMENTS: 30,
+  OwnDepartment: 30,
+  OWN_DEPARTMENT: 30,
+  ExplicitTeams: 20,
+  EXPLICIT_TEAMS: 20,
+  OwnTeam: 20,
+  OWN_TEAM: 20,
+  ExplicitProjects: 10,
+  EXPLICIT_PROJECTS: 10,
+  OwnProject: 10,
+  OWN_PROJECT: 10,
+  OwnProfile: 10,
+  OWN_PROFILE: 10,
+  None: 0,
+  NONE: 0,
+};
+
+export function getScopeWeight(strategyOrCode?: string | null): number {
+  if (!strategyOrCode) return 0;
+  return SCOPE_WEIGHTS[strategyOrCode] ?? 0;
+}
