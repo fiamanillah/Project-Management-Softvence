@@ -5,9 +5,11 @@ import { AppLogger } from "@/core/logging/logger";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import { PresenceService } from "@/core/realtime/PresenceService";
 import type { ProjectWorkspaceItem } from "../ProjectDTO";
+import { can } from "@/core/authorization/AuthorizationEngine";
 import {
   sanitizeAndDecorateWorkspaceProject,
   buildProjectScopedWhereConditions,
+  getProjectResourceContext,
 } from "./projects.capability.helper";
 
 export class ProjectsWorkspaceService {
@@ -135,12 +137,45 @@ export class ProjectsWorkspaceService {
           (m: any) => m.senderId !== actor.id && !m.reads?.some((rd: any) => rd.userId === actor.id),
         ).length;
 
-        // Compute pending approvals count
-        const pendingApprovalsCount = (p.projectMessages || []).filter(
+        // Evaluate permissions for attention counts
+        const resourceContext = getProjectResourceContext(p);
+        const [canLead, canSales, canEdit] = await Promise.all([
+          can(actor, "project.approval.lead_review", resourceContext),
+          can(actor, "project.approval.sales_dispatch", resourceContext),
+          can(actor, "project.edit", resourceContext),
+        ]);
+
+        const hasLeadAuthority = canLead || canEdit;
+        const hasSalesAuthority = canSales || canEdit;
+
+        // Compute granular pending counts
+        const pendingLeadApprovalsCount = hasLeadAuthority
+          ? (p.projectMessages || []).filter(
+              (m: any) => m.approvalWorkflow && m.approvalWorkflow.status?.code === "PENDING_LEAD",
+            ).length
+          : 0;
+
+        const pendingSalesDispatchesCount = hasSalesAuthority
+          ? (p.projectMessages || []).filter(
+              (m: any) => m.approvalWorkflow && m.approvalWorkflow.status?.code === "PENDING_SALES",
+            ).length
+          : 0;
+
+        const pendingRevisionsCount = (p.projectMessages || []).filter((m: any) => {
+          if (!m.approvalWorkflow || m.approvalWorkflow.status?.code !== "REVISION_REQUESTED") {
+            return false;
+          }
+          // If author, always count; if approver, also count
+          return m.senderId === actor.id || m.approvalWorkflow.requestedById === actor.id || hasLeadAuthority || hasSalesAuthority;
+        }).length;
+
+        const pendingApprovalsCount = pendingLeadApprovalsCount + pendingSalesDispatchesCount;
+
+        const pendingInboundCount = (p.projectMessages || []).filter(
           (m: any) =>
-            m.approvalWorkflow &&
-            (m.approvalWorkflow.status?.code === "PENDING_LEAD" ||
-              m.approvalWorkflow.status?.code === "PENDING_SALES"),
+            (m.isFromClient || (m.purpose === "CLIENT_COMMUNICATION" && m.clientDirection === "INBOUND")) &&
+            m.senderId !== actor.id &&
+            !m.reads?.some((rd: any) => rd.userId === actor.id),
         ).length;
 
         // Calculate online members
@@ -153,6 +188,10 @@ export class ProjectsWorkspaceService {
         const decorated = await sanitizeAndDecorateWorkspaceProject(p, actor, {
           unreadCount,
           pendingApprovalsCount,
+          pendingLeadApprovalsCount,
+          pendingSalesDispatchesCount,
+          pendingRevisionsCount,
+          pendingInboundCount,
           onlineCount: onlineIds.length,
         });
 

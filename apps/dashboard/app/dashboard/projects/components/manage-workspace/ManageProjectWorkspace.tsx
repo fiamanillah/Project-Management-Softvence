@@ -199,17 +199,23 @@ export function ManageProjectWorkspace({
           const isCurrentlySelected = p.id === selectedProjectId;
           const newUnread = isCurrentlySelected ? 0 : (p.unreadCount || 0) + 1;
           const newApprovals = hasApproval ? (p.pendingApprovalsCount || 0) + 1 : p.pendingApprovalsCount;
+          const newRevisions = isRevision ? (p.pendingRevisionsCount || 0) + 1 : p.pendingRevisionsCount;
+          const newInbound = isClient && !isCurrentlySelected ? (p.pendingInboundCount || 0) + 1 : (p.pendingInboundCount || 0);
 
           return {
             ...p,
             lastActivityAt: new Date().toISOString(),
             attentionType: isCurrentlySelected
-              ? hasApproval
+              ? isRevision
+                ? "REVISION_REQUESTED"
+                : hasApproval
                 ? "PENDING_APPROVAL"
                 : null
               : msgAttention,
             unreadCount: newUnread,
             pendingApprovalsCount: newApprovals,
+            pendingRevisionsCount: newRevisions,
+            pendingInboundCount: newInbound,
             lastMessage: {
               id: newMsg.id,
               senderName: newMsg.senderName,
@@ -386,7 +392,12 @@ return sortProjectsByActivity(updated);
           ? {
               ...p,
               unreadCount: 0,
-              attentionType: (p.pendingApprovalsCount || 0) > 0 ? "PENDING_APPROVAL" : null,
+              attentionType:
+                (p.pendingRevisionsCount || 0) > 0
+                  ? "REVISION_REQUESTED"
+                  : (p.pendingApprovalsCount || 0) > 0
+                  ? "PENDING_APPROVAL"
+                  : null,
             }
           : p
       )
@@ -539,6 +550,47 @@ return sortProjectsByActivity(updated);
     }
   };
 
+  // Handle editing a message (WebSocket with REST fallback)
+  const handleEditMessage = React.useCallback(
+    async (messageId: string, text: string, reason?: string) => {
+      if (!selectedProjectId) return;
+
+      try {
+        // 1. Attempt WebSocket edit
+        const updated = await socketClient.editMessage(messageId, { text, reason });
+        if (updated) {
+          setMessagesByProject((prev) => ({
+            ...prev,
+            [selectedProjectId]: (prev[selectedProjectId] || []).map((m) =>
+              m.id === messageId ? (updated as any) : m
+            ),
+          }));
+        }
+      } catch {
+        // 2. Fallback to REST API if socket fails
+        try {
+          const res = await api.patch<any>(`/projects/${selectedProjectId}/messages/${messageId}`, {
+            text,
+            reason,
+          });
+          const data = (res as any)?.data || res;
+          if (data) {
+            setMessagesByProject((prev) => ({
+              ...prev,
+              [selectedProjectId]: (prev[selectedProjectId] || []).map((m) =>
+                m.id === messageId ? data : m
+              ),
+            }));
+          }
+        } catch (restErr: any) {
+          console.error("Failed to edit message via REST fallback:", restErr);
+          throw restErr;
+        }
+      }
+    },
+    [selectedProjectId, socketClient]
+  );
+
   // Handle toggling reaction
   const handleToggleReaction = (messageId: string, emoji: string) => {
     socketClient.sendReaction(messageId, emoji);
@@ -671,6 +723,7 @@ return sortProjectsByActivity(updated);
             onSendMessage={handleSendMessage}
             onUpdateApproval={handleUpdateApproval}
             onToggleReaction={handleToggleReaction}
+            onEditMessage={handleEditMessage}
             onTogglePinMessage={handleTogglePinMessage}
             onMarkSeen={handleMarkMessagesSeen}
             onToggleRightSidebar={() => setIsRightSidebarOpen((prev) => !prev)}

@@ -46,13 +46,37 @@ export interface MessageReadReceipt {
 export interface ApprovalStageAudit {
   id: string;
   stageName: string;
-  stageKey: "DRAFTED" | "LEAD_REVIEW" | "SALES_DISPATCH" | "DISPATCHED" | "REVISION_REQUESTED";
+  stageKey:
+    | "DRAFTED"
+    | "DRAFT_EDITED"
+    | "LEAD_REVIEW"
+    | "LEAD_EDIT"
+    | "SALES_DISPATCH"
+    | "SALES_EDIT"
+    | "DISPATCHED"
+    | "REVISION_REQUESTED"
+    | "REVISION_RESUBMITTED"
+    | "POST_DISPATCH_EDIT"
+    | "CANCELLED"
+    | string;
   actorName: string;
   actorAvatar?: string;
   actorRole: string;
   timestamp: string;
   durationMinutes?: number;
   notes?: string;
+}
+
+export interface ProjectMessageRevision {
+  id: string;
+  messageId: string;
+  content: string;
+  editedById: string;
+  editorName: string;
+  editorAvatar?: string | null;
+  editorDesignation?: string | null;
+  reason?: string | null;
+  createdAt: string;
 }
 
 export interface ApprovalWorkflow {
@@ -64,6 +88,7 @@ export interface ApprovalWorkflow {
   requestedAt: string;
   targetClient: string;
   currentStageDwellMinutes: number;
+  stageStartedAt?: string;
   totalTurnaroundMinutes?: number;
   slaTargetMinutes: number;
   slaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED";
@@ -210,6 +235,10 @@ export interface ProjectWorkspaceItem {
   isPinned?: boolean;
   unreadCount?: number;
   pendingApprovalsCount?: number;
+  pendingLeadApprovalsCount?: number;
+  pendingSalesDispatchesCount?: number;
+  pendingRevisionsCount?: number;
+  pendingInboundCount?: number;
   onlineCount?: number;
   pinnedAnnouncement?: ProjectPinnedAnnouncement;
   pinnedAnnouncements?: ProjectPinnedAnnouncement[];
@@ -279,6 +308,16 @@ export interface ChatVoiceNote {
   waveform: number[];
 }
 
+export interface ProjectMessageCapabilities {
+  canLeadApprove?: boolean;
+  canSalesDispatch?: boolean;
+  canRequestRevision?: boolean;
+  canPin?: boolean;
+  canDelete?: boolean;
+  canEdit?: boolean;
+  editTimeRemainingSeconds?: number;
+}
+
 export interface ChatMessage {
   id: string;
   projectId: string;
@@ -287,9 +326,12 @@ export interface ChatMessage {
   senderName: string;
   senderAvatar: string;
   senderDesignation?: string;
-  senderRole?: "Admin" | "Project Manager" | "Tech Lead" | "Sales Lead" | "Member";
+  senderRole?: "Admin" | "Project Manager" | "Tech Lead" | "Sales Lead" | "Member" | string;
   isCurrentUser: boolean;
   isFromClient?: boolean; // True when message is from client (inbound relayed from external platform)
+  isEdited?: boolean;
+  editedAt?: string | null;
+  editHistoryCount?: number;
   text: string;
   timestamp: string;
   dateGroup: string; // e.g., "Today", "Yesterday", "Oct 18, 2026"
@@ -301,6 +343,7 @@ export interface ChatMessage {
   approval?: ApprovalWorkflow;
   clientInboundRelay?: ClientInboundRelay;
   seenBy?: MessageReadReceipt[];
+  revisions?: ProjectMessageRevision[];
   replyTo?: {
     id: string;
     senderName: string;
@@ -313,4 +356,5 @@ export interface ChatMessage {
   reactions?: ChatReaction[];
   isPinned?: boolean;
   isCollapsible?: boolean;
+  _capabilities?: ProjectMessageCapabilities;
 }

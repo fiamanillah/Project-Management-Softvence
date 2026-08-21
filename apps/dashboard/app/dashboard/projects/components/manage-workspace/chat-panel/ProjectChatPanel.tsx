@@ -37,6 +37,7 @@ interface ProjectChatPanelProps {
   }) => void;
   onReact?: (messageId: string, emoji: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  onEditMessage?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onMarkSeen?: (messageIds: string[]) => void;
   onTogglePinMessage?: (messageId: string) => void;
@@ -60,6 +61,7 @@ export function ProjectChatPanel({
   onSendMessage,
   onReact,
   onToggleReaction,
+  onEditMessage,
   onUpdateApproval,
   onMarkSeen,
   onTogglePinMessage,
@@ -153,6 +155,7 @@ export function ProjectChatPanel({
         onLoadEarlierMessages={onLoadEarlierMessages}
         onReply={handleReply}
         onReact={handleReact}
+        onEdit={onEditMessage}
         onUpdateApproval={onUpdateApproval}
         onMarkSeen={onMarkSeen}
         searchFilterQuery={searchQuery}

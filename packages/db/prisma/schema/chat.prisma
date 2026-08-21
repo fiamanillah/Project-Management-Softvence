@@ -85,6 +85,8 @@ model ProjectMessage {
   pinnedAt         DateTime?                  @map("pinned_at")
   pinnedById       String?                    @map("pinned_by_id") @db.Uuid
   isFromClient     Boolean                    @default(false) @map("is_from_client")
+  isEdited         Boolean                    @default(false) @map("is_edited")
+  editedAt         DateTime?                  @map("edited_at")
   metadata         Json?                      @map("metadata")
 
   createdAt        DateTime                   @default(now()) @map("created_at")
@@ -102,12 +104,29 @@ model ProjectMessage {
   attachments      ProjectMessageAttachment[]
   reactions        ProjectMessageReaction[]
   reads            ProjectMessageReadReceipt[]
+  revisions        ProjectMessageRevision[]
 
   @@index([projectId, createdAt])
   @@index([projectId, purpose])
   @@index([projectId, isPinned])
   @@index([senderId])
   @@map("project_messages")
+}
+
+model ProjectMessageRevision {
+  id         String         @id @default(uuid()) @db.Uuid
+  messageId  String         @map("message_id") @db.Uuid
+  content    String         @db.Text
+  editedById String         @map("edited_by_id") @db.Uuid
+  reason     String?        @db.Text
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  message    ProjectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  editor     User           @relation("ProjectMessageEditor", fields: [editedById], references: [id])
+
+  @@index([messageId])
+  @@index([editedById])
+  @@map("project_message_revisions")
 }
 
 model MessageApprovalWorkflow {

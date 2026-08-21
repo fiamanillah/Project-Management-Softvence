@@ -70,6 +70,9 @@ export class ProjectApprovalService {
     }
 
     const now = new Date();
+    const stageStartTime = workflow.createdAt;
+    const durationMinutes = Math.max(1, Math.round((now.getTime() - stageStartTime.getTime()) / (60 * 1000)));
+
     const updated = await this.prisma.messageApprovalWorkflow.update({
       where: { id: workflow.id },
       data: {
@@ -82,6 +85,7 @@ export class ProjectApprovalService {
             stageName: "Tech Lead Approved",
             actorId: actor.id,
             actorRole: actor.systemRole,
+            durationMinutes,
             notes: dto.notes || "Approved internally by Tech Lead",
           },
         },
@@ -172,6 +176,9 @@ export class ProjectApprovalService {
     }
 
     const now = new Date();
+    const stageStartTime = workflow.leadApprovedAt || workflow.createdAt;
+    const durationMinutes = Math.max(1, Math.round((now.getTime() - stageStartTime.getTime()) / (60 * 1000)));
+
     const updated = await this.prisma.messageApprovalWorkflow.update({
       where: { id: workflow.id },
       data: {
@@ -186,6 +193,7 @@ export class ProjectApprovalService {
             stageName: "Dispatched to Client",
             actorId: actor.id,
             actorRole: actor.systemRole,
+            durationMinutes,
             notes: dto.notes || `Dispatched via ${dto.dispatchPlatform}${dto.dispatchReferenceId ? ` (Ref: ${dto.dispatchReferenceId})` : ""}`,
           },
         },
@@ -280,6 +288,9 @@ export class ProjectApprovalService {
     }
 
     const now = new Date();
+    const stageStartTime = workflow.leadApprovedAt || workflow.createdAt;
+    const durationMinutes = Math.max(1, Math.round((now.getTime() - stageStartTime.getTime()) / (60 * 1000)));
+
     const updated = await this.prisma.messageApprovalWorkflow.update({
       where: { id: workflow.id },
       data: {
@@ -293,6 +304,7 @@ export class ProjectApprovalService {
             stageName: "Revision Requested",
             actorId: actor.id,
             actorRole: actor.systemRole,
+            durationMinutes,
             notes: dto.rejectionReason,
           },
         },
@@ -377,35 +389,81 @@ export class ProjectApprovalService {
   }
 
   private formatWorkflowItem(wf: any): ApprovalWorkflowItem {
+    const statusCode = wf.status?.code || "PENDING_LEAD";
+    const nowTime = Date.now();
+
+    let stageStartedDate = new Date(wf.createdAt);
+    if (statusCode === "PENDING_SALES" && wf.leadApprovedAt) {
+      stageStartedDate = new Date(wf.leadApprovedAt);
+    } else if (statusCode === "REVISION_REQUESTED" && wf.rejectedAt) {
+      stageStartedDate = new Date(wf.rejectedAt);
+    } else if (statusCode === "DISPATCHED" && wf.salesDispatchedAt) {
+      stageStartedDate = new Date(wf.salesDispatchedAt);
+    }
+
+    const dwellMinutes =
+      statusCode === "DISPATCHED"
+        ? 0
+        : Math.max(0, Math.floor((nowTime - stageStartedDate.getTime()) / (1000 * 60)));
+
+    const slaTargetMinutes = wf.slaTargetMinutes || 30;
+    let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
+    if (statusCode !== "DISPATCHED") {
+      if (dwellMinutes > slaTargetMinutes) {
+        computedSlaStatus = "BREACHED";
+      } else if (dwellMinutes > slaTargetMinutes * 0.75) {
+        computedSlaStatus = "AT_RISK";
+      }
+    }
+
     return {
       id: wf.id,
-      status: wf.status?.code || "PENDING_LEAD",
+      status: statusCode as any,
       clientMessageType: wf.clientMessageType || "GENERAL_NOTICE",
       requestedBy: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
       requestedAt: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       targetClient: wf.targetClientName,
-      slaTargetMinutes: wf.slaTargetMinutes || 30,
-      slaStatus: wf.slaStatus || "ON_TRACK",
+      currentStageDwellMinutes: dwellMinutes,
+      stageStartedAt: stageStartedDate.toISOString(),
+      slaTargetMinutes,
+      slaStatus: computedSlaStatus,
       leadApprovedBy: wf.leadApprover ? `${wf.leadApprover.firstName} ${wf.leadApprover.lastName}` : null,
       leadApprovedAt: wf.leadApprovedAt ? new Date(wf.leadApprovedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
       salesDispatchedBy: wf.salesDispatcher ? `${wf.salesDispatcher.firstName} ${wf.salesDispatcher.lastName}` : null,
       salesDispatchedAt: wf.salesDispatchedAt ? new Date(wf.salesDispatchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
       dispatchPlatform: wf.dispatchPlatform || null,
       dispatchReferenceId: wf.dispatchReferenceId || null,
-      rejectionReason: wf.rejectionReason || null,
       rejectedBy: wf.rejector ? `${wf.rejector.firstName} ${wf.rejector.lastName}` : null,
       rejectedAt: wf.rejectedAt ? new Date(wf.rejectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      auditTrail: (wf.auditTrail || []).map((aud: any) => ({
-        id: aud.id,
-        stageName: aud.stageName,
-        stageKey: aud.stageKey,
-        actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
-        actorAvatar: aud.actor?.avatarUrl || null,
-        actorRole: aud.actorRole,
-        timestamp: new Date(aud.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        durationMinutes: aud.durationMinutes || null,
-        notes: aud.notes || null,
-      })),
+      auditTrail: (() => {
+        const mapped = (wf.auditTrail || []).map((aud: any) => ({
+          id: aud.id,
+          stageName: aud.stageName,
+          stageKey: aud.stageKey,
+          actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
+          actorAvatar: aud.actor?.avatarUrl || null,
+          actorRole: aud.actorRole || "Reviewer",
+          timestamp: new Date(aud.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          durationMinutes: aud.durationMinutes || null,
+          notes: aud.notes || null,
+        }));
+
+        const hasDraft = mapped.some((a: any) => a.stageKey === "DRAFTED" || a.stageName === "Draft Created");
+        if (!hasDraft) {
+          mapped.unshift({
+            id: `draft-${wf.id}`,
+            stageName: "Draft Created",
+            stageKey: "DRAFTED",
+            actorName: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
+            actorAvatar: wf.requestedBy?.avatarUrl || null,
+            actorRole: "Author",
+            timestamp: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            durationMinutes: null,
+            notes: `Drafted client communication (${wf.clientMessageType || "General"})`,
+          });
+        }
+        return mapped;
+      })(),
     };
   }
 }

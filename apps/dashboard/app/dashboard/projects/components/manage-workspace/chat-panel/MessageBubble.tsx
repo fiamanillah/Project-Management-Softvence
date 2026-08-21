@@ -5,36 +5,45 @@ import { Bubble, BubbleContent, BubbleReactions } from "@workspace/ui/components
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@workspace/ui/components/collapsible";
 import { Button } from "@workspace/ui/components/button";
 import { Progress } from "@workspace/ui/components/progress";
-import { Badge } from "@workspace/ui/components/badge";
 import {
+  ChevronDown,
+  ChevronUp,
+  Reply,
+  Copy,
   CheckCheck,
   Play,
   Pause,
-  Reply,
-  Copy,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
-  ExternalLink,
-  Send,
   Package,
   Calendar,
+  Sparkles,
+  ExternalLink,
+  Pencil,
+  History,
+  Clock,
+  Loader2,
+  Check,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
+import { Textarea } from "@workspace/ui/components/textarea";
+import { useAuth } from "@/lib/auth-context";
+import { MessageReactionPicker } from "./MessageReactionPicker";
 import { MessageReplyPreview } from "./MessageReplyPreview";
 import { MessageAttachmentPreview } from "./MessageAttachmentPreview";
-import { MessageReactionPicker } from "./MessageReactionPicker";
 import { ClientDispatchCard } from "./ClientDispatchCard";
 import { ClientInboundMessageBubble } from "./ClientInboundMessageBubble";
 import { MessageMeetingSummary } from "./MessageMeetingSummary";
 import { MessageSeenReceipts } from "./MessageSeenReceipts";
+import { FormattedMessageText } from "./FormattedMessageText";
+import { MessageRevisionHistoryPopover } from "./MessageRevisionHistoryPopover";
 import type { ChatMessage, ApprovalWorkflow } from "../types";
 
 interface MessageBubbleProps {
   message: ChatMessage;
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
+  onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onScrollToMessage?: (messageId: string) => void;
   isHighlighted?: boolean;
@@ -44,13 +53,27 @@ export function MessageBubble({
   message,
   onReply,
   onReact,
+  onEdit,
   onUpdateApproval,
   onScrollToMessage,
   isHighlighted = false,
 }: MessageBubbleProps) {
+  const { user } = useAuth();
   const [isPlayingVoice, setIsPlayingVoice] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
-  const align = message.isCurrentUser ? "end" : "start";
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editText, setEditText] = React.useState(message.text);
+  const [editReason, setEditReason] = React.useState("");
+  const [isSaving, setIsSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    setEditText(message.text);
+  }, [message.text]);
+
+  const isCurrentUser = Boolean(user?.id && message.senderId === user.id);
+  const align = isCurrentUser ? "end" : "start";
+
+  const canEdit = Boolean(message._capabilities?.canEdit ?? isCurrentUser);
 
   const isLongMessage = message.text.length > 200 || message.text.split("\n").length > 3;
   const hasReactions = message.reactions && message.reactions.length > 0;
@@ -58,6 +81,28 @@ export function MessageBubble({
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text);
     toast.success("Message copied to clipboard");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editText.trim()) {
+      toast.error("Message cannot be empty");
+      return;
+    }
+    if (editText.trim() === message.text.trim()) {
+      setIsEditing(false);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onEdit?.(message.id, editText.trim(), editReason.trim() || undefined);
+      setIsEditing(false);
+      setEditReason("");
+      toast.success("Message updated");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save message edit");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // 1. Client Inbound Message (From Client -> Left side)
@@ -71,6 +116,7 @@ export function MessageBubble({
         message={message}
         onReply={onReply}
         onReact={onReact}
+        onEdit={onEdit}
         onScrollToMessage={onScrollToMessage}
         isHighlighted={isHighlighted}
       />
@@ -101,7 +147,7 @@ export function MessageBubble({
         id={message.id}
         workflow={message.approval || fallbackApproval}
         onUpdateApproval={(updated) => onUpdateApproval?.(message.id, updated)}
-        isCurrentUser={message.isCurrentUser}
+        isCurrentUser={isCurrentUser}
         messageText={message.text}
         attachments={message.attachments}
         seenBy={message.seenBy}
@@ -112,6 +158,10 @@ export function MessageBubble({
         reactions={message.reactions}
         onReact={onReact}
         onReply={() => onReply(message)}
+        onEdit={onEdit}
+        isEdited={message.isEdited}
+        revisions={message.revisions}
+        capabilities={message._capabilities}
         isHighlighted={isHighlighted}
       />
     );
@@ -141,113 +191,189 @@ export function MessageBubble({
   return (
     <div
       id={`msg-${message.id}`}
-      className={cn(
-        "group/msg-bubble relative flex flex-col gap-1 transition-all duration-300 rounded-2xl p-0.5 max-w-full min-w-0",
-        align === "end" ? "items-end" : "items-start",
-        isHighlighted ? "ring-2 ring-primary ring-offset-2 bg-primary/10" : ""
-      )}
-    >
-      {/* Quick Action Floating Bar on Hover */}
-      <div
         className={cn(
-          "absolute -top-3.5 z-30 opacity-0 group-hover/msg-bubble:opacity-100 transition-opacity duration-150 pointer-events-none group-hover/msg-bubble:pointer-events-auto flex items-center gap-0.5 rounded-full border border-border/80 bg-background/95 px-1.5 py-0.5 shadow-md backdrop-blur-md",
-          align === "end" ? "right-2" : "left-2"
+          "group/msg-bubble relative flex flex-col gap-1 transition-all duration-200 max-w-full min-w-0",
+          align === "end" ? "items-end" : "items-start",
+          isHighlighted ? "ring-2 ring-primary ring-offset-2 bg-primary/10 rounded-2xl p-1" : ""
         )}
       >
-        <MessageReactionPicker onSelectEmoji={(emoji) => onReact(message.id, emoji)} />
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
-          title="Reply"
-          onClick={() => onReply(message)}
-        >
-          <Reply className="size-3 rotate-180" />
-        </Button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
-          title="Copy text"
-          onClick={handleCopy}
-        >
-          <Copy className="size-3" />
-        </Button>
-      </div>
-
-      {/* Main Bubble Surface */}
-      <Bubble
-        variant={message.variant || (message.isCurrentUser ? "default" : "secondary")}
-        align={align}
-        className={cn(
-          "relative transition-all shadow-xs max-w-full min-w-0 break-words [overflow-wrap:anywhere]",
-          hasReactions ? "mb-3.5" : "",
-          message.deliverableUpdate ? "border-emerald-500/30 bg-card" : ""
-        )}
-      >
-        <BubbleContent
+        {/* Quick Action Floating Bar on Hover */}
+        <div
           className={cn(
-            "p-3.5 min-w-0 rounded-2xl shadow-2xs",
-            align === "end" ? "rounded-tr-xs" : "rounded-tl-xs"
+            "absolute -top-3.5 z-30 opacity-0 group-hover/msg-bubble:opacity-100 transition-opacity duration-150 pointer-events-none group-hover/msg-bubble:pointer-events-auto flex items-center gap-0.5 rounded-full border border-border/80 bg-background/95 px-1.5 py-0.5 shadow-md backdrop-blur-md",
+            align === "end" ? "right-2" : "left-2"
           )}
         >
-          {/* Purpose Identifier Tag */}
-          {renderPurposeBadge()}
+          <MessageReactionPicker onSelectEmoji={(emoji) => onReact(message.id, emoji)} />
 
-          {/* Quoted Reply Banner */}
-          {message.replyTo && (
-            <button
-              type="button"
-              onClick={() => onScrollToMessage?.(message.replyTo?.id || "")}
-              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity min-w-0 mb-1.5"
+          {canEdit && (
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
+              title="Edit message"
+              onClick={() => setIsEditing(true)}
             >
-              <MessageReplyPreview
-                replyTo={message.replyTo}
-                isInCurrentUserBubble={message.isCurrentUser}
-              />
-            </button>
+              <Pencil className="size-3" />
+            </Button>
           )}
 
-          {/* Message Text with Long Message Toggler */}
-          <div className="text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
-            {isLongMessage && !isExpanded ? (
-              <>
-                <p className="line-clamp-3 whitespace-pre-wrap">{message.text}</p>
-                <button
-                  type="button"
-                  onClick={() => setIsExpanded(true)}
-                  className={cn(
-                    "inline-flex items-center gap-1 text-[11px] font-bold mt-1.5 cursor-pointer transition-opacity hover:opacity-85",
-                    message.isCurrentUser
-                      ? "text-primary-foreground underline underline-offset-2 decoration-primary-foreground/60"
-                      : "text-primary hover:underline underline-offset-2"
-                  )}
-                >
-                  <span>Show full message</span>
-                  <ChevronDown className="size-3" />
-                </button>
-              </>
-            ) : isLongMessage && isExpanded ? (
-              <>
-                <p className="whitespace-pre-wrap">{message.text}</p>
-                <button
-                  type="button"
-                  onClick={() => setIsExpanded(false)}
-                  className={cn(
-                    "inline-flex items-center gap-1 text-[11px] font-bold mt-1.5 cursor-pointer transition-opacity hover:opacity-85",
-                    message.isCurrentUser
-                      ? "text-primary-foreground underline underline-offset-2 decoration-primary-foreground/60"
-                      : "text-primary hover:underline underline-offset-2"
-                  )}
-                >
-                  <span>Show less</span>
-                  <ChevronUp className="size-3" />
-                </button>
-              </>
-            ) : (
-              <p className="whitespace-pre-wrap">{message.text}</p>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
+            title="Reply"
+            onClick={() => onReply(message)}
+          >
+            <Reply className="size-3 rotate-180" />
+          </Button>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
+            title="Copy text"
+            onClick={handleCopy}
+          >
+            <Copy className="size-3" />
+          </Button>
+        </div>
+
+        {/* Main Bubble Surface */}
+        <Bubble
+          variant={isCurrentUser ? "default" : "secondary"}
+          align={align}
+          className={cn(
+            "relative transition-all max-w-full min-w-0",
+            hasReactions ? "mb-3.5" : ""
+          )}
+        >
+          <BubbleContent
+            className={cn(
+              "p-3 sm:px-3.5 sm:py-2.5 min-w-0 max-w-full text-xs leading-relaxed shadow-2xs transition-all",
+              isCurrentUser
+                ? "rounded-2xl rounded-tr-xs bg-primary text-primary-foreground border-transparent shadow-xs"
+                : "rounded-2xl rounded-tl-xs bg-muted/80 dark:bg-muted/50 text-foreground border border-border/70",
+              message.deliverableUpdate && "border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-500/10 text-foreground"
             )}
-          </div>
+          >
+            {/* Purpose Identifier Tag */}
+            {renderPurposeBadge()}
+
+            {/* Quoted Reply Banner */}
+            {message.replyTo && (
+              <button
+                type="button"
+                onClick={() => onScrollToMessage?.(message.replyTo?.id || "")}
+                className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity min-w-0 mb-1.5"
+              >
+                <MessageReplyPreview
+                  replyTo={message.replyTo}
+                  isInCurrentUserBubble={isCurrentUser}
+                />
+              </button>
+            )}
+
+            {/* Inline Edit Form OR Message Text */}
+            {isEditing ? (
+              <div className="space-y-2 py-1 min-w-[240px] sm:min-w-[320px]">
+                <Textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleSaveEdit();
+                    } else if (e.key === "Escape") {
+                      setIsEditing(false);
+                      setEditText(message.text);
+                    }
+                  }}
+                  rows={3}
+                  className="w-full text-xs font-sans bg-background text-foreground resize-y border-border focus:ring-1 focus:ring-primary rounded-xl"
+                  placeholder="Edit message..."
+                  autoFocus
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-muted-foreground opacity-90">
+                    Esc to cancel • ⌘+Enter to save
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditText(message.text);
+                      }}
+                      disabled={isSaving}
+                      className={cn(
+                        "h-6 text-[11px] px-2 cursor-pointer",
+                        isCurrentUser ? "text-primary-foreground/90 hover:text-primary-foreground hover:bg-white/10" : ""
+                      )}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={handleSaveEdit}
+                      disabled={isSaving}
+                      className={cn(
+                        "h-6 text-[11px] px-2.5 gap-1 cursor-pointer font-bold shadow-xs",
+                        isCurrentUser ? "bg-background text-foreground hover:bg-background/90" : "bg-primary text-primary-foreground"
+                      )}
+                    >
+                      {isSaving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
+                {isLongMessage && !isExpanded ? (
+                  <>
+                    <div className="line-clamp-3">
+                      <FormattedMessageText text={message.text} isCurrentUser={isCurrentUser} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsExpanded(true)}
+                      className={cn(
+                        "inline-flex items-center gap-1 text-[11px] font-bold mt-1.5 cursor-pointer transition-opacity hover:opacity-85",
+                        isCurrentUser
+                          ? "text-primary-foreground underline underline-offset-2 decoration-primary-foreground/60"
+                          : "text-primary hover:underline underline-offset-2"
+                      )}
+                    >
+                      <span>Show full message</span>
+                      <ChevronDown className="size-3" />
+                    </button>
+                  </>
+                ) : isLongMessage && isExpanded ? (
+                  <>
+                    <FormattedMessageText text={message.text} isCurrentUser={isCurrentUser} />
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setIsExpanded(false)}
+                        className={cn(
+                          "inline-flex items-center gap-1 text-[11px] font-bold mt-1.5 cursor-pointer transition-opacity hover:opacity-85",
+                          isCurrentUser
+                            ? "text-primary-foreground underline underline-offset-2 decoration-primary-foreground/60"
+                            : "text-primary hover:underline underline-offset-2"
+                        )}
+                      >
+                        <span>Show less</span>
+                        <ChevronUp className="size-3" />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <FormattedMessageText text={message.text} isCurrentUser={isCurrentUser} />
+                )}
+              </div>
+            )}
 
           {/* Meeting Summary Checklist */}
           {message.meetingSummary && (
@@ -335,7 +461,7 @@ export function MessageBubble({
           <div
             className={cn(
               "flex items-center gap-1.5 text-[10px] mt-1.5 font-medium select-none flex-wrap",
-              align === "end" && message.variant === "default"
+              isCurrentUser
                 ? "justify-end text-primary-foreground/80"
                 : "justify-end text-muted-foreground"
             )}
@@ -343,8 +469,24 @@ export function MessageBubble({
             {message.seenBy && message.seenBy.length > 0 && (
               <MessageSeenReceipts seenBy={message.seenBy} align={align} />
             )}
+
+            {(message.isEdited || (message.revisions && message.revisions.length > 0)) && (
+              <MessageRevisionHistoryPopover message={message} align={align}>
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-0.5 text-[10px] font-semibold underline underline-offset-2 hover:opacity-100 opacity-80 cursor-pointer transition-opacity",
+                    isCurrentUser ? "text-primary-foreground/90" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title="Click to view edit history"
+                >
+                  <span>(edited)</span>
+                </button>
+              </MessageRevisionHistoryPopover>
+            )}
+
             <span>{message.timestamp}</span>
-            {message.isCurrentUser && (
+            {isCurrentUser && (
               <span title="Delivered" className="inline-flex">
                 <CheckCheck className="size-3" />
               </span>

@@ -95,7 +95,18 @@ export function ProjectMediaTab({ media }: ProjectMediaTabProps) {
                 size="sm"
                 className="h-8 text-xs gap-1.5 rounded-xl cursor-pointer"
                 onClick={() => {
-                  toast.success(`Downloaded ${activeMedia.title}`);
+                  try {
+                    const a = document.createElement("a");
+                    a.href = activeMedia.url;
+                    a.download = activeMedia.title || "image";
+                    a.target = "_blank";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    toast.success(`Downloading ${activeMedia.title}`);
+                  } catch {
+                    window.open(activeMedia.url, "_blank");
+                  }
                 }}
               >
                 <Download className="size-3" />

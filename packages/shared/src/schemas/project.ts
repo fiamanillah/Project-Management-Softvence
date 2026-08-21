@@ -541,6 +541,24 @@ export const createProjectMessageSchema = z.object({
   metadata: z.record(z.string(), z.any()).optional().nullable(),
 });
 
+export const editProjectMessageSchema = z.object({
+  text: z.string().min(1, "Message content cannot be empty"),
+  reason: z.string().max(500).optional().nullable(),
+  attachments: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.string(),
+        url: z.string(),
+        thumbnailUrl: z.string().optional().nullable(),
+        fileSizeBytes: z.number().optional().nullable(),
+        extension: z.string().optional().nullable(),
+        mimeType: z.string().optional().nullable(),
+      }),
+    )
+    .optional(),
+});
+
 export const toggleReactionSchema = z.object({
   emoji: z.string().min(1, "Emoji is required"),
 });
@@ -611,6 +629,7 @@ export const createProjectLinkSchema = z.object({
 // ============================================================================
 
 export type CreateProjectMessageDTO = z.infer<typeof createProjectMessageSchema>;
+export type EditProjectMessageDTO = z.infer<typeof editProjectMessageSchema>;
 export type ToggleReactionDTO = z.infer<typeof toggleReactionSchema>;
 export type MarkMessagesSeenDTO = z.infer<typeof markMessagesSeenSchema>;
 export type LeadApproveDTO = z.infer<typeof leadApproveSchema>;
@@ -636,10 +655,34 @@ export interface MessageReadReceiptItem {
   seenAt: string;
 }
 
+export interface ProjectMessageRevisionItem {
+  id: string;
+  messageId: string;
+  content: string;
+  editedById: string;
+  editorName: string;
+  editorAvatar?: string | null;
+  editorDesignation?: string | null;
+  reason?: string | null;
+  createdAt: string;
+}
+
 export interface ApprovalStageAuditItem {
   id: string;
   stageName: string;
-  stageKey: "DRAFTED" | "LEAD_REVIEW" | "SALES_DISPATCH" | "DISPATCHED" | "REVISION_REQUESTED";
+  stageKey:
+    | "DRAFTED"
+    | "DRAFT_EDITED"
+    | "LEAD_REVIEW"
+    | "LEAD_EDIT"
+    | "SALES_DISPATCH"
+    | "SALES_EDIT"
+    | "DISPATCHED"
+    | "REVISION_REQUESTED"
+    | "REVISION_RESUBMITTED"
+    | "POST_DISPATCH_EDIT"
+    | "CANCELLED"
+    | string;
   actorName: string;
   actorAvatar?: string | null;
   actorRole: string;
@@ -655,6 +698,9 @@ export interface ApprovalWorkflowItem {
   requestedBy: string;
   requestedAt: string;
   targetClient: string;
+  currentStageDwellMinutes: number;
+  stageStartedAt?: string;
+  totalTurnaroundMinutes?: number;
   slaTargetMinutes: number;
   slaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED";
   auditTrail: ApprovalStageAuditItem[];
@@ -687,6 +733,7 @@ export interface ProjectMessageCapabilities {
   canPin?: boolean;
   canDelete?: boolean;
   canEdit?: boolean;
+  editTimeRemainingSeconds?: number;
 }
 
 export interface ProjectMessageItem {
@@ -700,6 +747,9 @@ export interface ProjectMessageItem {
   senderRole?: string | null;
   isCurrentUser: boolean;
   isFromClient: boolean;
+  isEdited?: boolean;
+  editedAt?: string | null;
+  editHistoryCount?: number;
   text: string;
   timestamp: string;
   dateGroup: string;
@@ -715,6 +765,7 @@ export interface ProjectMessageItem {
   attachments?: ProjectMessageAttachmentItem[];
   reactions?: MessageReactionItem[];
   seenBy?: MessageReadReceiptItem[];
+  revisions?: ProjectMessageRevisionItem[];
   approval?: ApprovalWorkflowItem | null;
   metadata?: Record<string, any> | null;
   isPinned?: boolean;
@@ -818,7 +869,13 @@ export interface ProjectWorkspaceItem {
   isPinned?: boolean;
   unreadCount?: number;
   pendingApprovalsCount?: number;
+  pendingLeadApprovalsCount?: number;
+  pendingSalesDispatchesCount?: number;
+  pendingRevisionsCount?: number;
+  pendingInboundCount?: number;
   onlineCount?: number;
+  media?: any[];
+  files?: any[];
   pinnedAnnouncements?: {
     id: string;
     messageId: string;

@@ -132,7 +132,7 @@ function NavMainItem({ item }: { item: NavItemConfig }) {
 function NavGroupSection({ group }: { group: NavGroupConfig }) {
   const permissions = usePermissions()
 
-  // Verify that at least one item in the group is accessible to the user
+  // Render the group section only if at least one item is accessible to the current user
   const visibleItems = group.items.filter(
     (item) => !item.permission || hasPermission(permissions, item.permission)
   )

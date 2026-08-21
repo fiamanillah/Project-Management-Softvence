@@ -5,7 +5,12 @@ import type { AuthenticatedSocket, RealtimeIoServer } from "@/core/realtime/real
 import type { ProjectChatService } from "../services/ProjectChatService";
 import type { ProjectApprovalService } from "../services/ProjectApprovalService";
 import { canSocket } from "@/core/realtime/socketPermission";
-import type { CreateProjectMessageDTO, ToggleReactionDTO, MarkMessagesSeenDTO } from "../ProjectDTO";
+import type {
+  CreateProjectMessageDTO,
+  EditProjectMessageDTO,
+  ToggleReactionDTO,
+  MarkMessagesSeenDTO,
+} from "../ProjectDTO";
 
 export class ProjectChatGateway extends BaseSocketGateway {
   public readonly name = "ProjectChatGateway";
@@ -32,6 +37,21 @@ export class ProjectChatGateway extends BaseSocketGateway {
       } catch (error: any) {
         this.logger.error("Error in chat:send_message:", { error: error.message || error });
         callback?.({ success: false, error: error.message || "Failed to send message" });
+      }
+    });
+
+    // 1b. Edit Project Message
+    socket.on("chat:edit_message", async (payload: { projectId: string; messageId: string } & EditProjectMessageDTO, callback) => {
+      try {
+        if (!payload.projectId || !payload.messageId || !payload.text?.trim()) {
+          return callback?.({ success: false, error: "Project ID, message ID, and message text are required" });
+        }
+
+        const updated = await this.chatService.editMessage(payload.projectId, payload.messageId, payload, user);
+        callback?.({ success: true, data: updated });
+      } catch (error: any) {
+        this.logger.error("Error in chat:edit_message:", { error: error.message || error });
+        callback?.({ success: false, error: error.message || "Failed to edit message" });
       }
     });
 

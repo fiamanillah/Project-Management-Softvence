@@ -207,7 +207,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const can = (permissionCode: string): boolean => {
-    if (user?.systemRole === "SuperAdmin") return true;
     return permissions[permissionCode] === true;
   };
 

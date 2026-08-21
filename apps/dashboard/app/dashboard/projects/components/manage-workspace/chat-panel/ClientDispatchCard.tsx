@@ -25,6 +25,7 @@ import {
   FileEdit,
   Calendar,
   MessageSquare,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
@@ -32,13 +33,25 @@ import { ClientDispatchModal } from "./ClientDispatchModal";
 import { MessageAttachmentPreview } from "./MessageAttachmentPreview";
 import { MessageSeenReceipts } from "./MessageSeenReceipts";
 import { MessageReactionPicker } from "./MessageReactionPicker";
+import { FormattedMessageText } from "./FormattedMessageText";
+import { MessageRevisionHistoryPopover } from "./MessageRevisionHistoryPopover";
+import { useElapsedTimer } from "./useElapsedTimer";
 import { getMessageTheme } from "../message-theme";
-import type { ApprovalWorkflow, ChatAttachment, MessageReadReceipt, ChatReaction, OutboundMessageType } from "../types";
+import type {
+  ApprovalWorkflow,
+  ChatAttachment,
+  MessageReadReceipt,
+  ChatReaction,
+  ProjectMessageCapabilities,
+  ProjectMessageRevision,
+  ChatMessage,
+} from "../types";
 
 interface ClientDispatchCardProps {
   id?: string;
   workflow: ApprovalWorkflow;
   onUpdateApproval: (updated: ApprovalWorkflow) => void;
+  onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
   isCurrentUser: boolean;
   messageText: string;
   attachments?: ChatAttachment[];
@@ -50,6 +63,9 @@ interface ClientDispatchCardProps {
   reactions?: ChatReaction[];
   onReact?: (messageId: string, emoji: string) => void;
   onReply: () => void;
+  isEdited?: boolean;
+  revisions?: ProjectMessageRevision[];
+  capabilities?: ProjectMessageCapabilities;
   isHighlighted?: boolean;
 }
 
@@ -57,6 +73,7 @@ export function ClientDispatchCard({
   id,
   workflow,
   onUpdateApproval,
+  onEdit,
   isCurrentUser,
   messageText,
   attachments,
@@ -68,6 +85,9 @@ export function ClientDispatchCard({
   reactions,
   onReact,
   onReply,
+  isEdited,
+  revisions,
+  capabilities,
   isHighlighted = false,
 }: ClientDispatchCardProps) {
   const [modalOpen, setModalOpen] = React.useState(false);
@@ -77,12 +97,42 @@ export function ClientDispatchCard({
   const theme = getMessageTheme(outboundType, "OUTBOUND");
   const isLongMessage = messageText.length > 180 || messageText.split("\n").length > 3;
 
+  // Live Timer for Stage Dwell Time
+  const isTerminal = workflow.status === "DISPATCHED";
+  const { elapsedFormatted } = useElapsedTimer({
+    startTimeISO: workflow.stageStartedAt || workflow.requestedAt,
+    slaTargetMinutes: workflow.slaTargetMinutes || 30,
+    isTerminal,
+  });
+
+  const canEdit = Boolean(capabilities?.canEdit ?? isCurrentUser);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
     toast.success("Outbound message copied to clipboard");
   };
 
   const hasReactions = reactions && reactions.length > 0;
+
+  const mockMessage: ChatMessage = {
+    id: id || "msg-outbound",
+    projectId: "",
+    projectCode: "PRJ",
+    senderId: "",
+    senderName: senderName || "Author",
+    senderAvatar: senderAvatar || "",
+    senderDesignation,
+    isCurrentUser,
+    text: messageText,
+    timestamp,
+    dateGroup: "Today",
+    purpose: "CLIENT_COMMUNICATION",
+    clientDirection: "OUTBOUND",
+    approval: workflow,
+    isEdited,
+    revisions,
+    _capabilities: capabilities,
+  };
 
   // Render tag indicating what kind of outbound message this is (using fixed theme color)
   const renderOutboundTypeTag = () => {
@@ -133,11 +183,24 @@ export function ClientDispatchCard({
 
           {/* Outbound Card Wrapper (Anchors Floating Action Bar and Reactions directly to the Card) */}
           <div className={cn("group/outbound-card relative w-full rounded-2xl min-w-0", hasReactions ? "mb-2" : "")}>
-            {/* Floating Action Bar on Hover (Reaction, Reply, Copy) - Directly attached to top edge of the Card */}
+            {/* Floating Action Bar on Hover (Reaction, Reply, Edit, Copy) */}
             <div className="absolute -top-3 right-3 z-30 opacity-0 group-hover/outbound-card:opacity-100 transition-opacity duration-150 pointer-events-none group-hover/outbound-card:pointer-events-auto flex items-center gap-0.5 rounded-full border border-border/80 bg-background/95 px-1.5 py-0.5 shadow-md backdrop-blur-md">
               {id && onReact && (
                 <MessageReactionPicker onSelectEmoji={(emoji) => onReact(id, emoji)} />
               )}
+
+              {canEdit && (
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
+                  title="Edit draft"
+                  onClick={() => setModalOpen(true)}
+                >
+                  <Pencil className="size-3" />
+                </Button>
+              )}
+
               <Button
                 size="icon-xs"
                 variant="ghost"
@@ -187,20 +250,20 @@ export function ClientDispatchCard({
                   {workflow.status === "PENDING_LEAD" && (
                     <Badge
                       variant="outline"
-                      className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px] sm:text-[10px] gap-1 font-semibold py-0.5 px-1.5 truncate max-w-[130px] sm:max-w-none"
+                      className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px] sm:text-[10px] gap-1 font-semibold py-0.5 px-1.5 truncate max-w-[140px] sm:max-w-none"
                     >
                       <Clock className="size-2.5 animate-spin shrink-0" />
-                      <span className="truncate">Lead Review ({workflow.currentStageDwellMinutes}m)</span>
+                      <span className="truncate">Lead Review ({elapsedFormatted})</span>
                     </Badge>
                   )}
 
                   {workflow.status === "PENDING_SALES" && (
                     <Badge
                       variant="outline"
-                      className="bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[9px] sm:text-[10px] gap-1 font-semibold py-0.5 px-1.5 truncate max-w-[130px] sm:max-w-none"
+                      className="bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[9px] sm:text-[10px] gap-1 font-semibold py-0.5 px-1.5 truncate max-w-[140px] sm:max-w-none"
                     >
                       <Clock className="size-2.5 animate-spin shrink-0" />
-                      <span className="truncate">Sales Dispatch ({workflow.currentStageDwellMinutes}m)</span>
+                      <span className="truncate">Sales Dispatch ({elapsedFormatted})</span>
                     </Badge>
                   )}
 
@@ -220,7 +283,7 @@ export function ClientDispatchCard({
                       className="bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30 text-[9px] sm:text-[10px] gap-1 font-semibold py-0.5 px-1.5 truncate"
                     >
                       <AlertTriangle className="size-2.5 shrink-0" />
-                      <span>Revision Req.</span>
+                      <span>Revision Req. ({elapsedFormatted})</span>
                     </Badge>
                   )}
 
@@ -233,7 +296,9 @@ export function ClientDispatchCard({
                 <div className="text-xs leading-relaxed text-foreground font-sans break-words [overflow-wrap:anywhere]">
                   {isLongMessage && !isExpanded ? (
                     <>
-                      <p className="line-clamp-3 whitespace-pre-wrap">{messageText}</p>
+                      <div className="line-clamp-3">
+                        <FormattedMessageText text={messageText} isCurrentUser={false} />
+                      </div>
                       <button
                         type="button"
                         onClick={() => setIsExpanded(true)}
@@ -244,17 +309,19 @@ export function ClientDispatchCard({
                     </>
                   ) : isLongMessage && isExpanded ? (
                     <>
-                      <p className="whitespace-pre-wrap">{messageText}</p>
-                      <button
-                        type="button"
-                        onClick={() => setIsExpanded(false)}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline mt-1 cursor-pointer"
-                      >
-                        Show less <ChevronUp className="size-3" />
-                      </button>
+                      <FormattedMessageText text={messageText} isCurrentUser={false} />
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setIsExpanded(false)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline mt-1 cursor-pointer"
+                        >
+                          Show less <ChevronUp className="size-3" />
+                        </button>
+                      </div>
                     </>
                   ) : (
-                    <p className="whitespace-pre-wrap">{messageText}</p>
+                    <FormattedMessageText text={messageText} isCurrentUser={false} />
                   )}
                 </div>
 
@@ -269,16 +336,17 @@ export function ClientDispatchCard({
                   <button
                     type="button"
                     onClick={() => setModalOpen(true)}
-                    className="flex w-full items-center justify-between gap-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 p-2 text-rose-700 dark:text-rose-300 text-[11px] text-left cursor-pointer hover:bg-rose-500/15 transition-colors min-w-0"
+                    className="flex w-full items-center justify-between gap-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 p-2.5 text-rose-700 dark:text-rose-300 text-[11px] text-left cursor-pointer hover:bg-rose-500/15 transition-colors min-w-0"
                   >
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <AlertTriangle className="size-3.5 shrink-0 text-rose-500" />
-                      <span className="truncate">
-                        <strong>Revision Note:</strong> {workflow.rejectionReason}
-                      </span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <AlertTriangle className="size-4 shrink-0 text-rose-500" />
+                      <div className="min-w-0 truncate">
+                        <p className="font-bold truncate">Revision Requested</p>
+                        <p className="text-[10px] opacity-90 truncate">{workflow.rejectionReason}</p>
+                      </div>
                     </div>
-                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 shrink-0">
-                      Details →
+                    <span className="text-[10px] font-bold bg-rose-600 text-white px-2 py-1 rounded-md shrink-0 shadow-2xs">
+                      Edit & Resubmit →
                     </span>
                   </button>
                 )}
@@ -305,9 +373,22 @@ export function ClientDispatchCard({
 
               {/* 3. Interactive Footer Strip */}
               <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/25 px-3 py-2 border-t border-border/40 text-[10px] text-muted-foreground rounded-b-2xl min-w-0">
-                {/* Left: Timestamp + Seen By + Timeline Trigger */}
+                {/* Left: Timestamp + Seen By + (edited) tag + Timeline Trigger */}
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <span className="shrink-0 font-medium">{timestamp}</span>
+                  <div className="flex items-center gap-1.5 shrink-0 font-medium">
+                    <span>{timestamp}</span>
+                    {(isEdited || (revisions && revisions.length > 0)) && (
+                      <MessageRevisionHistoryPopover message={mockMessage} align="end">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-0.5 text-[10px] font-semibold underline underline-offset-2 hover:text-foreground cursor-pointer transition-opacity text-muted-foreground"
+                          title="Click to view edit history"
+                        >
+                          <span>(edited)</span>
+                        </button>
+                      </MessageRevisionHistoryPopover>
+                    )}
+                  </div>
 
                   {seenBy && seenBy.length > 0 && (
                     <MessageSeenReceipts seenBy={seenBy} align="end" />
@@ -326,26 +407,78 @@ export function ClientDispatchCard({
                 {/* Right: Quick Action Trigger */}
                 <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                   {workflow.status === "PENDING_LEAD" && (
-                    <Button
-                      size="xs"
-                      onClick={() => setModalOpen(true)}
-                      className="h-6.5 text-[10px] sm:text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
-                    >
-                      <Check className="size-3" /> Review & Approve
-                    </Button>
+                    capabilities?.canLeadApprove ? (
+                      <Button
+                        size="xs"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] sm:text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
+                      >
+                        <Check className="size-3" /> Review & Approve
+                      </Button>
+                    ) : capabilities?.canEdit ? (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] sm:text-[11px] font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
+                      >
+                        <Pencil className="size-3" /> Edit Draft
+                      </Button>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] font-medium cursor-pointer shrink-0"
+                      >
+                        View Status
+                      </Button>
+                    )
                   )}
 
                   {workflow.status === "PENDING_SALES" && (
-                    <Button
-                      size="xs"
-                      onClick={() => setModalOpen(true)}
-                      className="h-6.5 text-[10px] sm:text-[11px] bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
-                    >
-                      <Send className="size-3" /> Dispatch to Client
-                    </Button>
+                    capabilities?.canSalesDispatch ? (
+                      <Button
+                        size="xs"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] sm:text-[11px] bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
+                      >
+                        <Send className="size-3" /> Dispatch to Client
+                      </Button>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] font-medium cursor-pointer shrink-0"
+                      >
+                        View Details
+                      </Button>
+                    )
                   )}
 
-                  {(workflow.status === "DISPATCHED" || workflow.status === "REVISION_REQUESTED") && (
+                  {workflow.status === "REVISION_REQUESTED" && (
+                    capabilities?.canEdit ? (
+                      <Button
+                        size="xs"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] sm:text-[11px] bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
+                      >
+                        <Pencil className="size-3" /> Edit & Resubmit
+                      </Button>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => setModalOpen(true)}
+                        className="h-6.5 text-[10px] text-rose-600 border-rose-500/30 hover:bg-rose-500/10 font-semibold cursor-pointer shadow-2xs gap-1 px-2.5 shrink-0"
+                      >
+                        View Feedback
+                      </Button>
+                    )
+                  )}
+
+                  {workflow.status === "DISPATCHED" && (
                     <Button
                       size="xs"
                       variant="outline"
@@ -359,7 +492,7 @@ export function ClientDispatchCard({
               </div>
             </div>
 
-            {/* Reaction Badges Row (Positioned below card to avoid overlapping action buttons) */}
+            {/* Reaction Badges Row */}
             {hasReactions && id && onReact && (
               <div className="flex items-center justify-end gap-1 mt-1.5 flex-wrap">
                 {reactions.map((r) => (
@@ -395,6 +528,11 @@ export function ClientDispatchCard({
         attachments={attachments}
         seenBy={seenBy}
         onUpdateApproval={onUpdateApproval}
+        onEdit={onEdit}
+        messageId={id}
+        capabilities={capabilities}
+        isCurrentUser={isCurrentUser}
+        revisions={revisions}
       />
     </>
   );

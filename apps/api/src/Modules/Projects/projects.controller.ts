@@ -10,6 +10,7 @@ import type {
   CreateProjectComponentDTO,
   UpdateProjectComponentDTO,
   CreateProjectMessageDTO,
+  EditProjectMessageDTO,
   ToggleReactionDTO,
   MarkMessagesSeenDTO,
   LeadApproveDTO,
@@ -95,6 +96,23 @@ export class ProjectsController extends BaseController {
     const messageId = req.params.messageId as string;
     const updated = await this.projectsService.togglePinMessage(projectId, messageId, actor);
     return this.sendResponse(req, res, "Message pin status updated", 200, updated);
+  }
+
+  public async editMessage(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const dto = req.validatedBody as EditProjectMessageDTO;
+    const message = await this.projectsService.editMessage(projectId, messageId, dto, actor);
+    return this.sendResponse(req, res, "Message updated successfully", 200, message);
+  }
+
+  public async getMessageRevisions(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const revisions = await this.projectsService.getMessageRevisions(projectId, messageId, actor);
+    return this.sendResponse(req, res, "Message revision history retrieved successfully", 200, revisions);
   }
 
   // --- Approval State Machine ---

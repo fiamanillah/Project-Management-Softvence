@@ -8,7 +8,9 @@ import { can } from "@/core/authorization/AuthorizationEngine";
 import { RealtimeServer } from "@/core/realtime/RealtimeServer";
 import type {
   CreateProjectMessageDTO,
+  EditProjectMessageDTO,
   ProjectMessageItem,
+  ProjectMessageRevisionItem,
   ToggleReactionDTO,
   MarkMessagesSeenDTO,
 } from "../ProjectDTO";
@@ -46,12 +48,18 @@ export class ProjectChatService {
     const resolvedProjectId = project.id;
 
     const resourceContext = getProjectResourceContext(project);
-    const hasViewPermission =
-      (await can(actor, "project.chat.view", resourceContext)) ||
-      (await can(actor, "project.view", resourceContext));
+    const [hasViewPermission, canLead, canSales, canEdit] = await Promise.all([
+      (await can(actor, "project.chat.view", resourceContext)) || (await can(actor, "project.view", resourceContext)),
+      can(actor, "project.approval.lead_review", resourceContext),
+      can(actor, "project.approval.sales_dispatch", resourceContext),
+      can(actor, "project.edit", resourceContext),
+    ]);
+
     if (!hasViewPermission) {
       throw new ForbiddenError("You do not have permission to view this project conversation");
     }
+
+    const isPrivilegedApprover = actor.systemRole === "SuperAdmin" || canLead || canSales || canEdit;
 
     const limit = Math.min(Number(query.limit) || 50, 100);
     const where: any = {
@@ -69,6 +77,24 @@ export class ProjectChatService {
 
     if (query.cursor) {
       where.createdAt = { lt: new Date(query.cursor) };
+    }
+
+    // Scoped visibility: Non-approvers can only view their own drafts, non-outbound messages, or dispatched communications
+    if (!isPrivilegedApprover) {
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { purpose: { not: "CLIENT_COMMUNICATION" } },
+            { clientDirection: "INBOUND" },
+            { approvalWorkflow: null },
+            { approvalWorkflow: { status: { isTerminal: true } } },
+            { approvalWorkflow: { status: { code: "DISPATCHED" } } },
+            { senderId: actor.id },
+            { approvalWorkflow: { requestedById: actor.id } },
+          ],
+        },
+      ];
     }
 
     const messages = await this.prisma.projectMessage.findMany({
@@ -91,6 +117,21 @@ export class ProjectChatService {
         reads: {
           include: {
             user: { include: { designation: true } },
+          },
+        },
+        revisions: {
+          take: 10,
+          orderBy: { createdAt: "desc" },
+          include: {
+            editor: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatarUrl: true,
+                designation: { select: { name: true } },
+              },
+            },
           },
         },
         approvalWorkflow: {
@@ -586,5 +627,309 @@ export class ProjectChatService {
     this.realtimeServer.toProject(projectId, "chat:message_updated", decorated as any);
 
     return decorated;
+  }
+
+  /**
+   * Edits a message, preserves revision history, and handles workflow transitions (e.g. resubmission or leader edits).
+   */
+  public async editMessage(
+    projectId: string,
+    messageId: string,
+    dto: EditProjectMessageDTO,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageItem> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundError("Project not found");
+    }
+
+    const resolvedProjectId = project.id;
+    const resourceContext = getProjectResourceContext(project);
+
+    const message = await this.prisma.projectMessage.findFirst({
+      where: { id: messageId, projectId: resolvedProjectId, deletedAt: null },
+      include: {
+        approvalWorkflow: {
+          include: { status: true },
+        },
+        attachments: true,
+      },
+    });
+
+    if (!message) {
+      throw new NotFoundError("Message not found");
+    }
+
+    const isAuthor = message.senderId === actor.id;
+    const createdAtTime = new Date(message.createdAt).getTime();
+    const nowTime = Date.now();
+    const elapsedMs = Math.max(0, nowTime - createdAtTime);
+    const internalEditWindowMs = 15 * 60 * 1000; // 15 minutes window
+    const isWithinEditWindow = elapsedMs <= internalEditWindowMs;
+
+    const [canLeadApprove, canSalesDispatch, canEditGlobal, canSendClient] = await Promise.all([
+      can(actor, "project.approval.lead_review", resourceContext),
+      can(actor, "project.approval.sales_dispatch", resourceContext),
+      can(actor, "project.edit", resourceContext),
+      can(actor, "project.chat.send_client", resourceContext),
+    ]);
+
+    const isClientOutbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "OUTBOUND";
+    const isClientInbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "INBOUND";
+
+    if (isClientOutbound && message.approvalWorkflow) {
+      const statusCode = message.approvalWorkflow.status?.code || "PENDING_LEAD";
+      if (statusCode === "PENDING_LEAD" || statusCode === "REVISION_REQUESTED") {
+        if (!isAuthor && !canLeadApprove && !canEditGlobal) {
+          throw new ForbiddenError("You do not have permission to edit this message draft");
+        }
+      } else if (statusCode === "PENDING_SALES" || statusCode === "DISPATCHED") {
+        // Once approved, ordinary senders cannot edit. Only leaders or users with approval permissions can edit.
+        if (!canLeadApprove && !canSalesDispatch && !canEditGlobal) {
+          throw new ForbiddenError("Approved or dispatched client messages can only be edited by Tech Leads or Sales managers.");
+        }
+      }
+    } else if (isClientInbound) {
+      if (!isWithinEditWindow && !canSendClient && !canEditGlobal) {
+        throw new ForbiddenError("Edit window expired (client relays can only be edited within 15 minutes).");
+      }
+      if (!isAuthor && !canSendClient && !canEditGlobal) {
+        throw new ForbiddenError("You do not have permission to edit this relayed client message");
+      }
+    } else {
+      // Internal Discussion
+      if (!isWithinEditWindow && !canEditGlobal) {
+        throw new ForbiddenError("Edit window expired (internal messages can only be edited within 15 minutes of sending).");
+      }
+      if (!isAuthor && !canEditGlobal) {
+        throw new ForbiddenError("You can only edit your own messages");
+      }
+    }
+
+    const newText = dto.text.trim();
+    if (!newText) {
+      throw new BadRequestError("Message text cannot be empty");
+    }
+
+    // Database transaction to record revision history and update message
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // 1. Record original content in revision history
+      await tx.projectMessageRevision.create({
+        data: {
+          messageId: message.id,
+          content: message.text,
+          editedById: actor.id,
+          reason: dto.reason || null,
+        },
+      });
+
+      // 2. Update message content and timestamps
+      await tx.projectMessage.update({
+        where: { id: message.id },
+        data: {
+          text: newText,
+          isEdited: true,
+          editedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // 3. Handle Workflow state changes
+      if (isClientOutbound && message.approvalWorkflow) {
+        const currentStatusCode = message.approvalWorkflow.status?.code;
+
+        // If author resubmitted a rejected / revision requested message -> Transition back to PENDING_LEAD
+        if (currentStatusCode === "REVISION_REQUESTED") {
+          const pendingLeadStatus = await tx.approvalStatusLookup.findFirst({
+            where: { code: "PENDING_LEAD" },
+            select: { id: true },
+          });
+
+          if (pendingLeadStatus) {
+            await tx.messageApprovalWorkflow.update({
+              where: { id: message.approvalWorkflow.id },
+              data: {
+                statusId: pendingLeadStatus.id,
+                rejectedById: null,
+                rejectionReason: null,
+                rejectedAt: null,
+                auditTrail: {
+                  create: {
+                    stageKey: "REVISION_RESUBMITTED",
+                    stageName: "Revision Resubmitted",
+                    actorId: actor.id,
+                    actorRole: actor.systemRole,
+                    notes: dto.reason || "Author addressed feedback and resubmitted draft for Tech Lead review",
+                  },
+                },
+              },
+            });
+          }
+        } else if (currentStatusCode === "PENDING_LEAD") {
+          // If author modified draft vs if tech lead/reviewer modified draft
+          if (isAuthor) {
+            await tx.approvalStageAudit.create({
+              data: {
+                workflowId: message.approvalWorkflow.id,
+                stageKey: "DRAFT_EDITED",
+                stageName: "Draft Modified",
+                actorId: actor.id,
+                actorRole: actor.systemRole,
+                notes: dto.reason || "Author updated draft content before review",
+              },
+            });
+          } else {
+            await tx.approvalStageAudit.create({
+              data: {
+                workflowId: message.approvalWorkflow.id,
+                stageKey: "LEAD_EDIT",
+                stageName: "Lead Edited Draft",
+                actorId: actor.id,
+                actorRole: actor.systemRole,
+                notes: dto.reason || "Reviewer adjusted draft content during Lead Review",
+              },
+            });
+          }
+        } else if (currentStatusCode === "PENDING_SALES") {
+          // If sales reviewer modified message
+          await tx.approvalStageAudit.create({
+            data: {
+              workflowId: message.approvalWorkflow.id,
+              stageKey: "SALES_EDIT",
+              stageName: "Sales Modified Dispatch",
+              actorId: actor.id,
+              actorRole: actor.systemRole,
+              notes: dto.reason || "Sales reviewer modified message prior to external dispatch",
+            },
+          });
+        } else if (currentStatusCode === "DISPATCHED") {
+          // If a leader modified message post-dispatch
+          await tx.approvalStageAudit.create({
+            data: {
+              workflowId: message.approvalWorkflow.id,
+              stageKey: "POST_DISPATCH_EDIT",
+              stageName: "Post-Dispatch Revision",
+              actorId: actor.id,
+              actorRole: actor.systemRole,
+              notes: dto.reason || "Content edited post-dispatch by reviewer",
+            },
+          });
+        }
+      }
+
+      // 4. Fetch full updated message with all relations
+      return tx.projectMessage.findUniqueOrThrow({
+        where: { id: message.id },
+        include: {
+          sender: {
+            include: {
+              role: { include: { department: true } },
+              designation: true,
+            },
+          },
+          messageType: true,
+          replyTo: { include: { sender: true } },
+          attachments: true,
+          reactions: true,
+          reads: { include: { user: { include: { designation: true } } } },
+          revisions: {
+            take: 5,
+            orderBy: { createdAt: "desc" },
+          },
+          approvalWorkflow: {
+            include: {
+              status: true,
+              requestedBy: true,
+              leadApprover: true,
+              salesDispatcher: true,
+              rejector: true,
+              auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+            },
+          },
+        },
+      });
+    });
+
+    const decorated = await sanitizeAndDecorateMessage(updated, actor, project);
+
+    // Broadcast updated message to room
+    this.realtimeServer.toProject(resolvedProjectId, "chat:message_updated", decorated as any);
+    if (projectId !== resolvedProjectId) {
+      this.realtimeServer.toProject(projectId, "chat:message_updated", decorated as any);
+    }
+
+    // If workflow was updated, also broadcast approval update
+    if (decorated.approval) {
+      this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
+        projectId: resolvedProjectId,
+        messageId: message.id,
+        workflow: decorated.approval,
+      } as any);
+    }
+
+    this.logger.info(`Message ${messageId} in project ${resolvedProjectId} edited by user ${actor.id}`);
+    return decorated;
+  }
+
+  /**
+   * Fetches the complete revision history for a message.
+   */
+  public async getMessageRevisions(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageRevisionItem[]> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundError("Project not found");
+    }
+
+    const resourceContext = getProjectResourceContext(project);
+    const hasViewPermission =
+      (await can(actor, "project.chat.view", resourceContext)) ||
+      (await can(actor, "project.view", resourceContext));
+    if (!hasViewPermission) {
+      throw new ForbiddenError("You do not have permission to view this project conversation");
+    }
+
+    const revisions = await this.prisma.projectMessageRevision.findMany({
+      where: { messageId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        editor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            designation: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    return revisions.map((rev) => ({
+      id: rev.id,
+      messageId: rev.messageId,
+      content: rev.content,
+      editedById: rev.editedById,
+      editorName: rev.editor ? `${rev.editor.firstName} ${rev.editor.lastName}` : "User",
+      editorAvatar: rev.editor?.avatarUrl || null,
+      editorDesignation: rev.editor?.designation?.name || null,
+      reason: rev.reason || null,
+      createdAt: rev.createdAt.toISOString(),
+    }));
   }
 }

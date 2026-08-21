@@ -18,6 +18,7 @@ interface MessageListProps {
   onLoadEarlierMessages?: () => void;
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
+  onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onMarkSeen?: (messageIds: string[]) => void;
   searchFilterQuery?: string;
@@ -36,6 +37,7 @@ export function MessageList({
   onLoadEarlierMessages,
   onReply,
   onReact,
+  onEdit,
   onUpdateApproval,
   onMarkSeen,
   searchFilterQuery = "",
@@ -49,8 +51,22 @@ export function MessageList({
   const reportedSeenIdsRef = React.useRef<Set<string>>(new Set());
 
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = React.useRef<HTMLDivElement>(null);
   const isLoadingRef = React.useRef(false);
   const prevScrollHeightRef = React.useRef<number>(0);
+  const prevProjectCodeRef = React.useRef<string | null>(null);
+  const isInitialLoadForProjectRef = React.useRef<boolean>(true);
+  const prevMessagesLengthRef = React.useRef<number>(0);
+
+  // Reset initial scroll flag when project changes
+  React.useEffect(() => {
+    if (projectCode !== prevProjectCodeRef.current) {
+      prevProjectCodeRef.current = projectCode || null;
+      isInitialLoadForProjectRef.current = true;
+      prevMessagesLengthRef.current = 0;
+      reportedSeenIdsRef.current.clear();
+    }
+  }, [projectCode]);
 
   // Automatic Read Receipts Reporter: Detect unread messages and mark seen
   React.useEffect(() => {
@@ -94,17 +110,61 @@ export function MessageList({
   }, [targetScrollMessageId, scrollToMessage]);
 
   // Scroll to bottom helper
-  const scrollToBottom = () => {
-    const viewport = scrollAreaRef.current?.querySelector("[data-slot='scroll-area-viewport']");
+  const scrollToBottom = React.useCallback((behavior: ScrollBehavior = "smooth") => {
+    const viewport = scrollAreaRef.current?.querySelector(
+      "[data-slot='scroll-area-viewport']"
+    ) as HTMLElement | null;
     if (viewport) {
       viewport.scrollTo({
         top: viewport.scrollHeight,
-        behavior: "smooth",
+        behavior,
       });
+    } else if (bottomAnchorRef.current) {
+      bottomAnchorRef.current.scrollIntoView({ behavior });
     }
-  };
+  }, []);
 
-  // Load older messages function (with scroll position preservation)
+  // 1. Initial Scroll to Bottom on Project Entry / Messages Ready
+  React.useLayoutEffect(() => {
+    if (messages.length > 0 && isInitialLoadForProjectRef.current && !isLoadingMessages) {
+      const viewport = scrollAreaRef.current?.querySelector(
+        "[data-slot='scroll-area-viewport']"
+      ) as HTMLElement | null;
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+        isInitialLoadForProjectRef.current = false;
+        prevMessagesLengthRef.current = messages.length;
+      }
+    }
+  }, [messages, isLoadingMessages]);
+
+  // 2. Handle Auto-Scroll Down on New Message Arrival / Sending
+  React.useEffect(() => {
+    if (isInitialLoadForProjectRef.current || messages.length === 0) return;
+
+    if (messages.length > prevMessagesLengthRef.current) {
+      const lastMsg = messages[messages.length - 1];
+      const isMyMessage = lastMsg?.isCurrentUser || (user?.id && lastMsg?.senderId === user.id);
+
+      const viewport = scrollAreaRef.current?.querySelector(
+        "[data-slot='scroll-area-viewport']"
+      ) as HTMLElement | null;
+
+      if (viewport) {
+        const distanceFromBottom =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        if (isMyMessage || distanceFromBottom < 160) {
+          viewport.scrollTo({
+            top: viewport.scrollHeight,
+            behavior: isMyMessage ? "instant" : "smooth",
+          });
+        }
+      }
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, user?.id]);
+
+  // 3. Load older messages function (with scroll position preservation)
   const handleLoadOlder = React.useCallback(() => {
     if (!hasMoreOlder || isLoadingOlder || isLoadingRef.current) return;
 
@@ -117,7 +177,7 @@ export function MessageList({
     onLoadEarlierMessages?.();
   }, [hasMoreOlder, isLoadingOlder, onLoadEarlierMessages]);
 
-  // Adjust scroll position after older messages prepended
+  // 4. Adjust scroll position after older messages prepended
   React.useLayoutEffect(() => {
     if (prevScrollHeightRef.current > 0) {
       const viewport = scrollAreaRef.current?.querySelector(
@@ -135,7 +195,7 @@ export function MessageList({
     }
   }, [messages]);
 
-  // Scroll listener for infinite scroll at top and showing scroll-to-bottom button
+  // 5. Scroll listener for infinite scroll at top and showing scroll-to-bottom button
   React.useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector(
       "[data-slot='scroll-area-viewport']"
@@ -143,12 +203,12 @@ export function MessageList({
     if (!viewport) return;
 
     const handleScroll = () => {
-      // 1. Infinite scroll trigger when user scrolls near top
-      if (viewport.scrollTop < 60 && hasMoreOlder && !isLoadingOlder && !isLoadingRef.current) {
+      // Infinite scroll trigger when user scrolls near top
+      if (viewport.scrollTop < 80 && hasMoreOlder && !isLoadingOlder && !isLoadingRef.current) {
         handleLoadOlder();
       }
 
-      // 2. Show scroll to bottom button if user scrolled up
+      // Show scroll to bottom button if user scrolled up
       const distanceFromBottom =
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       setShowScrollBottom(distanceFromBottom > 180);
@@ -285,6 +345,7 @@ export function MessageList({
                     messages={cluster}
                     onReply={onReply}
                     onReact={onReact}
+                    onEdit={onEdit}
                     onUpdateApproval={onUpdateApproval}
                     onScrollToMessage={scrollToMessage}
                     highlightedMessageId={highlightedId}
@@ -313,6 +374,9 @@ export function MessageList({
               </p>
             </div>
           )}
+
+          {/* Bottom Anchor Sentinel */}
+          <div ref={bottomAnchorRef} className="h-px w-full shrink-0" />
         </div>
       </ScrollArea>
 
@@ -320,7 +384,7 @@ export function MessageList({
       {showScrollBottom && (
         <Button
           size="icon-xs"
-          onClick={scrollToBottom}
+          onClick={() => scrollToBottom("smooth")}
           className="absolute bottom-3 right-3 z-30 size-8 rounded-full bg-background/95 border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/80 shadow-md backdrop-blur-md cursor-pointer transition-all animate-in fade-in zoom-in-95"
           title="Jump to latest messages"
         >

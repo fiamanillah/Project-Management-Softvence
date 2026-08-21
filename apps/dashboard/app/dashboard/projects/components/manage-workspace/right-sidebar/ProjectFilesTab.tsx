@@ -44,46 +44,70 @@ export function ProjectFilesTab({ files }: ProjectFilesTabProps) {
       </div>
 
       <div className="space-y-1.5">
-        {files.map((file) => (
-          <div
-            key={file.id}
-            className="flex items-center justify-between gap-2.5 rounded-xl border border-border/60 bg-card/60 p-2.5 shadow-2xs hover:bg-muted/40 hover:border-border transition-all group"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-muted/70 group-hover:bg-muted shrink-0 transition-colors">
-                {getFileIcon(file.extension)}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
-                  {file.name}
-                </p>
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
-                  <span className="font-mono">{file.size}</span>
-                  <span>•</span>
-                  <span>{file.uploadedAt}</span>
+        {files.map((file) => {
+          const downloadUrl = file.downloadUrl || (file as any).url;
+          const handleFileDownload = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (downloadUrl) {
+              try {
+                const a = document.createElement("a");
+                a.href = downloadUrl;
+                a.download = file.name;
+                a.target = "_blank";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                toast.success(`Downloading ${file.name}`);
+              } catch {
+                window.open(downloadUrl, "_blank");
+              }
+            } else {
+              toast.info(`Document: ${file.name}`);
+            }
+          };
+
+          return (
+            <div
+              key={file.id}
+              onClick={handleFileDownload}
+              className="flex items-center justify-between gap-2.5 rounded-xl border border-border/60 bg-card/60 p-2.5 shadow-2xs hover:bg-muted/40 hover:border-border transition-all group cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-muted/70 group-hover:bg-muted shrink-0 transition-colors">
+                  {getFileIcon(file.extension)}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
+                    {file.name}
+                  </p>
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                    <span className="font-mono">{file.size}</span>
+                    <span>•</span>
+                    <span>{file.uploadedAt}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 cursor-pointer"
-                    onClick={() => toast.success(`Downloading ${file.name}`)}
-                  >
-                    <Download className="size-3.5" />
-                  </Button>
-                }
-              />
-              <TooltipContent side="left" sideOffset={5} className="text-xs">
-                Download {file.name}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        ))}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      className="size-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 cursor-pointer"
+                      onClick={handleFileDownload}
+                    >
+                      <Download className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="left" sideOffset={5} className="text-xs">
+                  Download {file.name}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

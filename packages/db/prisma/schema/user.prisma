@@ -71,6 +71,7 @@ model User {
   projectMessageReadReceipts  ProjectMessageReadReceipt[]
   assignedProjectMilestones   ProjectMilestone[]               @relation("ProjectMilestoneAssignee")
   addedProjectLinks           ProjectLink[]                    @relation("ProjectLinkAdder")
+  editedProjectMessages       ProjectMessageRevision[]         @relation("ProjectMessageEditor")
 
   @@index([email])
   @@index([roleId])

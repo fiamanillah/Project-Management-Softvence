@@ -21,6 +21,7 @@ import {
   createQuickStatusSchema,
   createQuickOrderSourceSchema,
   createProjectMessageSchema,
+  editProjectMessageSchema,
   toggleReactionSchema,
   markMessagesSeenSchema,
   leadApproveSchema,
@@ -203,6 +204,19 @@ export class ProjectsModule extends BaseModule {
       controller.sendMessage.bind(controller),
     );
 
+    this.router.patch(
+      "/:id/messages/:messageId",
+      validateRequest({ body: editProjectMessageSchema }),
+      requirePermission("project.view", loadProjectResource),
+      controller.editMessage.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/messages/:messageId/revisions",
+      requirePermission("project.view", loadProjectResource),
+      controller.getMessageRevisions.bind(controller),
+    );
+
     this.router.post(
       "/:id/messages/:messageId/react",
       validateRequest({ body: toggleReactionSchema }),
@@ -248,7 +262,7 @@ export class ProjectsModule extends BaseModule {
     this.router.post(
       "/:id/messages/:messageId/approval/reject",
       validateRequest({ body: requestRevisionSchema }),
-      requirePermission("project.approval.lead_review", loadProjectResource),
+      requirePermission("project.view", loadProjectResource),
       controller.requestRevision.bind(controller),
     );
 

@@ -323,7 +323,15 @@ export async function sanitizeAndDecorateProject(
 export async function sanitizeAndDecorateWorkspaceProject(
   project: any,
   actor: AuthenticatedUser,
-  counts?: { unreadCount?: number; pendingApprovalsCount?: number; onlineCount?: number },
+  counts?: {
+    unreadCount?: number;
+    pendingApprovalsCount?: number;
+    pendingLeadApprovalsCount?: number;
+    pendingSalesDispatchesCount?: number;
+    pendingRevisionsCount?: number;
+    pendingInboundCount?: number;
+    onlineCount?: number;
+  },
 ): Promise<ProjectWorkspaceItem> {
   const capabilities = await computeProjectCapabilities(project, actor);
   const { canViewClient, canViewFinancials } = capabilities;
@@ -453,9 +461,11 @@ export async function sanitizeAndDecorateWorkspaceProject(
 
   // Compute attention type
   let attentionType: "CLIENT_MESSAGE" | "PENDING_APPROVAL" | "REVISION_REQUESTED" | "NEW_MESSAGE" | null = null;
-  if ((counts?.pendingApprovalsCount || 0) > 0) {
+  if ((counts?.pendingRevisionsCount || 0) > 0) {
+    attentionType = "REVISION_REQUESTED";
+  } else if ((counts?.pendingApprovalsCount || 0) > 0) {
     attentionType = "PENDING_APPROVAL";
-  } else if (lastMsg && (lastMsg.purpose === "CLIENT_COMMUNICATION" || lastMsg.isFromClient)) {
+  } else if ((counts?.pendingInboundCount || 0) > 0 || (lastMsg && (lastMsg.purpose === "CLIENT_COMMUNICATION" || lastMsg.isFromClient))) {
     attentionType = "CLIENT_MESSAGE";
   } else if ((counts?.unreadCount || 0) > 0) {
     attentionType = "NEW_MESSAGE";
@@ -495,6 +505,10 @@ export async function sanitizeAndDecorateWorkspaceProject(
     isPinned: project.isPinned || false,
     unreadCount: counts?.unreadCount || 0,
     pendingApprovalsCount: counts?.pendingApprovalsCount || 0,
+    pendingLeadApprovalsCount: counts?.pendingLeadApprovalsCount || 0,
+    pendingSalesDispatchesCount: counts?.pendingSalesDispatchesCount || 0,
+    pendingRevisionsCount: counts?.pendingRevisionsCount || 0,
+    pendingInboundCount: counts?.pendingInboundCount || 0,
     onlineCount: counts?.onlineCount || 0,
     pinnedAnnouncements,
     lead: leadMember,
@@ -511,7 +525,54 @@ export async function sanitizeAndDecorateWorkspaceProject(
 }
 
 /**
- * Sanitizes and decorates a project chat message with permissions and capabilities.
+ * Helper to check if an actor is authorized to view a pending/draft outbound message.
+ */
+export async function canActorViewPendingMessage(
+  actor: AuthenticatedUser,
+  message: any,
+  projectContext: any,
+): Promise<boolean> {
+  const isOutboundClientComm =
+    (message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "OUTBOUND") ||
+    Boolean(message.approvalWorkflow);
+
+  // If not an outbound client message, standard chat view rules apply
+  if (!isOutboundClientComm) {
+    return true;
+  }
+
+  // If already dispatched to client, visible to all project members
+  const statusCode = message.approvalWorkflow?.status?.code;
+  if (statusCode === "DISPATCHED" || (!message.approvalWorkflow && message.status === "DISPATCHED")) {
+    return true;
+  }
+
+  // SuperAdmin has global bypass
+  if (actor.systemRole === "SuperAdmin") {
+    return true;
+  }
+
+  // Author can always see their own draft / pending message
+  const isAuthor =
+    message.senderId === actor.id ||
+    message.approvalWorkflow?.requestedById === actor.id;
+  if (isAuthor) {
+    return true;
+  }
+
+  // Approvers & Project Administrators
+  const resourceContext = getProjectResourceContext(projectContext);
+  const [canLead, canSales, canEdit] = await Promise.all([
+    can(actor, "project.approval.lead_review", resourceContext),
+    can(actor, "project.approval.sales_dispatch", resourceContext),
+    can(actor, "project.edit", resourceContext),
+  ]);
+
+  return canLead || canSales || canEdit;
+}
+
+/**
+ * Sanitizes and decorates a project chat message with permissions, capabilities, dwell times, and revision history.
  */
 export async function sanitizeAndDecorateMessage(
   message: any,
@@ -521,20 +582,75 @@ export async function sanitizeAndDecorateMessage(
   const resourceContext = getProjectResourceContext(projectContext);
   const isAuthor = message.senderId === actor.id;
 
-  const [canLeadApprove, canSalesDispatch, canPin, canDeleteGlobal] = await Promise.all([
+  const [
+    hasLeadReviewPerm,
+    hasSalesDispatchPerm,
+    canPin,
+    canDeleteGlobal,
+    canEditGlobal,
+    canSendClient,
+  ] = await Promise.all([
     can(actor, "project.approval.lead_review", resourceContext),
     can(actor, "project.approval.sales_dispatch", resourceContext),
     can(actor, "project.chat.pin", resourceContext),
+    can(actor, "project.delete", resourceContext),
     can(actor, "project.edit", resourceContext),
+    can(actor, "project.chat.send_client", resourceContext),
   ]);
+
+  const createdAtTime = new Date(message.createdAt).getTime();
+  const nowTime = Date.now();
+  const elapsedMs = Math.max(0, nowTime - createdAtTime);
+  const internalEditWindowMs = 15 * 60 * 1000; // 15 minutes window
+  const isWithinEditWindow = elapsedMs <= internalEditWindowMs;
+  const editTimeRemainingSeconds = Math.max(0, Math.floor((internalEditWindowMs - elapsedMs) / 1000));
+
+  const isClientOutbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "OUTBOUND";
+  const isClientInbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "INBOUND";
+  const statusCode = message.approvalWorkflow?.status?.code || "PENDING_LEAD";
+
+  // Fine-grained action capabilities based on exact stage and permissions
+  let canLeadApprove = false;
+  let canSalesDispatch = false;
+  let canRequestRevision = false;
+  let canEdit = false;
+  let canDelete = false;
+
+  if (isClientOutbound && message.approvalWorkflow) {
+    if (statusCode === "PENDING_LEAD") {
+      canLeadApprove = hasLeadReviewPerm || canEditGlobal;
+      canRequestRevision = hasLeadReviewPerm || canEditGlobal;
+      canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
+      canDelete = isAuthor || canDeleteGlobal;
+    } else if (statusCode === "PENDING_SALES") {
+      canSalesDispatch = hasSalesDispatchPerm || canEditGlobal;
+      canRequestRevision = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
+      canEdit = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
+      canDelete = canDeleteGlobal;
+    } else if (statusCode === "REVISION_REQUESTED") {
+      canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
+      canDelete = isAuthor || canDeleteGlobal;
+    } else if (statusCode === "DISPATCHED") {
+      canEdit = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
+      canDelete = canDeleteGlobal;
+    }
+  } else if (isClientInbound) {
+    canEdit = (isAuthor && isWithinEditWindow) || canSendClient || canEditGlobal;
+    canDelete = isAuthor || canDeleteGlobal;
+  } else {
+    // Internal Discussion
+    canEdit = (isAuthor && isWithinEditWindow) || canEditGlobal;
+    canDelete = isAuthor || canDeleteGlobal;
+  }
 
   const capabilities: ProjectMessageCapabilities = {
     canLeadApprove,
     canSalesDispatch,
-    canRequestRevision: canLeadApprove || canSalesDispatch,
+    canRequestRevision,
     canPin,
-    canDelete: isAuthor || canDeleteGlobal,
-    canEdit: isAuthor,
+    canDelete,
+    canEdit,
+    editTimeRemainingSeconds: isAuthor && isWithinEditWindow ? editTimeRemainingSeconds : undefined,
   };
 
   // Format reactions with reactedByMe flag
@@ -563,19 +679,75 @@ export async function sanitizeAndDecorateMessage(
     seenAt: new Date(rd.seenAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
   }));
 
-  // Format approval workflow
+  // Format approval workflow with accurate dwell times and SLA status
   let approval: any = null;
   if (message.approvalWorkflow) {
     const wf = message.approvalWorkflow;
+    const statusCode = wf.status?.code || "PENDING_LEAD";
+
+    let stageStartedDate = new Date(wf.createdAt);
+    if (statusCode === "PENDING_SALES" && wf.leadApprovedAt) {
+      stageStartedDate = new Date(wf.leadApprovedAt);
+    } else if (statusCode === "REVISION_REQUESTED" && wf.rejectedAt) {
+      stageStartedDate = new Date(wf.rejectedAt);
+    } else if (statusCode === "DISPATCHED" && wf.salesDispatchedAt) {
+      stageStartedDate = new Date(wf.salesDispatchedAt);
+    }
+
+    const dwellMinutes =
+      statusCode === "DISPATCHED"
+        ? 0
+        : Math.max(0, Math.floor((nowTime - stageStartedDate.getTime()) / (1000 * 60)));
+
+    const slaTargetMinutes = wf.slaTargetMinutes || 30;
+    let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
+    if (statusCode !== "DISPATCHED") {
+      if (dwellMinutes > slaTargetMinutes) {
+        computedSlaStatus = "BREACHED";
+      } else if (dwellMinutes > slaTargetMinutes * 0.75) {
+        computedSlaStatus = "AT_RISK";
+      }
+    }
+
+    const mappedAudits = (wf.auditTrail || []).map((aud: any) => ({
+      id: aud.id,
+      stageName: aud.stageName,
+      stageKey: aud.stageKey,
+      actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
+      actorAvatar: aud.actor?.avatarUrl || null,
+      actorRole: aud.actorRole || "Reviewer",
+      timestamp: new Date(aud.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      durationMinutes: aud.durationMinutes || null,
+      notes: aud.notes || null,
+    }));
+
+    // Ensure initial Draft Created event is always present at index 0 if not recorded
+    const hasDraftAudit = mappedAudits.some((a: any) => a.stageKey === "DRAFTED" || a.stageName === "Draft Created");
+    if (!hasDraftAudit) {
+      mappedAudits.unshift({
+        id: `draft-${wf.id}`,
+        stageName: "Draft Created",
+        stageKey: "DRAFTED",
+        actorName: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
+        actorAvatar: wf.requestedBy?.avatarUrl || null,
+        actorRole: "Author",
+        timestamp: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        durationMinutes: null,
+        notes: `Drafted client communication (${message.messageType?.code || wf.clientMessageType || "General"})`,
+      });
+    }
+
     approval = {
       id: wf.id,
-      status: wf.status?.code || "PENDING_LEAD",
+      status: statusCode,
       clientMessageType: message.messageType?.code || wf.clientMessageType || "GENERAL_NOTICE",
       requestedBy: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
       requestedAt: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       targetClient: wf.targetClientName,
-      slaTargetMinutes: wf.slaTargetMinutes || 30,
-      slaStatus: wf.slaStatus || "ON_TRACK",
+      currentStageDwellMinutes: dwellMinutes,
+      stageStartedAt: stageStartedDate.toISOString(),
+      slaTargetMinutes,
+      slaStatus: computedSlaStatus,
       leadApprovedBy: wf.leadApprover ? `${wf.leadApprover.firstName} ${wf.leadApprover.lastName}` : null,
       leadApprovedAt: wf.leadApprovedAt ? new Date(wf.leadApprovedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
       salesDispatchedBy: wf.salesDispatcher ? `${wf.salesDispatcher.firstName} ${wf.salesDispatcher.lastName}` : null,
@@ -585,17 +757,7 @@ export async function sanitizeAndDecorateMessage(
       rejectionReason: wf.rejectionReason || null,
       rejectedBy: wf.rejector ? `${wf.rejector.firstName} ${wf.rejector.lastName}` : null,
       rejectedAt: wf.rejectedAt ? new Date(wf.rejectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      auditTrail: (wf.auditTrail || []).map((aud: any) => ({
-        id: aud.id,
-        stageName: aud.stageName,
-        stageKey: aud.stageKey,
-        actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
-        actorAvatar: aud.actor?.avatarUrl || null,
-        actorRole: aud.actorRole,
-        timestamp: new Date(aud.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        durationMinutes: aud.durationMinutes || null,
-        notes: aud.notes || null,
-      })),
+      auditTrail: mappedAudits,
     };
   }
 
@@ -635,6 +797,9 @@ export async function sanitizeAndDecorateMessage(
     senderRole: message.sender?.role?.name || "Member",
     isCurrentUser: isAuthor,
     isFromClient: message.isFromClient || false,
+    isEdited: message.isEdited || false,
+    editedAt: message.editedAt ? new Date(message.editedAt).toISOString() : null,
+    editHistoryCount: Array.isArray(message.revisions) ? message.revisions.length : undefined,
     text: message.text,
     timestamp: createdDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     dateGroup,

@@ -30,10 +30,14 @@ export function ProjectListItem({
     .toUpperCase();
 
   const hasPendingApproval =
-    project.attentionType === "PENDING_APPROVAL" ||
-    (project.pendingApprovalsCount !== undefined && project.pendingApprovalsCount > 0);
-  const isRevision = project.attentionType === "REVISION_REQUESTED";
-  const isClientMessage = project.attentionType === "CLIENT_MESSAGE";
+    (project.pendingApprovalsCount !== undefined && project.pendingApprovalsCount > 0) ||
+    project.attentionType === "PENDING_APPROVAL";
+  const isRevision =
+    (project.pendingRevisionsCount !== undefined && project.pendingRevisionsCount > 0) ||
+    project.attentionType === "REVISION_REQUESTED";
+  const isClientMessage =
+    (project.pendingInboundCount !== undefined && project.pendingInboundCount > 0) ||
+    project.attentionType === "CLIENT_MESSAGE";
   const hasUnread = (project.unreadCount || 0) > 0 && !isSelected;
 
   // 1. COLLAPSED VIEW (Slim Rail with Rich Tooltips)
@@ -78,29 +82,33 @@ export function ProjectListItem({
                   </span>
                 ) : null}
 
-                {/* Attention Badges */}
-                {isRevision ? (
-                  <span
-                    className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-rose-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs animate-bounce"
-                    title="Revision Requested"
-                  >
-                    <AlertTriangle className="size-2" />
-                  </span>
-                ) : hasPendingApproval ? (
-                  <span
-                    className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
-                    title={`${project.pendingApprovalsCount} pending approvals`}
-                  >
-                    <ShieldCheck className="size-2" />
-                  </span>
-                ) : isClientMessage ? (
-                  <span
-                    className="absolute -top-1 -left-1 z-20 flex size-3.5 items-center justify-center rounded-full bg-purple-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
-                    title="Client Message"
-                  >
-                    <Send className="size-2" />
-                  </span>
-                ) : null}
+                {/* Attention Indicators on Avatar */}
+                <div className="absolute -top-1 -left-1 z-20 flex items-center -space-x-1">
+                  {isRevision ? (
+                    <span
+                      className="flex size-3.5 items-center justify-center rounded-full bg-rose-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs animate-bounce"
+                      title="Revision Requested"
+                    >
+                      <AlertTriangle className="size-2" />
+                    </span>
+                  ) : null}
+                  {hasPendingApproval ? (
+                    <span
+                      className="flex size-3.5 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
+                      title={`${project.pendingApprovalsCount || 1} pending approval(s)`}
+                    >
+                      <ShieldCheck className="size-2" />
+                    </span>
+                  ) : null}
+                  {isClientMessage ? (
+                    <span
+                      className="flex size-3.5 items-center justify-center rounded-full bg-purple-500 text-white text-[8px] font-bold ring-1.5 ring-background shadow-xs"
+                      title={`${project.pendingInboundCount || 1} client message(s)`}
+                    >
+                      <Send className="size-2" />
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </button>
           }
@@ -131,23 +139,27 @@ export function ProjectListItem({
             )}
           </div>
 
-          {/* Attention Tag in Tooltip if any */}
-          {isRevision ? (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
-              <AlertTriangle className="size-3 text-rose-500" />
-              <span>Revision feedback submitted</span>
-            </div>
-          ) : hasPendingApproval ? (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
-              <ShieldCheck className="size-3 text-amber-500" />
-              <span>{project.pendingApprovalsCount || 1} pending approval(s)</span>
-            </div>
-          ) : isClientMessage ? (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/20">
-              <Send className="size-3 text-purple-500" />
-              <span>New client message received</span>
-            </div>
-          ) : null}
+          {/* Attention Tags in Tooltip */}
+          <div className="flex flex-col gap-1">
+            {isRevision && (
+              <div className="flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
+                <AlertTriangle className="size-3 text-rose-500 shrink-0" />
+                <span>Revision requested ({project.pendingRevisionsCount || 1})</span>
+              </div>
+            )}
+            {hasPendingApproval && (
+              <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                <ShieldCheck className="size-3 text-amber-500 shrink-0" />
+                <span>{project.pendingApprovalsCount || 1} pending approval(s)</span>
+              </div>
+            )}
+            {isClientMessage && (
+              <div className="flex items-center gap-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/20">
+                <Send className="size-3 text-purple-500 shrink-0" />
+                <span>Client inbound communication ({project.pendingInboundCount || 1})</span>
+              </div>
+            )}
+          </div>
 
           {/* Client & Platform Info */}
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -255,23 +267,29 @@ export function ProjectListItem({
           </span>
         </div>
 
-        {/* Attention Banner Pills (C8 Command Center Style) */}
-        {isRevision ? (
-          <div className="flex items-center gap-1 text-[9.5px] font-bold text-rose-700 dark:text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-md w-fit animate-pulse">
-            <AlertTriangle className="size-2.5 text-rose-600 dark:text-rose-400" />
-            <span>Revision Needed</span>
+        {/* Attention Banner Pills (Supports multiple pending states simultaneously) */}
+        {(isRevision || hasPendingApproval || isClientMessage) && (
+          <div className="flex items-center flex-wrap gap-1 my-0.5">
+            {isRevision && (
+              <div className="flex items-center gap-1 text-[9.5px] font-bold text-rose-700 dark:text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-md shrink-0 animate-pulse">
+                <AlertTriangle className="size-2.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span>Revision Needed</span>
+              </div>
+            )}
+            {hasPendingApproval && (
+              <div className="flex items-center gap-1 text-[9.5px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-md shrink-0">
+                <ShieldCheck className="size-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Needs Review ({project.pendingApprovalsCount || 1})</span>
+              </div>
+            )}
+            {isClientMessage && (
+              <div className="flex items-center gap-1 text-[9.5px] font-bold text-purple-700 dark:text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded-md shrink-0">
+                <Send className="size-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                <span>Client Inbound {project.pendingInboundCount ? `(${project.pendingInboundCount})` : ""}</span>
+              </div>
+            )}
           </div>
-        ) : hasPendingApproval ? (
-          <div className="flex items-center gap-1 text-[9.5px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-md w-fit">
-            <ShieldCheck className="size-2.5 text-amber-600 dark:text-amber-400" />
-            <span>Needs Review ({project.pendingApprovalsCount || 1})</span>
-          </div>
-        ) : isClientMessage ? (
-          <div className="flex items-center gap-1 text-[9.5px] font-bold text-purple-700 dark:text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded-md w-fit">
-            <Send className="size-2.5 text-purple-600 dark:text-purple-400" />
-            <span>Client Inbound</span>
-          </div>
-        ) : null}
+        )}
 
         {/* Middle Line: Client & Platform */}
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

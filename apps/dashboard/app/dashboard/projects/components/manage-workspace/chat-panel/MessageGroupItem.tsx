@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/av
 import { BubbleGroup } from "@workspace/ui/components/bubble";
 import { Crown, Send } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { MessageBubble } from "./MessageBubble";
 import type { ChatMessage, ApprovalWorkflow } from "../types";
 
@@ -12,6 +13,7 @@ interface MessageGroupItemProps {
   messages: ChatMessage[];
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
+  onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onScrollToMessage?: (messageId: string) => void;
   highlightedMessageId?: string | null;
@@ -21,14 +23,16 @@ export function MessageGroupItem({
   messages,
   onReply,
   onReact,
+  onEdit,
   onUpdateApproval,
   onScrollToMessage,
   highlightedMessageId,
 }: MessageGroupItemProps) {
+  const { user } = useAuth();
   const firstMsg = messages[0];
   if (!firstMsg) return null;
 
-  const isCurrentUser = firstMsg.isCurrentUser;
+  const isCurrentUser = Boolean(user?.id && firstMsg.senderId === user.id);
   const isClientOutbound =
     (firstMsg.purpose === "CLIENT_COMMUNICATION" && firstMsg.clientDirection === "OUTBOUND") ||
     !!firstMsg.approval;
@@ -47,6 +51,7 @@ export function MessageGroupItem({
             message={msg}
             onReply={onReply}
             onReact={onReact}
+            onEdit={onEdit}
             onUpdateApproval={onUpdateApproval}
             onScrollToMessage={onScrollToMessage}
             isHighlighted={highlightedMessageId === msg.id}
@@ -131,6 +136,7 @@ export function MessageGroupItem({
               message={msg}
               onReply={onReply}
               onReact={onReact}
+              onEdit={onEdit}
               onUpdateApproval={onUpdateApproval}
               onScrollToMessage={onScrollToMessage}
               isHighlighted={highlightedMessageId === msg.id}

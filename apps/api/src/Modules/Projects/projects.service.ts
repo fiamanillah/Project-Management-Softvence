@@ -17,6 +17,7 @@ import type {
   CreateQuickStatusDTO,
   CreateQuickOrderSourceDTO,
   CreateProjectMessageDTO,
+  EditProjectMessageDTO,
   ToggleReactionDTO,
   MarkMessagesSeenDTO,
   LeadApproveDTO,
@@ -34,6 +35,7 @@ import type {
   ProjectLookups,
   ProjectWorkspaceItem,
   ProjectMessageItem,
+  ProjectMessageRevisionItem,
   MessageTypeItem,
   ProjectMilestoneItem,
   ProjectLinkItem,
@@ -256,6 +258,23 @@ export class ProjectsService {
     actor: AuthenticatedUser,
   ): Promise<ProjectMessageItem> {
     return this.chat.togglePinMessage(projectId, messageId, actor);
+  }
+
+  public async editMessage(
+    projectId: string,
+    messageId: string,
+    dto: EditProjectMessageDTO,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageItem> {
+    return this.chat.editMessage(projectId, messageId, dto, actor);
+  }
+
+  public async getMessageRevisions(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageRevisionItem[]> {
+    return this.chat.getMessageRevisions(projectId, messageId, actor);
   }
 
   // --- Approval Workflows ---

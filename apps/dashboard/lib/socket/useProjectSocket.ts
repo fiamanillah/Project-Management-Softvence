@@ -9,6 +9,7 @@ import type {
   MessageReactionItem,
   MessageReadReceiptItem,
   CreateProjectMessageDTO,
+  EditProjectMessageDTO,
 } from "@workspace/shared";
 
 interface UseProjectSocketOptions {
@@ -237,10 +238,39 @@ export function useProjectSocket({
     [socket, projectId],
   );
 
+  const editMessage = useCallback(
+    (messageId: string, dto: EditProjectMessageDTO): Promise<ProjectMessageItem> => {
+      return new Promise((resolve, reject) => {
+        if (!socket || !projectId) {
+          return reject(new Error("Socket not connected or no project selected"));
+        }
+
+        const timer = setTimeout(() => {
+          reject(new Error("Socket message edit timeout"));
+        }, 4000);
+
+        socket.emit(
+          "chat:edit_message",
+          { projectId, messageId, ...dto },
+          (res: { success: boolean; data?: ProjectMessageItem; error?: string }) => {
+            clearTimeout(timer);
+            if (res?.success && res.data) {
+              resolve(res.data);
+            } else {
+              reject(new Error(res?.error || "Failed to edit message"));
+            }
+          },
+        );
+      });
+    },
+    [socket, projectId],
+  );
+
   return {
     isConnected,
     typingUsers,
     sendMessage,
+    editMessage,
     sendReaction,
     markSeen,
     startTyping,

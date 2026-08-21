@@ -25,7 +25,14 @@ import { ProjectLinksTab } from "./ProjectLinksTab";
 import { ProjectMilestonesTab } from "./ProjectMilestonesTab";
 import { ProjectMembersTab } from "./ProjectMembersTab";
 import { ProjectClientDispatchTab } from "./ProjectClientDispatchTab";
-import type { ProjectWorkspaceItem, ChatMessage, ApprovalWorkflow } from "../types";
+import type {
+  ProjectWorkspaceItem,
+  ChatMessage,
+  ApprovalWorkflow,
+  ProjectMediaItem,
+  ProjectFileItem,
+  ProjectLinkItem,
+} from "../types";
 
 interface ProjectDetailsSidebarProps {
   project: ProjectWorkspaceItem;
@@ -46,10 +53,168 @@ export function ProjectDetailsSidebar({
 }: ProjectDetailsSidebarProps) {
   const [activeTab, setActiveTab] = React.useState("overview");
 
-  // Client messages count
+  // 1. Client messages count
   const clientMessagesCount = React.useMemo(() => {
     return messages.filter((m) => m.approval && m.approval.status !== "NOT_REQUIRED").length;
   }, [messages]);
+
+  // 2. Media Items Aggregation (from project.media + chat message image attachments)
+  const allMedia: ProjectMediaItem[] = React.useMemo(() => {
+    const list: ProjectMediaItem[] = [...(project.media || [])];
+    const seenUrls = new Set(list.map((m) => m.url));
+
+    messages.forEach((msg) => {
+      (msg.attachments || []).forEach((att) => {
+        const isImage =
+          att.type === "image" ||
+          att.mimeType?.startsWith("image/") ||
+          /\.(jpg|jpeg|png|gif|webp|svg|avif)$/i.test(att.name || att.url || "");
+
+        if (isImage && att.url && !seenUrls.has(att.url)) {
+          seenUrls.add(att.url);
+          list.push({
+            id: att.id || `media-${msg.id}-${att.name}`,
+            title: att.name || "Image attachment",
+            url: att.url,
+            type: "image",
+            uploadedAt: msg.timestamp || "Recently",
+            uploaderName: msg.senderName || "Team Member",
+            dimensions: att.dimensions
+              ? `${att.dimensions.width} × ${att.dimensions.height}`
+              : undefined,
+          });
+        }
+      });
+    });
+
+    return list;
+  }, [project.media, messages]);
+
+  // 3. Documents & Files Aggregation (from project.files + chat message document attachments)
+  const allFiles: ProjectFileItem[] = React.useMemo(() => {
+    const list: ProjectFileItem[] = [...(project.files || [])];
+    const seenUrls = new Set(list.map((f) => f.downloadUrl || f.id));
+
+    messages.forEach((msg) => {
+      (msg.attachments || []).forEach((att) => {
+        const isImage =
+          att.type === "image" ||
+          att.mimeType?.startsWith("image/") ||
+          /\.(jpg|jpeg|png|gif|webp|svg|avif)$/i.test(att.name || att.url || "");
+        const isLink = att.type === "link";
+
+        if (!isImage && !isLink && att.url && !seenUrls.has(att.url)) {
+          seenUrls.add(att.url);
+          const ext =
+            att.extension ||
+            att.name?.split(".").pop() ||
+            (att.mimeType ? att.mimeType.split("/")[1] : "file") ||
+            "file";
+
+          const size =
+            att.size ||
+            (att.fileSizeBytes
+              ? att.fileSizeBytes > 1024 * 1024
+                ? `${(att.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
+                : `${Math.round(att.fileSizeBytes / 1024)} KB`
+              : "Attachment");
+
+          list.push({
+            id: att.id || `file-${msg.id}-${att.name}`,
+            name: att.name || "Project Document",
+            size,
+            extension: ext,
+            uploadedAt: msg.timestamp || "Recently",
+            uploaderName: msg.senderName || "Team Member",
+            downloadUrl: att.url,
+          });
+        }
+      });
+    });
+
+    return list;
+  }, [project.files, messages]);
+
+  // 4. External Links Aggregation (from project.links + links in messages)
+  const allLinks: ProjectLinkItem[] = React.useMemo(() => {
+    const list: ProjectLinkItem[] = [...(project.links || [])];
+    const seenUrls = new Set(list.map((l) => l.url.toLowerCase()));
+
+    const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+
+    messages.forEach((msg) => {
+      // Check link attachments
+      (msg.attachments || []).forEach((att) => {
+        if (att.type === "link" && att.url && !seenUrls.has(att.url.toLowerCase())) {
+          seenUrls.add(att.url.toLowerCase());
+          let category: "Figma" | "GitHub" | "Jira" | "Docs" | "Staging" | "Other" = "Other";
+          const low = att.url.toLowerCase();
+          if (low.includes("figma.com")) category = "Figma";
+          else if (low.includes("github.com") || low.includes("gitlab.com")) category = "GitHub";
+          else if (low.includes("jira.") || low.includes("atlassian.net")) category = "Jira";
+          else if (low.includes("docs.google.com") || low.includes("notion.so")) category = "Docs";
+          else if (low.includes("staging.") || low.includes("vercel.app") || low.includes("netlify.app"))
+            category = "Staging";
+
+          list.push({
+            id: att.id || `link-${msg.id}-${att.url}`,
+            title: att.name || `${category} Link`,
+            url: att.url,
+            category,
+            addedAt: msg.timestamp || "Recently",
+            description: `Shared by ${msg.senderName}`,
+          });
+        }
+      });
+
+      // Detect URLs in message text
+      if (msg.text) {
+        const matches = msg.text.match(urlRegex);
+        if (matches) {
+          matches.forEach((matchedUrl) => {
+            const cleanUrl = matchedUrl.trim();
+            if (!seenUrls.has(cleanUrl.toLowerCase())) {
+              seenUrls.add(cleanUrl.toLowerCase());
+
+              let category: "Figma" | "GitHub" | "Jira" | "Docs" | "Staging" | "Other" = "Other";
+              const low = cleanUrl.toLowerCase();
+              if (low.includes("figma.com")) category = "Figma";
+              else if (low.includes("github.com") || low.includes("gitlab.com")) category = "GitHub";
+              else if (low.includes("jira.") || low.includes("atlassian.net")) category = "Jira";
+              else if (low.includes("docs.google.com") || low.includes("notion.so")) category = "Docs";
+              else if (
+                low.includes("staging.") ||
+                low.includes("vercel.app") ||
+                low.includes("netlify.app")
+              )
+                category = "Staging";
+
+              let title = `${category} Resource`;
+              if (category === "Other") {
+                try {
+                  const parsed = new URL(cleanUrl);
+                  title = parsed.hostname.replace(/^www\./, "");
+                } catch {
+                  title = "Shared Link";
+                }
+              }
+
+              list.push({
+                id: `link-${msg.id}-${cleanUrl}`,
+                title,
+                url: cleanUrl,
+                category,
+                addedAt: msg.timestamp || "Recently",
+                description: `Shared in message by ${msg.senderName}`,
+              });
+            }
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [project.links, messages]);
 
   const tabsConfig = [
     {
@@ -78,21 +243,21 @@ export function ProjectDetailsSidebar({
       label: "Files",
       tooltip: "Documents & Project Files",
       icon: FileText,
-      count: project.files?.length,
+      count: allFiles.length,
     },
     {
       id: "media",
       label: "Media",
       tooltip: "Pictures, Media & Mockups",
       icon: ImageIcon,
-      count: project.media?.length,
+      count: allMedia.length,
     },
     {
       id: "links",
       label: "Links",
       tooltip: "External Links & Resources",
       icon: Link2,
-      count: project.links?.length,
+      count: allLinks.length,
     },
     {
       id: "members",
@@ -229,15 +394,15 @@ export function ProjectDetailsSidebar({
             </TabsContent>
 
             <TabsContent value="files" className="mt-0 outline-none">
-              <ProjectFilesTab files={project.files || []} />
+              <ProjectFilesTab files={allFiles} />
             </TabsContent>
 
             <TabsContent value="media" className="mt-0 outline-none">
-              <ProjectMediaTab media={project.media || []} />
+              <ProjectMediaTab media={allMedia} />
             </TabsContent>
 
             <TabsContent value="links" className="mt-0 outline-none">
-              <ProjectLinksTab links={project.links || []} />
+              <ProjectLinksTab links={allLinks} />
             </TabsContent>
 
             <TabsContent value="members" className="mt-0 outline-none">
