@@ -59,7 +59,7 @@ export class ProjectChatService {
       throw new ForbiddenError("You do not have permission to view this project conversation");
     }
 
-    const isPrivilegedApprover = actor.systemRole === "SuperAdmin" || canLead || canSales || canEdit;
+    const isPrivilegedApprover = canLead || canSales || canEdit;
 
     const limit = Math.min(Number(query.limit) || 50, 100);
     const where: any = {
@@ -89,7 +89,6 @@ export class ProjectChatService {
             { clientDirection: "INBOUND" },
             { approvalWorkflow: null },
             { approvalWorkflow: { status: { isTerminal: true } } },
-            { approvalWorkflow: { status: { code: "DISPATCHED" } } },
             { senderId: actor.id },
             { approvalWorkflow: { requestedById: actor.id } },
           ],
@@ -235,13 +234,31 @@ export class ProjectChatService {
 
     // Resolve approval status lookup for new outbound draft
     let initialApprovalStatusId: string | undefined = undefined;
+    let isAutoApproved = false;
+
     if (isClientOutbound) {
-      const pendingLeadStatus = await this.prisma.approvalStatusLookup.findFirst({
-        where: { code: "PENDING_LEAD" },
-        select: { id: true },
-      });
-      if (pendingLeadStatus) {
-        initialApprovalStatusId = pendingLeadStatus.id;
+      const [canLeadReview, canAutoApprove, canEditProject] = await Promise.all([
+        can(actor, "project.approval.lead_review", resourceContext),
+        can(actor, "project.approval.auto_approve", resourceContext),
+        can(actor, "project.edit", resourceContext),
+      ]);
+
+      isAutoApproved = canLeadReview || canAutoApprove || canEditProject;
+
+      if (isAutoApproved) {
+        // Auto-approve: bypass In Review and transition directly to Awaiting Dispatch (Rule BE-11: flag lookup)
+        const awaitingDispatchStatus = await this.prisma.approvalStatusLookup.findFirst({
+          where: { requiresSalesAction: true, isTerminal: false },
+          select: { id: true },
+        });
+        initialApprovalStatusId = awaitingDispatchStatus?.id;
+      } else {
+        // Standard review: route to In Review stage (Rule BE-11: flag lookup)
+        const inReviewStatus = await this.prisma.approvalStatusLookup.findFirst({
+          where: { requiresLeadAction: true, isTerminal: false },
+          select: { id: true },
+        });
+        initialApprovalStatusId = inReviewStatus?.id;
       }
     }
 
@@ -313,22 +330,47 @@ export class ProjectChatService {
       // If client outbound, create initial approval workflow
       let approvalWorkflow: any = null;
       if (isClientOutbound && initialApprovalStatusId) {
+        const now = new Date();
+        const initialAuditTrail = isAutoApproved
+          ? [
+              {
+                stageKey: "DRAFTED",
+                stageName: "Draft Created",
+                actorId: actor.id,
+                actorRole: "Author",
+                notes: `Drafted client communication (${dto.clientMessageType || "General"})`,
+              },
+              {
+                stageKey: "LEAD_REVIEW",
+                stageName: "Auto-Approved (In Review Bypassed)",
+                actorId: actor.id,
+                actorRole: "Reviewer",
+                durationMinutes: 0,
+                notes: "Auto-approved based on author review permissions",
+              },
+            ]
+          : [
+              {
+                stageKey: "DRAFTED",
+                stageName: "Draft Created",
+                actorId: actor.id,
+                actorRole: "Author",
+                notes: `Drafted client communication (${dto.clientMessageType || "General"})`,
+              },
+            ];
+
         const wf = await tx.messageApprovalWorkflow.create({
           data: {
             messageId: msg.id,
             statusId: initialApprovalStatusId,
             requestedById: actor.id,
+            leadApprovedById: isAutoApproved ? actor.id : null,
+            leadApprovedAt: isAutoApproved ? now : null,
             targetClientName: (project as any).client?.name || "Client",
             slaTargetMinutes: 30,
             slaStatus: "ON_TRACK",
             auditTrail: {
-              create: {
-                stageKey: "DRAFTED",
-                stageName: "Draft Created",
-                actorId: actor.id,
-                actorRole: actor.systemRole,
-                notes: `Drafted client communication (${dto.clientMessageType || "General"})`,
-              },
+              create: initialAuditTrail,
             },
           },
           include: {
@@ -369,10 +411,19 @@ export class ProjectChatService {
       const allRecipientUserIds = Array.from(new Set([...teamMemberUserIds, ...userAssignmentIds, actor.id]));
 
       const isClient = created.isFromClient || created.purpose === "CLIENT_COMMUNICATION";
+      const approvalObj = created.approvalWorkflow;
       const hasApproval =
-        (decorated as any).approval &&
-        ((decorated as any).approval.status === "PENDING_LEAD" || (decorated as any).approval.status === "PENDING_SALES");
-      const isRevision = (decorated as any).approval?.status === "REVISION_REQUESTED";
+        approvalObj &&
+        (approvalObj.status?.requiresLeadAction ||
+          approvalObj.status?.requiresSalesAction ||
+          (decorated as any).approval?.status === "IN_REVIEW" ||
+          (decorated as any).approval?.status === "PENDING_SALES");
+      const isRevision = Boolean(
+        approvalObj?.status &&
+          !approvalObj.status.isTerminal &&
+          !approvalObj.status.requiresLeadAction &&
+          !approvalObj.status.requiresSalesAction,
+      );
 
       const attentionType = hasApproval
         ? "PENDING_APPROVAL"
@@ -684,15 +735,15 @@ export class ProjectChatService {
     const isClientInbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "INBOUND";
 
     if (isClientOutbound && message.approvalWorkflow) {
-      const statusCode = message.approvalWorkflow.status?.code || "PENDING_LEAD";
-      if (statusCode === "PENDING_LEAD" || statusCode === "REVISION_REQUESTED") {
+      const statusObj = message.approvalWorkflow.status;
+      if (statusObj?.requiresLeadAction || statusObj?.code === "REVISION_REQUESTED") {
         if (!isAuthor && !canLeadApprove && !canEditGlobal) {
           throw new ForbiddenError("You do not have permission to edit this message draft");
         }
-      } else if (statusCode === "PENDING_SALES" || statusCode === "DISPATCHED") {
+      } else if (statusObj?.requiresSalesAction || statusObj?.isTerminal) {
         // Once approved, ordinary senders cannot edit. Only leaders or users with approval permissions can edit.
         if (!canLeadApprove && !canSalesDispatch && !canEditGlobal) {
-          throw new ForbiddenError("Approved or dispatched client messages can only be edited by Tech Leads or Sales managers.");
+          throw new ForbiddenError("Approved or dispatched client messages can only be edited by Reviewers or Sales managers.");
         }
       }
     } else if (isClientInbound) {
@@ -742,61 +793,66 @@ export class ProjectChatService {
 
       // 3. Handle Workflow state changes
       if (isClientOutbound && message.approvalWorkflow) {
-        const currentStatusCode = message.approvalWorkflow.status?.code;
+        const currentStatus = message.approvalWorkflow.status;
+        const isRevisionState =
+          currentStatus &&
+          !currentStatus.isTerminal &&
+          !currentStatus.requiresLeadAction &&
+          !currentStatus.requiresSalesAction;
 
-        // If author resubmitted a rejected / revision requested message -> Transition back to PENDING_LEAD
-        if (currentStatusCode === "REVISION_REQUESTED") {
-          const pendingLeadStatus = await tx.approvalStatusLookup.findFirst({
-            where: { code: "PENDING_LEAD" },
+        // If author resubmitted a rejected / revision requested message
+        if (isRevisionState || currentStatus?.code === "REVISION_REQUESTED") {
+          const [canAutoApprove, canLead] = await Promise.all([
+            can(actor, "project.approval.auto_approve", resourceContext),
+            can(actor, "project.approval.lead_review", resourceContext),
+          ]);
+
+          const isEligibleForAutoApprove = canAutoApprove || canLead || canEditGlobal;
+
+          const targetStatus = await tx.approvalStatusLookup.findFirst({
+            where: isEligibleForAutoApprove
+              ? { requiresSalesAction: true, isTerminal: false }
+              : { requiresLeadAction: true, isTerminal: false },
             select: { id: true },
           });
 
-          if (pendingLeadStatus) {
+          if (targetStatus) {
             await tx.messageApprovalWorkflow.update({
               where: { id: message.approvalWorkflow.id },
               data: {
-                statusId: pendingLeadStatus.id,
+                statusId: targetStatus.id,
                 rejectedById: null,
                 rejectionReason: null,
                 rejectedAt: null,
+                leadApprovedById: isEligibleForAutoApprove ? actor.id : null,
+                leadApprovedAt: isEligibleForAutoApprove ? new Date() : null,
                 auditTrail: {
                   create: {
                     stageKey: "REVISION_RESUBMITTED",
-                    stageName: "Revision Resubmitted",
+                    stageName: isEligibleForAutoApprove
+                      ? "Revision Resubmitted (Auto-Approved)"
+                      : "Revision Resubmitted for Review",
                     actorId: actor.id,
-                    actorRole: actor.systemRole,
-                    notes: dto.reason || "Author addressed feedback and resubmitted draft for Tech Lead review",
+                    actorRole: isAuthor ? "Author" : "Reviewer",
+                    notes: dto.reason || "Author addressed feedback and resubmitted draft",
                   },
                 },
               },
             });
           }
-        } else if (currentStatusCode === "PENDING_LEAD") {
-          // If author modified draft vs if tech lead/reviewer modified draft
-          if (isAuthor) {
-            await tx.approvalStageAudit.create({
-              data: {
-                workflowId: message.approvalWorkflow.id,
-                stageKey: "DRAFT_EDITED",
-                stageName: "Draft Modified",
-                actorId: actor.id,
-                actorRole: actor.systemRole,
-                notes: dto.reason || "Author updated draft content before review",
-              },
-            });
-          } else {
-            await tx.approvalStageAudit.create({
-              data: {
-                workflowId: message.approvalWorkflow.id,
-                stageKey: "LEAD_EDIT",
-                stageName: "Lead Edited Draft",
-                actorId: actor.id,
-                actorRole: actor.systemRole,
-                notes: dto.reason || "Reviewer adjusted draft content during Lead Review",
-              },
-            });
-          }
-        } else if (currentStatusCode === "PENDING_SALES") {
+        } else if (currentStatus?.requiresLeadAction) {
+          // If draft modified while in review stage
+          await tx.approvalStageAudit.create({
+            data: {
+              workflowId: message.approvalWorkflow.id,
+              stageKey: isAuthor ? "DRAFT_EDITED" : "LEAD_EDIT",
+              stageName: isAuthor ? "Draft Modified" : "Reviewer Edited Draft",
+              actorId: actor.id,
+              actorRole: isAuthor ? "Author" : "Reviewer",
+              notes: dto.reason || (isAuthor ? "Author updated draft content" : "Reviewer adjusted draft content"),
+            },
+          });
+        } else if (currentStatus?.requiresSalesAction) {
           // If sales reviewer modified message
           await tx.approvalStageAudit.create({
             data: {
@@ -804,19 +860,19 @@ export class ProjectChatService {
               stageKey: "SALES_EDIT",
               stageName: "Sales Modified Dispatch",
               actorId: actor.id,
-              actorRole: actor.systemRole,
+              actorRole: "Dispatcher",
               notes: dto.reason || "Sales reviewer modified message prior to external dispatch",
             },
           });
-        } else if (currentStatusCode === "DISPATCHED") {
-          // If a leader modified message post-dispatch
+        } else if (currentStatus?.isTerminal) {
+          // If modified post-dispatch
           await tx.approvalStageAudit.create({
             data: {
               workflowId: message.approvalWorkflow.id,
               stageKey: "POST_DISPATCH_EDIT",
               stageName: "Post-Dispatch Revision",
               actorId: actor.id,
-              actorRole: actor.systemRole,
+              actorRole: "Reviewer",
               notes: dto.reason || "Content edited post-dispatch by reviewer",
             },
           });

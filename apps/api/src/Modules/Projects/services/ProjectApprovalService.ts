@@ -61,12 +61,12 @@ export class ProjectApprovalService {
     }
 
     const pendingSalesStatus = await this.prisma.approvalStatusLookup.findFirst({
-      where: { code: "PENDING_SALES" },
+      where: { requiresSalesAction: true, isTerminal: false },
       select: { id: true },
     });
 
     if (!pendingSalesStatus) {
-      throw new BadRequestError("Approval status lookup 'PENDING_SALES' not configured in system");
+      throw new BadRequestError("Awaiting dispatch approval status not configured in system");
     }
 
     const now = new Date();
@@ -82,11 +82,11 @@ export class ProjectApprovalService {
         auditTrail: {
           create: {
             stageKey: "LEAD_REVIEW",
-            stageName: "Tech Lead Approved",
+            stageName: "Review Approved",
             actorId: actor.id,
-            actorRole: actor.systemRole,
+            actorRole: "Reviewer",
             durationMinutes,
-            notes: dto.notes || "Approved internally by Tech Lead",
+            notes: dto.notes || "Approved internally by reviewer",
           },
         },
       },
@@ -167,12 +167,12 @@ export class ProjectApprovalService {
     }
 
     const dispatchedStatus = await this.prisma.approvalStatusLookup.findFirst({
-      where: { code: "DISPATCHED" },
+      where: { isTerminal: true },
       select: { id: true },
     });
 
     if (!dispatchedStatus) {
-      throw new BadRequestError("Approval status lookup 'DISPATCHED' not configured in system");
+      throw new BadRequestError("Dispatched approval status not configured in system");
     }
 
     const now = new Date();
@@ -192,7 +192,7 @@ export class ProjectApprovalService {
             stageKey: "SALES_DISPATCH",
             stageName: "Dispatched to Client",
             actorId: actor.id,
-            actorRole: actor.systemRole,
+            actorRole: "Dispatcher",
             durationMinutes,
             notes: dto.notes || `Dispatched via ${dto.dispatchPlatform}${dto.dispatchReferenceId ? ` (Ref: ${dto.dispatchReferenceId})` : ""}`,
           },
@@ -279,12 +279,16 @@ export class ProjectApprovalService {
     }
 
     const revisionStatus = await this.prisma.approvalStatusLookup.findFirst({
-      where: { code: "REVISION_REQUESTED" },
+      where: {
+        isTerminal: false,
+        requiresLeadAction: false,
+        requiresSalesAction: false,
+      },
       select: { id: true },
     });
 
     if (!revisionStatus) {
-      throw new BadRequestError("Approval status lookup 'REVISION_REQUESTED' not configured in system");
+      throw new BadRequestError("Revision requested approval status not configured in system");
     }
 
     const now = new Date();
@@ -303,7 +307,7 @@ export class ProjectApprovalService {
             stageKey: "REVISION_REQUESTED",
             stageName: "Revision Requested",
             actorId: actor.id,
-            actorRole: actor.systemRole,
+            actorRole: "Reviewer",
             durationMinutes,
             notes: dto.rejectionReason,
           },
@@ -370,7 +374,7 @@ export class ProjectApprovalService {
       const allRecipientUserIds = Array.from(new Set([...teamMemberUserIds, ...userAssignmentIds, actor.id]));
 
       const attentionType =
-        workflow.status === "PENDING_LEAD" || workflow.status === "PENDING_SALES"
+        workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD" || workflow.status === "PENDING_SALES"
           ? "PENDING_APPROVAL"
           : workflow.status === "REVISION_REQUESTED"
           ? "REVISION_REQUESTED"
@@ -389,26 +393,27 @@ export class ProjectApprovalService {
   }
 
   private formatWorkflowItem(wf: any): ApprovalWorkflowItem {
-    const statusCode = wf.status?.code || "PENDING_LEAD";
+    const statusCode = wf.status?.code || "IN_REVIEW";
+    const isTerminalStatus = Boolean(wf.status?.isTerminal || statusCode === "DISPATCHED");
     const nowTime = Date.now();
 
     let stageStartedDate = new Date(wf.createdAt);
-    if (statusCode === "PENDING_SALES" && wf.leadApprovedAt) {
+    if (wf.status?.requiresSalesAction && wf.leadApprovedAt) {
       stageStartedDate = new Date(wf.leadApprovedAt);
-    } else if (statusCode === "REVISION_REQUESTED" && wf.rejectedAt) {
+    } else if (wf.rejectedAt) {
       stageStartedDate = new Date(wf.rejectedAt);
-    } else if (statusCode === "DISPATCHED" && wf.salesDispatchedAt) {
+    } else if (isTerminalStatus && wf.salesDispatchedAt) {
       stageStartedDate = new Date(wf.salesDispatchedAt);
     }
 
     const dwellMinutes =
-      statusCode === "DISPATCHED"
+      isTerminalStatus
         ? 0
         : Math.max(0, Math.floor((nowTime - stageStartedDate.getTime()) / (1000 * 60)));
 
     const slaTargetMinutes = wf.slaTargetMinutes || 30;
     let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
-    if (statusCode !== "DISPATCHED") {
+    if (!isTerminalStatus) {
       if (dwellMinutes > slaTargetMinutes) {
         computedSlaStatus = "BREACHED";
       } else if (dwellMinutes > slaTargetMinutes * 0.75) {
@@ -435,6 +440,7 @@ export class ProjectApprovalService {
       dispatchReferenceId: wf.dispatchReferenceId || null,
       rejectedBy: wf.rejector ? `${wf.rejector.firstName} ${wf.rejector.lastName}` : null,
       rejectedAt: wf.rejectedAt ? new Date(wf.rejectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
+      rejectionReason: wf.rejectionReason || null,
       auditTrail: (() => {
         const mapped = (wf.auditTrail || []).map((aud: any) => ({
           id: aud.id,

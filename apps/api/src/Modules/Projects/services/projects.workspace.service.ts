@@ -151,22 +151,37 @@ export class ProjectsWorkspaceService {
         // Compute granular pending counts
         const pendingLeadApprovalsCount = hasLeadAuthority
           ? (p.projectMessages || []).filter(
-              (m: any) => m.approvalWorkflow && m.approvalWorkflow.status?.code === "PENDING_LEAD",
+              (m: any) =>
+                m.approvalWorkflow &&
+                (m.approvalWorkflow.status?.requiresLeadAction ||
+                  m.approvalWorkflow.status?.code === "IN_REVIEW" ||
+                  m.approvalWorkflow.status?.code === "PENDING_LEAD"),
             ).length
           : 0;
 
         const pendingSalesDispatchesCount = hasSalesAuthority
           ? (p.projectMessages || []).filter(
-              (m: any) => m.approvalWorkflow && m.approvalWorkflow.status?.code === "PENDING_SALES",
+              (m: any) =>
+                m.approvalWorkflow &&
+                (m.approvalWorkflow.status?.requiresSalesAction ||
+                  m.approvalWorkflow.status?.code === "PENDING_SALES"),
             ).length
           : 0;
 
         const pendingRevisionsCount = (p.projectMessages || []).filter((m: any) => {
-          if (!m.approvalWorkflow || m.approvalWorkflow.status?.code !== "REVISION_REQUESTED") {
-            return false;
-          }
+          if (!m.approvalWorkflow) return false;
+          const status = m.approvalWorkflow.status;
+          const isRev =
+            status?.code === "REVISION_REQUESTED" ||
+            (status && !status.isTerminal && !status.requiresLeadAction && !status.requiresSalesAction);
+          if (!isRev) return false;
           // If author, always count; if approver, also count
-          return m.senderId === actor.id || m.approvalWorkflow.requestedById === actor.id || hasLeadAuthority || hasSalesAuthority;
+          return (
+            m.senderId === actor.id ||
+            m.approvalWorkflow.requestedById === actor.id ||
+            hasLeadAuthority ||
+            hasSalesAuthority
+          );
         }).length;
 
         const pendingApprovalsCount = pendingLeadApprovalsCount + pendingSalesDispatchesCount;

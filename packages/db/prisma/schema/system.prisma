@@ -101,21 +101,23 @@ model MessageType {
 }
 
 model ApprovalStatusLookup {
-  id                  String                    @id @default(uuid()) @db.Uuid
-  code                String                    @unique
-  name                String
-  requiresLeadAction  Boolean                   @default(false) @map("requires_lead_action")
-  requiresSalesAction Boolean                   @default(false) @map("requires_sales_action")
-  isTerminal          Boolean                   @default(false) @map("is_terminal")
-  color               String?
-  sortOrder           Int                       @default(0) @map("sort_order")
-  isActive            Boolean                   @default(true) @map("is_active")
-  createdAt           DateTime                  @default(now()) @map("created_at")
+  id                       String                    @id @default(uuid()) @db.Uuid
+  code                     String                    @unique
+  name                     String
+  requiresLeadAction       Boolean                   @default(false) @map("requires_lead_action")
+  requiresSalesAction      Boolean                   @default(false) @map("requires_sales_action")
+  requiresAutoApproveCheck Boolean                   @default(false) @map("requires_auto_approve_check")
+  isTerminal               Boolean                   @default(false) @map("is_terminal")
+  color                    String?
+  sortOrder                Int                       @default(0) @map("sort_order")
+  isActive                 Boolean                   @default(true) @map("is_active")
+  createdAt                DateTime                  @default(now()) @map("created_at")
 
-  workflows           MessageApprovalWorkflow[]
+  workflows                MessageApprovalWorkflow[]
 
   @@map("approval_status_lookups")
 }
+
 
 model OrderSource {
   id          String    @id @default(uuid()) @db.Uuid

@@ -130,7 +130,7 @@ export function MessageBubble({
   ) {
     const fallbackApproval: ApprovalWorkflow = {
       id: `appr-${message.id}`,
-      status: "PENDING_LEAD",
+      status: "IN_REVIEW",
       clientMessageType: message.clientMessageType || message.outboundType || "GENERAL_NOTICE",
       outboundType: message.outboundType || message.clientMessageType || "GENERAL_NOTICE",
       requestedBy: message.senderName,

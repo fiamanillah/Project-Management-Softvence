@@ -89,6 +89,14 @@ async function main() {
     prisma.bdOrder.count(),
   ]);
 
+  // Invalidate Redis authorization cache & bump permission version on seed completion (Rule BE-10)
+  try {
+    const { AuthorizationEngine } = await import("../../src/core/authorization/AuthorizationEngine");
+    await AuthorizationEngine.getInstance().invalidateCache();
+  } catch (err) {
+    console.warn("Failed to invalidate authorization cache after seed:", err);
+  }
+
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
   const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();

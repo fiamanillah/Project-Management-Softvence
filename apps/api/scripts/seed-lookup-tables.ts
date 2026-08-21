@@ -313,6 +313,111 @@ async function main() {
     }
   }
 
+  // Seed ApprovalStatusLookup records
+  console.log("⚡ Seeding ApprovalStatusLookup records...");
+  const APPROVAL_STATUSES = [
+    {
+      code: "IN_REVIEW",
+      name: "In Review",
+      requiresLeadAction: true,
+      requiresSalesAction: false,
+      requiresAutoApproveCheck: false,
+      isTerminal: false,
+      sortOrder: 1,
+      color: "#f59e0b",
+    },
+    {
+      code: "PENDING_SALES",
+      name: "Awaiting Dispatch",
+      requiresLeadAction: false,
+      requiresSalesAction: true,
+      requiresAutoApproveCheck: false,
+      isTerminal: false,
+      sortOrder: 2,
+      color: "#3b82f6",
+    },
+    {
+      code: "DISPATCHED",
+      name: "Dispatched",
+      requiresLeadAction: false,
+      requiresSalesAction: false,
+      requiresAutoApproveCheck: false,
+      isTerminal: true,
+      sortOrder: 3,
+      color: "#10b981",
+    },
+    {
+      code: "REVISION_REQUESTED",
+      name: "Revision Requested",
+      requiresLeadAction: false,
+      requiresSalesAction: false,
+      requiresAutoApproveCheck: false,
+      isTerminal: false,
+      sortOrder: 4,
+      color: "#ef4444",
+    },
+  ];
+
+  // Handle migration of legacy PENDING_LEAD code if present
+  const legacyLeadStatus = await prisma.approvalStatusLookup.findUnique({
+    where: { code: "PENDING_LEAD" },
+  });
+  if (legacyLeadStatus) {
+    await prisma.approvalStatusLookup.update({
+      where: { code: "PENDING_LEAD" },
+      data: {
+        code: "IN_REVIEW",
+        name: "In Review",
+        requiresLeadAction: true,
+        requiresSalesAction: false,
+        requiresAutoApproveCheck: false,
+        isTerminal: false,
+        sortOrder: 1,
+        color: "#f59e0b",
+        isActive: true,
+      },
+    });
+    console.log(`  ~ Migrated legacy PENDING_LEAD to IN_REVIEW`);
+  }
+
+  for (const st of APPROVAL_STATUSES) {
+    const existing = await prisma.approvalStatusLookup.findUnique({
+      where: { code: st.code },
+    });
+
+    if (existing) {
+      await prisma.approvalStatusLookup.update({
+        where: { code: st.code },
+        data: {
+          name: st.name,
+          requiresLeadAction: st.requiresLeadAction,
+          requiresSalesAction: st.requiresSalesAction,
+          requiresAutoApproveCheck: st.requiresAutoApproveCheck,
+          isTerminal: st.isTerminal,
+          sortOrder: st.sortOrder,
+          color: st.color,
+          isActive: true,
+        },
+      });
+      console.log(`  ~ Updated approval status: ${st.code}`);
+    } else {
+      await prisma.approvalStatusLookup.create({
+        data: {
+          code: st.code,
+          name: st.name,
+          requiresLeadAction: st.requiresLeadAction,
+          requiresSalesAction: st.requiresSalesAction,
+          requiresAutoApproveCheck: st.requiresAutoApproveCheck,
+          isTerminal: st.isTerminal,
+          sortOrder: st.sortOrder,
+          color: st.color,
+          isActive: true,
+        },
+      });
+      console.log(`  + Created approval status: ${st.code}`);
+    }
+  }
+
   console.log("✔ All project lookups seeded successfully!");
 }
 

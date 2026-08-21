@@ -247,13 +247,13 @@ export function ClientDispatchCard({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0 ml-auto">
-                  {workflow.status === "PENDING_LEAD" && (
+                  {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
                     <Badge
                       variant="outline"
                       className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px] sm:text-[10px] gap-1 font-semibold py-0.5 px-1.5 truncate max-w-[140px] sm:max-w-none"
                     >
                       <Clock className="size-2.5 animate-spin shrink-0" />
-                      <span className="truncate">Lead Review ({elapsedFormatted})</span>
+                      <span className="truncate">In Review ({elapsedFormatted})</span>
                     </Badge>
                   )}
 
@@ -406,7 +406,7 @@ export function ClientDispatchCard({
 
                 {/* Right: Quick Action Trigger */}
                 <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                  {workflow.status === "PENDING_LEAD" && (
+                  {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
                     capabilities?.canLeadApprove ? (
                       <Button
                         size="xs"

@@ -127,13 +127,12 @@ export async function buildProjectScopedWhereConditions(
   prisma: PrismaClient,
   actor: AuthenticatedUser,
 ): Promise<any[] | null> {
-  if (actor.systemRole === "SuperAdmin") {
-    return null;
-  }
-
   const userPerms = await getUserPermissions(actor);
   const viewPerm = userPerms["project.view"];
-  const isGlobal = viewPerm?.scope === "Global" || viewPerm?.scope === "Override";
+  const isGlobal =
+    viewPerm?.scope === "Global" ||
+    viewPerm?.scope === "Override" ||
+    (viewPerm?.allowed === true && (!viewPerm.scope || viewPerm.scope === "Global"));
 
   if (isGlobal) {
     return null;
@@ -541,14 +540,9 @@ export async function canActorViewPendingMessage(
     return true;
   }
 
-  // If already dispatched to client, visible to all project members
-  const statusCode = message.approvalWorkflow?.status?.code;
-  if (statusCode === "DISPATCHED" || (!message.approvalWorkflow && message.status === "DISPATCHED")) {
-    return true;
-  }
-
-  // SuperAdmin has global bypass
-  if (actor.systemRole === "SuperAdmin") {
+  // If already dispatched (terminal status) or author, visible to project members
+  const status = message.approvalWorkflow?.status;
+  if (status?.isTerminal || message.status === "DISPATCHED") {
     return true;
   }
 
@@ -560,7 +554,7 @@ export async function canActorViewPendingMessage(
     return true;
   }
 
-  // Approvers & Project Administrators
+  // Approvers & Project Administrators (can() automatically resolves SuperAdmin fast-path)
   const resourceContext = getProjectResourceContext(projectContext);
   const [canLead, canSales, canEdit] = await Promise.all([
     can(actor, "project.approval.lead_review", resourceContext),
@@ -607,9 +601,9 @@ export async function sanitizeAndDecorateMessage(
 
   const isClientOutbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "OUTBOUND";
   const isClientInbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "INBOUND";
-  const statusCode = message.approvalWorkflow?.status?.code || "PENDING_LEAD";
+  const statusObj = message.approvalWorkflow?.status;
 
-  // Fine-grained action capabilities based on exact stage and permissions
+  // Fine-grained action capabilities based on exact stage behavioral flags and permissions (Rule BE-11)
   let canLeadApprove = false;
   let canSalesDispatch = false;
   let canRequestRevision = false;
@@ -617,22 +611,26 @@ export async function sanitizeAndDecorateMessage(
   let canDelete = false;
 
   if (isClientOutbound && message.approvalWorkflow) {
-    if (statusCode === "PENDING_LEAD") {
+    if (statusObj?.requiresLeadAction) {
+      // In Review stage
       canLeadApprove = hasLeadReviewPerm || canEditGlobal;
       canRequestRevision = hasLeadReviewPerm || canEditGlobal;
       canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
       canDelete = isAuthor || canDeleteGlobal;
-    } else if (statusCode === "PENDING_SALES") {
+    } else if (statusObj?.requiresSalesAction) {
+      // Awaiting Dispatch stage
       canSalesDispatch = hasSalesDispatchPerm || canEditGlobal;
       canRequestRevision = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
       canEdit = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
       canDelete = canDeleteGlobal;
-    } else if (statusCode === "REVISION_REQUESTED") {
-      canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
-      canDelete = isAuthor || canDeleteGlobal;
-    } else if (statusCode === "DISPATCHED") {
+    } else if (statusObj?.isTerminal) {
+      // Dispatched / Terminal stage
       canEdit = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
       canDelete = canDeleteGlobal;
+    } else {
+      // Revision Requested / other intermediate non-terminal states
+      canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
+      canDelete = isAuthor || canDeleteGlobal;
     }
   } else if (isClientInbound) {
     canEdit = (isAuthor && isWithinEditWindow) || canSendClient || canEditGlobal;
@@ -683,25 +681,26 @@ export async function sanitizeAndDecorateMessage(
   let approval: any = null;
   if (message.approvalWorkflow) {
     const wf = message.approvalWorkflow;
-    const statusCode = wf.status?.code || "PENDING_LEAD";
+    const statusCode = wf.status?.code || "IN_REVIEW";
+    const isTerminalStatus = Boolean(wf.status?.isTerminal || statusCode === "DISPATCHED");
 
     let stageStartedDate = new Date(wf.createdAt);
-    if (statusCode === "PENDING_SALES" && wf.leadApprovedAt) {
+    if (wf.status?.requiresSalesAction && wf.leadApprovedAt) {
       stageStartedDate = new Date(wf.leadApprovedAt);
-    } else if (statusCode === "REVISION_REQUESTED" && wf.rejectedAt) {
+    } else if (wf.rejectedAt) {
       stageStartedDate = new Date(wf.rejectedAt);
-    } else if (statusCode === "DISPATCHED" && wf.salesDispatchedAt) {
+    } else if (isTerminalStatus && wf.salesDispatchedAt) {
       stageStartedDate = new Date(wf.salesDispatchedAt);
     }
 
     const dwellMinutes =
-      statusCode === "DISPATCHED"
+      isTerminalStatus
         ? 0
         : Math.max(0, Math.floor((nowTime - stageStartedDate.getTime()) / (1000 * 60)));
 
     const slaTargetMinutes = wf.slaTargetMinutes || 30;
     let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
-    if (statusCode !== "DISPATCHED") {
+    if (!isTerminalStatus) {
       if (dwellMinutes > slaTargetMinutes) {
         computedSlaStatus = "BREACHED";
       } else if (dwellMinutes > slaTargetMinutes * 0.75) {

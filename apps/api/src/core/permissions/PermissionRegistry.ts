@@ -337,19 +337,12 @@ export class PermissionRegistry {
       diff,
     };
 
-    // Log diff metrics
-    this.logger.info(
-      `Permission sync completed: +${toInsert.length} new, ~${toUpdate.length} changed, -${toDeprecate.length} deprecated (total declared: ${declaredPermissions.length})`,
-    );
-
-    if (toInsert.length > 0) {
-      this.logger.info(`+ Added permissions: ${toInsert.map((i) => i.code).join(", ")}`);
-    }
-    if (toUpdate.length > 0) {
-      this.logger.info(`~ Updated permissions: ${toUpdate.map((u) => u.code).join(", ")}`);
-    }
-    if (toDeprecate.length > 0) {
-      this.logger.info(`- Deprecated permissions: ${toDeprecate.map((d) => d.code).join(", ")}`);
+    // Invalidate Redis authorization cache & bump permission version on sync completion (Rule BE-10)
+    try {
+      const { AuthorizationEngine } = await import("../authorization/AuthorizationEngine");
+      await AuthorizationEngine.getInstance().invalidateCache();
+    } catch (err) {
+      this.logger.warn("Failed to invalidate cache after permission sync", { error: err });
     }
 
     return result;

@@ -206,9 +206,9 @@ export function DispatchAuditTimeline({
   };
 
   return (
-    <div className="rounded-xl border border-border/80 bg-card p-3.5 space-y-3 shadow-2xs">
+    <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-border/80 bg-card p-3.5 space-y-3 shadow-2xs">
       {/* Header & Filter Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <History className="size-4 text-primary shrink-0" />
           <span className="text-xs font-bold text-foreground truncate">
@@ -262,14 +262,14 @@ export function DispatchAuditTimeline({
 
       {/* Active Stage Live Dwell Callout */}
       {!isTerminal && (
-        <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs">
+        <div className="shrink-0 flex items-center justify-between gap-2 p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs">
           <div className="flex items-center gap-2">
             <Timer className="size-4 text-amber-600 dark:text-amber-400 animate-spin shrink-0" />
             <div>
               <p className="font-bold text-foreground text-[11px]">
                 Active Stage:{" "}
-                {workflow.status === "PENDING_LEAD"
-                  ? "Tech Lead Review"
+                {workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD"
+                  ? "In Review"
                   : workflow.status === "PENDING_SALES"
                   ? "Sales Dispatch"
                   : "Revision Addressing"}
@@ -296,8 +296,8 @@ export function DispatchAuditTimeline({
         </div>
       )}
 
-      {/* Scrollable Timeline Stream */}
-      <ScrollArea className="max-h-[380px] pr-2 -mr-1">
+      {/* Scrollable Timeline Stream with shadcn ScrollArea */}
+      <ScrollArea className="flex-1 min-h-0 pr-2 -mr-1">
         <div className="relative pl-3 space-y-3 pt-1 border-l-2 border-border/70 ml-2.5 my-1">
           {filteredTimeline.map((item, i) => {
             const isExpanded = expandedRevisionIds.has(item.id);

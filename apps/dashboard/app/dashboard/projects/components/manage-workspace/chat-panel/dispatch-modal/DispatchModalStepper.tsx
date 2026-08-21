@@ -28,13 +28,13 @@ export function DispatchModalStepper({
           </div>
         </div>
 
-        {/* Step 2: Tech Lead Review */}
+        {/* Step 2: In Review */}
         <div
           className={cn(
             "flex items-center gap-2 p-2 rounded-xl border transition-all min-w-0",
             workflow.leadApprovedBy
               ? "bg-background/90 border-border/60 shadow-2xs"
-              : workflow.status === "PENDING_LEAD"
+              : workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD"
               ? "bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/30 shadow-xs"
               : workflow.status === "REVISION_REQUESTED"
               ? "bg-rose-500/10 border-rose-500/40"
@@ -46,7 +46,7 @@ export function DispatchModalStepper({
               "flex size-6 items-center justify-center rounded-full text-xs font-bold shrink-0 shadow-2xs",
               workflow.leadApprovedBy
                 ? "bg-emerald-500 text-white"
-                : workflow.status === "PENDING_LEAD"
+                : workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD"
                 ? "bg-amber-500 text-white animate-pulse"
                 : workflow.status === "REVISION_REQUESTED"
                 ? "bg-rose-500 text-white"
@@ -57,14 +57,14 @@ export function DispatchModalStepper({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-bold text-foreground truncate">
-              2. Tech Lead Review {workflow.status === "PENDING_LEAD" ? `(${elapsedFormatted})` : ""}
+              2. In Review {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") ? `(${elapsedFormatted})` : ""}
             </p>
             <p className="text-[10px] text-muted-foreground truncate">
               {workflow.leadApprovedBy
                 ? `Approved by ${workflow.leadApprovedBy}`
                 : workflow.status === "REVISION_REQUESTED"
                 ? "Revision Requested"
-                : "Awaiting Tech Lead"}
+                : "Awaiting Review"}
             </p>
           </div>
         </div>

@@ -103,10 +103,26 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     }
     sampleTeamId = team.id;
 
-    // Setup SuperAdmin Actor
+    // Setup SuperAdmin Actor with real DB row for FK relations
+    const superAdminRecord = await prisma.user.upsert({
+      where: { email: "admin@softvence.test" },
+      update: { systemRole: "SuperAdmin" },
+      create: {
+        id: "00000000-0000-0000-0000-000000000001",
+        employeeId: "EMP-TEST-001",
+        email: "admin@softvence.test",
+        passwordHash: "hash123",
+        firstName: "Super",
+        lastName: "Admin",
+        systemRole: "SuperAdmin",
+        status: "ACTIVE",
+        isActive: true,
+      },
+    });
+
     superAdminUser = {
-      id: "00000000-0000-0000-0000-000000000001",
-      email: "admin@softvence.test",
+      id: superAdminRecord.id,
+      email: superAdminRecord.email,
       systemRole: "SuperAdmin",
       roleId: "",
       designationId: undefined,
@@ -623,6 +639,108 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     expect(clientRes.pagination.total).toBeGreaterThanOrEqual(1);
     expect(clientRes.pagination.page).toBe(1);
   });
+
+  it("14. Client Outbound message from user with review authority auto-approves straight to Awaiting Dispatch", async () => {
+    // 0. Create an active project for chat & approval workflow testing
+    const chatTestProject = await projectsService.createProject(
+      {
+        orderId: `CHAT-TEST-${Date.now()}`,
+        projectName: "Chat Approval Test Project",
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+      },
+      superAdminUser,
+    );
+
+    // 1. Send outbound message as superAdmin (who has auto-approve & lead_review permissions)
+    const msg = await projectsService.chat.sendMessage(
+      chatTestProject.id,
+      {
+        text: "Important project update delivered to client",
+        purpose: "CLIENT_COMMUNICATION",
+        clientDirection: "OUTBOUND",
+        clientMessageType: "PROGRESS_UPDATE",
+      },
+      superAdminUser,
+    );
+
+    expect(msg.id).toBeDefined();
+    expect(msg.approval).toBeDefined();
+    // Auto-approved messages land directly in PENDING_SALES (Awaiting Dispatch), bypassing IN_REVIEW
+    expect(msg.approval?.status).toBe("PENDING_SALES");
+    expect(msg.approval?.leadApprovedBy).toBeDefined();
+    expect(msg._capabilities?.canSalesDispatch).toBe(true);
+
+    // 2. Dispatch the approved message via Sales
+    const dispatched = await projectsService.approval.salesDispatch(
+      chatTestProject.id,
+      msg.id,
+      {
+        dispatchPlatform: "Upwork",
+        dispatchReferenceId: "UP-998877",
+        notes: "Delivered via Upwork workroom",
+      },
+      superAdminUser,
+    );
+
+    expect(dispatched.status).toBe("DISPATCHED");
+    expect(dispatched.salesDispatchedBy).toBeDefined();
+    expect(dispatched.dispatchPlatform).toBe("Upwork");
+  });
+
+  it("15. Requesting revision moves approval status to REVISION_REQUESTED and resubmit auto-approves for privileged author", async () => {
+    // 0. Create an active project
+    const chatTestProject2 = await projectsService.createProject(
+      {
+        orderId: `CHAT-TEST-2-${Date.now()}`,
+        projectName: "Chat Revision Test Project",
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+      },
+      superAdminUser,
+    );
+
+    // 1. Send message as superAdmin
+    const msg = await projectsService.chat.sendMessage(
+      chatTestProject2.id,
+      {
+        text: "Draft message that needs tweaks",
+        purpose: "CLIENT_COMMUNICATION",
+        clientDirection: "OUTBOUND",
+      },
+      superAdminUser,
+    );
+
+    // 2. Request revision
+    const revised = await projectsService.approval.requestRevision(
+      chatTestProject2.id,
+      msg.id,
+      { rejectionReason: "Please adjust scope wording" },
+      superAdminUser,
+    );
+
+    expect(revised.status).toBe("REVISION_REQUESTED");
+    expect(revised.rejectionReason).toBe("Please adjust scope wording");
+
+    // 3. Edit and resubmit -> because author has review authority, auto-approves back to PENDING_SALES
+    const resubmitted = await projectsService.chat.editMessage(
+      chatTestProject2.id,
+      msg.id,
+      {
+        text: "Updated draft message with clear scope wording",
+        reason: "Fixed scope wording as requested",
+      },
+      superAdminUser,
+    );
+
+    expect(resubmitted.text).toBe("Updated draft message with clear scope wording");
+    expect(resubmitted.approval?.status).toBe("PENDING_SALES");
+  });
 });
+
 
 

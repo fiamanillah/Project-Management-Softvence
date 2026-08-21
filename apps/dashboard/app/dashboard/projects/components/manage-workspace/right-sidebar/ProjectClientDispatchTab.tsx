@@ -35,7 +35,9 @@ export function ProjectClientDispatchTab({
     return messages.filter((m) => m.approval && m.approval.status !== "NOT_REQUIRED");
   }, [messages]);
 
-  const pendingLeadCount = clientMessages.filter((m) => m.approval?.status === "PENDING_LEAD").length;
+  const pendingLeadCount = clientMessages.filter(
+    (m) => m.approval?.status === "IN_REVIEW" || m.approval?.status === "PENDING_LEAD",
+  ).length;
   const pendingSalesCount = clientMessages.filter((m) => m.approval?.status === "PENDING_SALES").length;
   const dispatchedCount = clientMessages.filter((m) => m.approval?.status === "DISPATCHED").length;
 
@@ -59,7 +61,7 @@ export function ProjectClientDispatchTab({
       <div className="grid grid-cols-3 gap-1.5 shrink-0">
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-center">
           <span className="text-[9px] uppercase font-bold text-amber-700 dark:text-amber-400">
-            Lead Review
+            In Review
           </span>
           <p className="text-base font-extrabold text-foreground font-mono">{pendingLeadCount}</p>
         </div>
@@ -106,9 +108,9 @@ export function ProjectClientDispatchTab({
                   </div>
 
                   <div>
-                    {workflow.status === "PENDING_LEAD" && (
+                    {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
                       <Badge variant="outline" className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px] gap-1 py-0.5">
-                        <Clock className="size-2.5 animate-spin" /> Pending Lead ({workflow.currentStageDwellMinutes}m)
+                        <Clock className="size-2.5 animate-spin" /> In Review ({workflow.currentStageDwellMinutes}m)
                       </Badge>
                     )}
                     {workflow.status === "PENDING_SALES" && (

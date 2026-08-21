@@ -84,15 +84,15 @@ export function DispatchActionConsole({
         </Badge>
       </div>
 
-      {/* A: Tech Lead Review State */}
-      {workflow.status === "PENDING_LEAD" && (
+      {/* A: In Review State */}
+      {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
         <div className="space-y-3">
           {!isRejecting ? (
             <>
               {canLeadApprove && (
                 <div>
                   <label className="text-[11px] font-semibold text-foreground block mb-1">
-                    Internal Tech Lead Review Notes (Optional):
+                    Internal Review Notes (Optional):
                   </label>
                   <Input
                     value={approvalNotes}
@@ -131,7 +131,7 @@ export function DispatchActionConsole({
                 )}
                 {!canLeadApprove && !canRequestRevision && (
                   <p className="col-span-2 text-[11px] text-muted-foreground text-center py-2 bg-muted/30 rounded-lg">
-                    Awaiting Tech Lead review. You do not have approval permissions on this project.
+                    Awaiting review. You do not have approval permissions on this project.
                   </p>
                 )}
               </div>

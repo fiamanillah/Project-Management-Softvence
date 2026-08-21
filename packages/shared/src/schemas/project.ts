@@ -693,7 +693,7 @@ export interface ApprovalStageAuditItem {
 
 export interface ApprovalWorkflowItem {
   id: string;
-  status: "PENDING_LEAD" | "PENDING_SALES" | "DISPATCHED" | "REVISION_REQUESTED" | "NOT_REQUIRED";
+  status: "IN_REVIEW" | "PENDING_LEAD" | "PENDING_SALES" | "DISPATCHED" | "REVISION_REQUESTED" | "NOT_REQUIRED" | string;
   clientMessageType?: string | null;
   requestedBy: string;
   requestedAt: string;

@@ -88,7 +88,13 @@ export function ProjectChatPanel({
 
   // Compute pending approvals count
   const pendingApprovalsCount = React.useMemo(() => {
-    return messages.filter((m) => m.approval && (m.approval.status === "PENDING_LEAD" || m.approval.status === "PENDING_SALES")).length;
+    return messages.filter(
+      (m) =>
+        m.approval &&
+        (m.approval.status === "IN_REVIEW" ||
+          m.approval.status === "PENDING_LEAD" ||
+          m.approval.status === "PENDING_SALES"),
+    ).length;
   }, [messages]);
 
   const handleReply = (message: ChatMessage) => {

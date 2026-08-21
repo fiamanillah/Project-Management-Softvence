@@ -281,7 +281,7 @@ export function ClientDispatchModal({
       }
       setIsEditingContent(false);
       setEditReason("");
-      toast.success("Draft updated and resubmitted for Tech Lead review");
+      toast.success("Draft updated and resubmitted");
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err?.message || "Failed to update draft");
@@ -331,9 +331,9 @@ export function ClientDispatchModal({
           />
 
           {/* Right Column: Review Console & Audit Timeline */}
-          <div className="lg:col-span-6 flex flex-col min-h-0 overflow-hidden bg-muted/20">
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
-              {/* Contextual Action Console */}
+          <div className="lg:col-span-6 flex flex-col min-h-0 overflow-hidden bg-muted/20 p-4 gap-3">
+            {/* Contextual Action Console */}
+            <div className="shrink-0">
               <DispatchActionConsole
                 workflow={workflow}
                 capabilities={capabilities}
@@ -355,16 +355,16 @@ export function ClientDispatchModal({
                 isEditingContent={isEditingContent}
                 setIsEditingContent={setIsEditingContent}
               />
-
-              {/* Comprehensive Action Audit & Revision Timeline */}
-              <DispatchAuditTimeline
-                workflow={workflow}
-                revisions={revisions}
-                elapsedFormatted={elapsedFormatted}
-                isTerminal={isTerminal}
-                currentContent={editText || messageText}
-              />
             </div>
+
+            {/* Comprehensive Action Audit & Revision Timeline */}
+            <DispatchAuditTimeline
+              workflow={workflow}
+              revisions={revisions}
+              elapsedFormatted={elapsedFormatted}
+              isTerminal={isTerminal}
+              currentContent={editText || messageText}
+            />
           </div>
         </div>
 
@@ -391,7 +391,7 @@ export function ClientDispatchModal({
               Close
             </Button>
 
-            {workflow.status === "PENDING_LEAD" && !isRejecting && (capabilities?.canLeadApprove ?? true) && (
+            {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && !isRejecting && (capabilities?.canLeadApprove ?? true) && (
               <Button
                 size="sm"
                 onClick={handleLeadApprove}

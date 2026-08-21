@@ -182,7 +182,9 @@ export function ManageProjectWorkspace({
       const isClient = newMsg.isFromClient || newMsg.purpose === "CLIENT_COMMUNICATION";
       const hasApproval =
         newMsg.approval &&
-        (newMsg.approval.status === "PENDING_LEAD" || newMsg.approval.status === "PENDING_SALES");
+        (newMsg.approval.status === "IN_REVIEW" ||
+          newMsg.approval.status === "PENDING_LEAD" ||
+          newMsg.approval.status === "PENDING_SALES");
       const isRevision = newMsg.approval?.status === "REVISION_REQUESTED";
 
       let msgAttention: "CLIENT_MESSAGE" | "PENDING_APPROVAL" | "REVISION_REQUESTED" | "NEW_MESSAGE" | null = null;
@@ -278,7 +280,11 @@ export function ManageProjectWorkspace({
 
           if (workflow.status === "REVISION_REQUESTED") {
             attentionType = "REVISION_REQUESTED";
-          } else if (workflow.status === "PENDING_SALES" || workflow.status === "PENDING_LEAD") {
+          } else if (
+            workflow.status === "PENDING_SALES" ||
+            workflow.status === "IN_REVIEW" ||
+            workflow.status === "PENDING_LEAD"
+          ) {
             attentionType = "PENDING_APPROVAL";
           } else if (workflow.status === "DISPATCHED") {
             pendingApprovalsCount = Math.max(0, pendingApprovalsCount - 1);

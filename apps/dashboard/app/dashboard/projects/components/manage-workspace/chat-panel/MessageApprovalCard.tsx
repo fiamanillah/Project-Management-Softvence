@@ -103,9 +103,9 @@ export function MessageApprovalCard({
         </div>
 
         <div>
-          {workflow.status === "PENDING_LEAD" && (
+          {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
             <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-semibold">
-              <Clock className="size-3" /> Awaiting Lead Approval
+              <Clock className="size-3" /> In Review
             </Badge>
           )}
           {workflow.status === "PENDING_SALES" && (
@@ -139,11 +139,11 @@ export function MessageApprovalCard({
           </span>
         </div>
 
-        {/* Step 2: Tech Lead Approval */}
+        {/* Step 2: In Review */}
         <div
           className={cn(
             "flex flex-col items-center rounded-lg p-1.5 text-center transition-colors",
-            workflow.status === "PENDING_LEAD"
+            workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD"
               ? "bg-amber-500/10 border border-amber-500/30"
               : workflow.leadApprovedBy
               ? "bg-muted/40"
@@ -155,14 +155,14 @@ export function MessageApprovalCard({
               "size-4 rounded-full flex items-center justify-center text-[9px] mb-1",
               workflow.leadApprovedBy
                 ? "bg-emerald-500 text-white"
-                : workflow.status === "PENDING_LEAD"
+                : workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD"
                 ? "bg-amber-500 text-white animate-pulse"
                 : "bg-muted text-muted-foreground"
             )}
           >
             {workflow.leadApprovedBy ? "✓" : "2"}
           </span>
-          <span className="text-[10px] font-semibold text-foreground">2. Lead Review</span>
+          <span className="text-[10px] font-semibold text-foreground">2. In Review</span>
           <span className="text-[9px] text-muted-foreground truncate max-w-full">
             {workflow.leadApprovedBy ? "Approved" : "Pending"}
           </span>
@@ -217,10 +217,10 @@ export function MessageApprovalCard({
       )}
 
       {/* Interactive Action Buttons */}
-      {((workflow.status === "PENDING_LEAD" && (canLeadApprove || canRequestRevision)) ||
+      {(((workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (canLeadApprove || canRequestRevision)) ||
         (workflow.status === "PENDING_SALES" && (canSalesDispatch || canRequestRevision))) && (
         <div className="flex items-center justify-end gap-2 mt-2.5 pt-2 border-t border-border/50">
-          {workflow.status === "PENDING_LEAD" && (
+          {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
             <>
               {canRequestRevision && (
                 <Button

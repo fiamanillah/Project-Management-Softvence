@@ -30,8 +30,9 @@ export type OutboundMessageType = ClientMessageType;
 
 export type ApprovalStatus =
   | "NOT_REQUIRED"        // Internal team chats or inbound client notes
-  | "PENDING_LEAD"        // Step 1: Needs Tech Lead / PM review
-  | "PENDING_SALES"       // Step 2: Approved internally, needs Sales / AM dispatch to client
+  | "IN_REVIEW"           // Step 1: In Review stage
+  | "PENDING_LEAD"        // Legacy alias for IN_REVIEW
+  | "PENDING_SALES"       // Step 2: Approved internally, awaiting Sales / AM dispatch to client
   | "DISPATCHED"          // Step 3: Successfully sent to client
   | "REVISION_REQUESTED"; // Rejected / Needs revision
 

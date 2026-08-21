@@ -55,10 +55,10 @@ export function DispatchModalHeader({
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
 
           {/* Status Badge with Live Dwell Time */}
-          {status === "PENDING_LEAD" && (
+          {(status === "IN_REVIEW" || status === "PENDING_LEAD") && (
             <Badge variant="outline" className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 text-xs font-semibold py-1 px-2.5 gap-1.5 shadow-2xs">
               <span className="size-2 rounded-full bg-amber-500 animate-ping shrink-0" />
-              <span>Lead Review ({elapsedFormatted})</span>
+              <span>In Review ({elapsedFormatted})</span>
             </Badge>
           )}
           {status === "PENDING_SALES" && (
