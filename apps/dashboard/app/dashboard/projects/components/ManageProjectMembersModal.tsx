@@ -588,7 +588,7 @@ export function ManageProjectMembersModal({
               type="button"
               size="sm"
               onClick={handleSave}
-              disabled={loading}
+              disabled={loading || (!caps?.canManageMembers && !caps?.canReassign)}
               className="text-xs h-9 gap-1.5 w-full sm:w-auto shadow-xs"
             >
               {loading && <Loader2 className="size-3.5 animate-spin" />}

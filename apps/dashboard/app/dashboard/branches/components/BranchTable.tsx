@@ -400,10 +400,10 @@ export function BranchTable({
         cell: ({ row }) => {
           const b = row.original.branch;
           const caps = b._capabilities || {
-            canEdit: true,
-            canDelete: true,
-            canAssignManager: true,
-            canCreateSubBranch: true,
+            canEdit: false,
+            canDelete: false,
+            canAssignManager: false,
+            canCreateSubBranch: false,
           };
           const hasAnyAction =
             caps.canEdit || caps.canAssignManager || caps.canCreateSubBranch || caps.canDelete;

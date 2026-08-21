@@ -404,9 +404,9 @@ export function UserTable({
           cell: ({ row }) => {
             const user = row.original;
             const caps = user._capabilities || {
-              canEdit: true,
-              canToggleActive: true,
-              canManageOverrides: true,
+              canEdit: false,
+              canToggleActive: false,
+              canManageOverrides: false,
             };
             const isUpdating = updatingUserId === user.id;
 
@@ -518,9 +518,9 @@ export function UserTable({
         cell: ({ row }) => {
           const user = row.original;
           const caps = user._capabilities || {
-            canEdit: true,
-            canToggleActive: true,
-            canManageOverrides: true,
+            canEdit: false,
+            canToggleActive: false,
+            canManageOverrides: false,
           };
           const hasAnyAction = caps.canEdit || caps.canManageOverrides;
           const isInvited =

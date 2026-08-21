@@ -430,7 +430,7 @@ export function DepartmentTable({
         header: () => <div className="text-right">Actions</div>,
         cell: ({ row }) => {
           const d = row.original.department;
-          const caps = d._capabilities || { canEdit: true, canDelete: true, canAssignManager: true };
+          const caps = d._capabilities || { canEdit: false, canDelete: false, canAssignManager: false };
           const hasAnyAction = caps.canEdit || caps.canAssignManager || caps.canDelete;
 
           return (

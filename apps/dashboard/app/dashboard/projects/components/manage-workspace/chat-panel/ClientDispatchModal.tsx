@@ -391,7 +391,7 @@ export function ClientDispatchModal({
               Close
             </Button>
 
-            {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && !isRejecting && (capabilities?.canLeadApprove ?? true) && (
+            {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && !isRejecting && Boolean(capabilities?.canLeadApprove) && (
               <Button
                 size="sm"
                 onClick={handleLeadApprove}
@@ -403,7 +403,7 @@ export function ClientDispatchModal({
               </Button>
             )}
 
-            {workflow.status === "PENDING_SALES" && !isDispatching && (capabilities?.canSalesDispatch ?? true) && (
+            {workflow.status === "PENDING_SALES" && !isDispatching && Boolean(capabilities?.canSalesDispatch) && (
               <Button
                 size="sm"
                 onClick={handleConfirmDispatch}

@@ -56,7 +56,7 @@ export function OrgCardNode({
   const isRoot = depth === 0;
 
   const activeManagers = department.managers?.filter((m) => !m.unassignedAt) || [];
-  const caps = department._capabilities || { canEdit: true, canDelete: true, canAssignManager: true };
+  const caps = department._capabilities || { canEdit: false, canDelete: false, canAssignManager: false };
   const hasAnyAction = caps.canEdit || caps.canAssignManager || caps.canDelete;
 
   return (

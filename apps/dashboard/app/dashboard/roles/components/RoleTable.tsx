@@ -195,7 +195,7 @@ export function RoleTable({
 
           return (
             <div className="flex items-center justify-end gap-2">
-              {caps.canManageMatrix !== false && (
+              {Boolean(caps.canManageMatrix) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -219,13 +219,13 @@ export function RoleTable({
                   <DropdownMenuLabel>Role Actions</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => onEdit(role, "details")}
-                    disabled={caps.canEdit === false}
+                    disabled={!caps.canEdit}
                   >
                     <Pencil className="size-4 mr-2" /> Edit Details
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => onEdit(role, "permissions")}
-                    disabled={caps.canManageMatrix === false}
+                    disabled={!caps.canManageMatrix}
                   >
                     <ShieldCheck className="size-4 mr-2" /> Permission Matrix
                   </DropdownMenuItem>
@@ -233,7 +233,7 @@ export function RoleTable({
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onClick={() => onDelete?.(role)}
-                    disabled={caps.canDelete === false}
+                    disabled={!caps.canDelete}
                   >
                     <Trash2 className="size-4 mr-2" /> Delete Role
                   </DropdownMenuItem>

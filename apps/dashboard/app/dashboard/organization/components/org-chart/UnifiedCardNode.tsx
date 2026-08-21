@@ -60,13 +60,13 @@ export function UnifiedCardNode({
   const isExpanded = expandedIds.has(node.id);
 
   const caps = node._capabilities || {
-    canEdit: true,
-    canDelete: true,
-    canAssignManager: true,
-    canAddSubBranch: true,
-    canAddDepartment: true,
-    canAddSubDepartment: true,
-    canAddTeam: true,
+    canEdit: false,
+    canDelete: false,
+    canAssignManager: false,
+    canAddSubBranch: false,
+    canAddDepartment: false,
+    canAddSubDepartment: false,
+    canAddTeam: false,
   };
 
   const isBranch = node.type === "BRANCH";

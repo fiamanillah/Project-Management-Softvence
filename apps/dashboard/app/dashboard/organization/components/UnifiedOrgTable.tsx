@@ -494,13 +494,13 @@ export function UnifiedOrgTable({
         cell: ({ row }) => {
           const n = row.original.node;
           const caps = n._capabilities || {
-            canEdit: true,
-            canDelete: true,
-            canAssignManager: true,
-            canAddSubBranch: true,
-            canAddDepartment: true,
-            canAddSubDepartment: true,
-            canAddTeam: true,
+            canEdit: false,
+            canDelete: false,
+            canAssignManager: false,
+            canAddSubBranch: false,
+            canAddDepartment: false,
+            canAddSubDepartment: false,
+            canAddTeam: false,
           };
 
           const canAddAny =

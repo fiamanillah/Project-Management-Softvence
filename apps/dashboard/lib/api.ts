@@ -1,4 +1,5 @@
 // apps/dashboard/lib/api.ts
+import { toast } from "sonner";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3030";
 
@@ -223,6 +224,7 @@ function notifyAuthFailure() {
 // Forbidden (403) Listeners (e.g. AuthProvider/PermissionContext silently refetches fresh permission map)
 type ForbiddenCallback = () => void;
 const forbiddenListeners: Set<ForbiddenCallback> = new Set();
+let lastForbiddenToastTime = 0;
 
 export function onForbidden(callback: ForbiddenCallback) {
   forbiddenListeners.add(callback);
@@ -231,8 +233,24 @@ export function onForbidden(callback: ForbiddenCallback) {
   };
 }
 
-function notifyForbidden() {
+function notifyForbidden(customMessage?: string) {
   forbiddenListeners.forEach((cb) => cb());
+
+  const now = Date.now();
+  if (now - lastForbiddenToastTime > 2000) {
+    lastForbiddenToastTime = now;
+    try {
+      toast.error(
+        customMessage || "Access Denied: You do not have permission to perform this action.",
+        {
+          id: "global-403-forbidden",
+          duration: 4000,
+        }
+      );
+    } catch {
+      // Ignore if toast cannot be dispatched in non-browser context
+    }
+  }
 }
 
 // Interceptor Queue for Concurrent 401 Requests

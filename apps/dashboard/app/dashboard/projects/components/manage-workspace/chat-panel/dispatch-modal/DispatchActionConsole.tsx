@@ -69,9 +69,9 @@ export function DispatchActionConsole({
   isEditingContent,
   setIsEditingContent,
 }: DispatchActionConsoleProps) {
-  const canLeadApprove = capabilities?.canLeadApprove ?? true;
-  const canSalesDispatch = capabilities?.canSalesDispatch ?? true;
-  const canRequestRevision = capabilities?.canRequestRevision ?? true;
+  const canLeadApprove = Boolean(capabilities?.canLeadApprove);
+  const canSalesDispatch = Boolean(capabilities?.canSalesDispatch);
+  const canRequestRevision = Boolean(capabilities?.canRequestRevision);
 
   return (
     <div className="rounded-xl border border-border/80 bg-card p-3.5 space-y-3 shadow-2xs">

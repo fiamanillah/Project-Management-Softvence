@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import { useProjectSocket } from "@/lib/socket/useProjectSocket";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
+import { PermissionGate } from "@/components/permission-gate";
 
 interface ManageProjectWorkspaceProps {
   initialProjectId?: string | null;
@@ -653,14 +654,16 @@ return sortProjectsByActivity(updated);
             You do not currently have permission to access or view any active projects in this workspace, or no projects have been assigned to your scope yet.
           </p>
           {onNewProject && (
-            <Button
-              size="sm"
-              onClick={onNewProject}
-              className="mt-2 text-xs font-semibold gap-1.5 cursor-pointer"
-            >
-              <Plus className="size-3.5" />
-              <span>Create New Project</span>
-            </Button>
+            <PermissionGate code="project.create">
+              <Button
+                size="sm"
+                onClick={onNewProject}
+                className="mt-2 text-xs font-semibold gap-1.5 cursor-pointer"
+              >
+                <Plus className="size-3.5" />
+                <span>Create New Project</span>
+              </Button>
+            </PermissionGate>
           )}
         </div>
       </div>

@@ -183,7 +183,7 @@ export function DesignationTable({
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => onEdit(desig)}
-                disabled={caps.canEdit === false}
+                disabled={!caps.canEdit}
               >
                 <Pencil className="size-3.5 mr-1" /> Edit
               </Button>
@@ -201,7 +201,7 @@ export function DesignationTable({
                   <DropdownMenuLabel>Designation Actions</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => onEdit(desig)}
-                    disabled={caps.canEdit === false}
+                    disabled={!caps.canEdit}
                   >
                     <Pencil className="size-4 mr-2" /> Edit Details
                   </DropdownMenuItem>
@@ -209,7 +209,7 @@ export function DesignationTable({
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onClick={() => onDelete?.(desig)}
-                    disabled={caps.canDelete === false}
+                    disabled={!caps.canDelete}
                   >
                     <Trash2 className="size-4 mr-2" /> Delete Designation
                   </DropdownMenuItem>

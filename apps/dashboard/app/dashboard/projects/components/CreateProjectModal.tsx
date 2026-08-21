@@ -57,6 +57,8 @@ import {
   Layers,
 } from "lucide-react";
 
+import { usePermissions, hasPermission } from "@/lib/permissions/PermissionContext";
+
 interface CreateProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -80,15 +82,17 @@ export function CreateProjectModal({
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [generalError, setGeneralError] = React.useState<string | null>(null);
 
-  // Financial & Sensitive permission checks
+  const permissions = usePermissions();
+
+  // Financial & Sensitive permission checks (Fail-closed: defaults to false if not granted)
   const canEditFinancials =
     userPermissions?.["project.financial.edit"] !== undefined
       ? Boolean(userPermissions["project.financial.edit"])
-      : true;
+      : hasPermission(permissions, "project.financial.edit");
   const canViewClient =
     userPermissions?.["project.client.view"] !== undefined
       ? Boolean(userPermissions["project.client.view"])
-      : true;
+      : hasPermission(permissions, "project.client.view");
 
   // Form State
   const [orderId, setOrderId] = React.useState("");
