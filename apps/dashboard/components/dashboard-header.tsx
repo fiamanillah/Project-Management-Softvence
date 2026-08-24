@@ -15,6 +15,7 @@ import {
 import { Button } from '@workspace/ui/components/button'
 import { Moon, Sun, Bell, Search } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { StationSessionWidget } from './station-session-widget'
 
 export function DashboardHeader() {
   const pathname = usePathname()
@@ -51,6 +52,7 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-2">
+        <StationSessionWidget />
         <Button variant="ghost" size="icon" className="size-8">
           <Search className="size-4" />
           <span className="sr-only">Search</span>

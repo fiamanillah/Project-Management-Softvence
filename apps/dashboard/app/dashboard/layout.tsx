@@ -7,6 +7,7 @@ import { TooltipProvider } from '@workspace/ui/components/tooltip'
 import { AppSidebar } from '@/components/app-sidebar'
 import { DashboardHeader } from '@/components/dashboard-header'
 import { useAuth } from '@/lib/auth-context'
+import { StationSessionProvider } from '@/lib/station/StationContext'
 import { Loader2 } from 'lucide-react'
 
 export default function DashboardLayout({
@@ -42,16 +43,17 @@ export default function DashboardLayout({
 
   return (
     <TooltipProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset className="relative z-0 flex flex-col min-h-screen min-w-0 max-w-full overflow-x-hidden">
-          <DashboardHeader />
-          <main className="flex-1 p-4 sm:p-6 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
-            {children}
-          </main>
-        </SidebarInset>
-
-      </SidebarProvider>
+      <StationSessionProvider>
+        <SidebarProvider>
+          <AppSidebar />
+          <SidebarInset className="relative z-0 flex flex-col min-h-screen min-w-0 max-w-full overflow-x-hidden">
+            <DashboardHeader />
+            <main className="flex-1 p-4 sm:p-6 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
+              {children}
+            </main>
+          </SidebarInset>
+        </SidebarProvider>
+      </StationSessionProvider>
     </TooltipProvider>
   )
 }

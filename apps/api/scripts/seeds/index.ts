@@ -11,6 +11,7 @@ import { seedChatsAndMessages } from "./07-chats-messages.seed";
 import { seedIssuesAndTickets } from "./08-issues-tickets.seed";
 import { seedBdOrders } from "./09-bd-orders.seed";
 import { seedMiscAndAudit } from "./10-misc-audit.seed";
+import { seedStations } from "./11-stations.seed";
 
 const prisma = createPrismaClient({
   databaseUrl: env.DATABASE_URL,
@@ -41,6 +42,7 @@ async function main() {
     { name: "08. Issues, Comments & Support Tickets", fn: seedIssuesAndTickets },
     { name: "09. Business Development Orders", fn: seedBdOrders },
     { name: "10. Notifications, Overrides & Audit Log", fn: seedMiscAndAudit },
+    { name: "11. Workstations, Shifts & Hosted Profiles", fn: seedStations },
   ];
 
   for (let i = 0; i < steps.length; i++) {
@@ -72,6 +74,10 @@ async function main() {
     workflowCount,
     issueCount,
     bdOrderCount,
+    stationCount,
+    stationProfileCount,
+    stationUserCount,
+    stationSessionCount,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.department.count(),
@@ -85,6 +91,10 @@ async function main() {
     prisma.messageApprovalWorkflow.count(),
     prisma.issue.count(),
     prisma.bdOrder.count(),
+    prisma.station.count(),
+    prisma.stationProfileAssignment.count({ where: { unassignedAt: null } }),
+    prisma.stationUserAssignment.count({ where: { unassignedAt: null } }),
+    prisma.stationSession.count({ where: { leftAt: null } }),
   ]);
 
   // Invalidate Redis authorization cache & bump permission version on seed completion (Rule BE-10)
@@ -117,6 +127,10 @@ async function main() {
   console.log(`    • Approval Workflows:   ${workflowCount}`);
   console.log(`    • Issues & Defects:     ${issueCount}`);
   console.log(`    • BD Orders & Deals:    ${bdOrderCount}`);
+  console.log(`    • Workstations:         ${stationCount}`);
+  console.log(`    • Hosted Profiles:      ${stationProfileCount}`);
+  console.log(`    • Shift Operators:      ${stationUserCount}`);
+  console.log(`    • Live Active Shifts:   ${stationSessionCount}`);
   console.log("------------------------------------------------------------");
   console.log("🔑  Persona Test Accounts (Password: Password123!):");
   console.log(`    • SuperAdmin (Env):     ${envAdminEmail} (Password: ${envAdminPassword})`);

@@ -298,3 +298,43 @@ export interface ActiveStationContext {
   activeProfiles: StationProfileAssignmentItem[];
   activeProfileIds: string[];
 }
+
+export interface StationTypeItem {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isSales: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface StationStatusItem {
+  id: string;
+  code: string;
+  name: string;
+  isOperational: boolean;
+  isMaintenance: boolean;
+  color?: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface StationRoleItem {
+  id: string;
+  code: string;
+  name: string;
+  canManageProfiles: boolean;
+  canOperate: boolean;
+  isActive: boolean;
+}
+
+export interface StationStats {
+  totalStations: number;
+  activeStations: number;
+  salesStations: number;
+  activeUsersCount: number;
+  activeProfilesCount: number;
+}
+
+

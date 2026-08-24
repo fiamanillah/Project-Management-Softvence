@@ -12,6 +12,7 @@ import {
   KeyRound,
   Award,
   ListTodo,
+  Radio,
   type LucideIcon,
 } from "lucide-react";
 
@@ -101,6 +102,12 @@ export const data = {
           url: "/dashboard/manage-projects",
           icon: MessagesSquare,
           permission: "project.view",
+        },
+        {
+          title: "Workstations & Profiles",
+          url: "/dashboard/stations",
+          icon: Radio,
+          permission: "station.view",
         },
         {
           title: "Agile Tasks & Boards",
@@ -193,6 +200,12 @@ export const data = {
       url: "/dashboard/manage-projects",
       icon: MessagesSquare,
       permission: "project.view",
+    },
+    {
+      title: "Workstations & Profiles",
+      url: "/dashboard/stations",
+      icon: Radio,
+      permission: "station.view",
     },
     {
       title: "Agile Tasks & Boards",

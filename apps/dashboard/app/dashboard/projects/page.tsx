@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
@@ -25,7 +26,10 @@ import {
   ChevronsRight,
   Filter,
   ListTodo,
+  Radio,
 } from "lucide-react";
+import { Badge } from "@workspace/ui/components/badge";
+import { useStationSession } from "@/lib/station/StationContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import type {
@@ -35,28 +39,37 @@ import type {
 } from "@workspace/shared";
 import { RouteGuard } from "@/components/permission-gate/RouteGuard";
 import { PermissionGate } from "@/components/permission-gate/PermissionGate";
-import { ProjectStatsCards } from "./components/ProjectStatsCards";
 import { ProjectTable } from "./components/ProjectTable";
 import { ProjectCardGrid } from "./components/ProjectCardGrid";
-import { ProjectDetailDialog } from "./components/detail/ProjectDetailDialog";
+import { ProjectStatsCards } from "./components/ProjectStatsCards";
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { EditProjectModal } from "./components/EditProjectModal";
 import { ManageProjectMembersModal } from "./components/ManageProjectMembersModal";
 import { ManageComponentsModal } from "./components/ManageComponentsModal";
+import { ProjectDetailDialog } from "./components/detail/ProjectDetailDialog";
 import { DeleteProjectDialog } from "./components/DeleteProjectDialog";
 
 export default function ProjectsPage() {
   return (
     <RouteGuard code="project.view">
-      <ProjectsContent />
+      <React.Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading projects...</div>}>
+        <ProjectsContent />
+      </React.Suspense>
     </RouteGuard>
   );
 }
 
 function ProjectsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { activeContext } = useStationSession();
+
   const [projects, setProjects] = React.useState<ProjectItem[]>([]);
   const [lookups, setLookups] = React.useState<ProjectLookups | null>(null);
+  const [stationsList, setStationsList] = React.useState<
+    { id: string; name: string; code: string }[]
+  >([]);
+
   const [stats, setStats] = React.useState<ProjectStats>({
     totalProjects: 0,
     activeProjects: 0,
@@ -74,6 +87,12 @@ function ProjectsContent() {
   const [selectedServiceLineId, setSelectedServiceLineId] = React.useState<string>("all");
   const [selectedTeamId, setSelectedTeamId] = React.useState<string>("all");
   const [selectedPlatformId, setSelectedPlatformId] = React.useState<string>("all");
+  const [selectedStationId, setSelectedStationId] = React.useState<string>(
+    searchParams.get("stationId") || "all"
+  );
+  const [selectedProfileId, setSelectedProfileId] = React.useState<string>(
+    searchParams.get("profileId") || "all"
+  );
   const [viewMode, setViewMode] = React.useState<"table" | "grid">("table");
 
   // Pagination
@@ -93,7 +112,15 @@ function ProjectsContent() {
   // Reset to page 1 whenever filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, selectedStatusId, selectedServiceLineId, selectedTeamId, selectedPlatformId]);
+  }, [
+    debouncedSearch,
+    selectedStatusId,
+    selectedServiceLineId,
+    selectedTeamId,
+    selectedPlatformId,
+    selectedStationId,
+    selectedProfileId,
+  ]);
 
   // Modals & Dialogs
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
@@ -110,11 +137,19 @@ function ProjectsContent() {
     router.push(`/dashboard/manage-projects?projectId=${project.id}`);
   };
 
-  // Fetch Lookups
+  // Fetch Lookups & Stations
   const fetchLookups = React.useCallback(async () => {
     try {
-      const res = await api.get("/projects/lookups");
-      setLookups(res?.data || res);
+      const [lookupsRes, stationsRes] = await Promise.all([
+        api.get("/projects/lookups"),
+        api.get("/stations?limit=100"),
+      ]);
+      setLookups(lookupsRes?.data || lookupsRes);
+      const stnItems =
+        stationsRes?.data?.items ||
+        stationsRes?.items ||
+        (Array.isArray(stationsRes) ? stationsRes : []);
+      setStationsList(stnItems);
     } catch (err) {
       console.error("Failed to load lookups:", err);
     }
@@ -134,6 +169,8 @@ function ProjectsContent() {
       if (selectedServiceLineId !== "all") params.set("serviceLineId", selectedServiceLineId);
       if (selectedTeamId !== "all") params.set("teamId", selectedTeamId);
       if (selectedPlatformId !== "all") params.set("platformId", selectedPlatformId);
+      if (selectedStationId !== "all") params.set("stationId", selectedStationId);
+      if (selectedProfileId !== "all") params.set("profileId", selectedProfileId);
 
       const [projectsRes, statsRes] = await Promise.all([
         api.get(`/projects?${params.toString()}`),
@@ -170,6 +207,8 @@ function ProjectsContent() {
     selectedServiceLineId,
     selectedTeamId,
     selectedPlatformId,
+    selectedStationId,
+    selectedProfileId,
   ]);
 
   React.useEffect(() => {
@@ -277,6 +316,26 @@ function ProjectsContent() {
       <div className="space-y-6">
         {/* KPI Metrics Bar */}
         <ProjectStatsCards stats={stats} isLoading={isLoading} />
+
+        {/* Active Workstation Context Notification */}
+        {activeContext?.station && (
+          <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+            <div className="flex items-center gap-2">
+              <Radio className="size-4 text-emerald-600 animate-pulse" />
+              <span className="font-semibold text-foreground">
+                Workstation Shift Active: {activeContext.station.name} ({activeContext.activeProfiles.length} Platform Profiles Attached)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/stations"
+                className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold hover:underline"
+              >
+                Manage Stations
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Filtering & Search Toolbar */}
         <Card className="border bg-card/60 shadow-2xs backdrop-blur-xs">
@@ -413,11 +472,67 @@ function ProjectsContent() {
                   </SelectContent>
                 </Select>
 
+                {/* Station Filter */}
+                <Select
+                  value={selectedStationId}
+                  onValueChange={(val: string | null) => {
+                    setSelectedStationId(val || "all");
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs w-[140px]">
+                    <SelectValue placeholder="Station">
+                      {selectedStationId === "all"
+                        ? "All Stations"
+                        : stationsList.find((s) => s.id === selectedStationId)?.name || "Station"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">
+                      All Workstations
+                    </SelectItem>
+                    {stationsList.map((stn) => (
+                      <SelectItem key={stn.id} value={stn.id} className="text-xs">
+                        {stn.name} ({stn.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Profile Filter */}
+                <Select
+                  value={selectedProfileId}
+                  onValueChange={(val: string | null) => {
+                    setSelectedProfileId(val || "all");
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs w-[130px]">
+                    <SelectValue placeholder="Profile">
+                      {selectedProfileId === "all"
+                        ? "All Profiles"
+                        : lookups?.profiles?.find((p) => p.id === selectedProfileId)?.username || "Profile"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">
+                      All Profiles
+                    </SelectItem>
+                    {lookups?.profiles?.map((prof) => (
+                      <SelectItem key={prof.id} value={prof.id} className="text-xs">
+                        {prof.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 {/* Clear Filters */}
                 {(selectedStatusId !== "all" ||
                   selectedServiceLineId !== "all" ||
                   selectedTeamId !== "all" ||
                   selectedPlatformId !== "all" ||
+                  selectedStationId !== "all" ||
+                  selectedProfileId !== "all" ||
                   debouncedSearch !== "") && (
                   <Button
                     variant="ghost"
@@ -427,10 +542,13 @@ function ProjectsContent() {
                       setSelectedServiceLineId("all");
                       setSelectedTeamId("all");
                       setSelectedPlatformId("all");
+                      setSelectedStationId("all");
+                      setSelectedProfileId("all");
                       setSearchQuery("");
+                      setDebouncedSearch("");
                       setCurrentPage(1);
                     }}
-                    className="h-9 text-xs text-muted-foreground hover:text-foreground px-2.5"
+                    className="h-9 text-xs text-muted-foreground hover:text-foreground"
                   >
                     Clear Filters
                   </Button>

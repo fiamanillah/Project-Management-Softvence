@@ -194,20 +194,24 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
   await grantRolePerms("SUPER_ADMIN", globalScopeId, () => true);
 
   // 2. ENG_DIRECTOR gets org, user, project, storage with OWN_DEPARTMENT scope
-  await grantRolePerms("ENG_DIRECTOR", ownDeptScopeId, (code) =>
+  await grantRolePerms("ENG_DIRECTOR", ownDeptScopeId, (code) =>    code.startsWith("organization.") ||
     code.startsWith("project.") ||
-    code.startsWith("organization.") ||
+    code.startsWith("bd_order.") ||
     code.startsWith("auth.user.") ||
-    code.startsWith("storage.")
+    code.startsWith("storage.") ||
+    code.startsWith("station.")
   );
 
-  // 3. PROJECT_MANAGER gets project management, member allocation, approvals, chat, collateral
+  // 3. PROJECT_MANAGER gets project management, member allocation, approvals, chat, collateral, station shift
   await grantRolePerms("PROJECT_MANAGER", ownDeptScopeId, [
     "organization.department.view",
     "organization.designation.view",
     "organization.team.view",
     "organization.team.manage_members",
     "auth.user.view",
+    "station.view",
+    "station.join",
+    "station.assign_profile",
   ]);
   await grantRolePerms("PROJECT_MANAGER", ownTeamScopeId, [
     "project.view",
@@ -234,11 +238,13 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "storage.delete",
   ]);
 
-  // 4. TECH_LEAD gets team projects, lead reviews, chat, component management, collateral
+  // 4. TECH_LEAD gets team projects, lead reviews, chat, component management, collateral, station join
   await grantRolePerms("TECH_LEAD", ownTeamScopeId, [
     "organization.department.view",
     "organization.team.view",
     "auth.user.view",
+    "station.view",
+    "station.join",
     "project.view",
     "project.edit",
     "project.component.manage",
@@ -258,6 +264,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     await grantRolePerms(roleCode, ownTeamScopeId, [
       "organization.team.view",
       "auth.user.view",
+      "station.view",
+      "station.join",
     ]);
     await grantRolePerms(roleCode, ownProjScopeId, [
       "project.view",
@@ -275,6 +283,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "organization.department.view",
     "organization.team.view",
     "auth.user.view",
+    "station.view",
+    "station.join",
     "project.view",
     "project.edit",
     "project.component.manage",
@@ -293,6 +303,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "project.chat.send",
     "project.chat.send_client",
     "project.collateral.manage",
+    "station.view",
+    "station.join",
     "storage.view",
     "storage.upload",
   ]);
@@ -302,6 +314,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "organization.department.view",
     "organization.team.view",
     "auth.user.view",
+    "station.view",
+    "station.join",
     "project.view",
     "project.component.manage",
     "project.chat.view",
@@ -319,6 +333,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "project.chat.send",
     "project.chat.send_client",
     "project.collateral.manage",
+    "station.view",
+    "station.join",
     "storage.view",
     "storage.upload",
   ]);
@@ -337,6 +353,11 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "project.chat.send",
     "project.chat.send_client",
     "project.approval.sales_dispatch",
+    "station.view",
+    "station.manage",
+    "station.assign_user",
+    "station.assign_profile",
+    "station.join",
     "organization.team.view",
     "auth.user.view",
     "storage.view",
@@ -351,6 +372,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "project.chat.send",
     "project.chat.send_client",
     "project.approval.sales_dispatch",
+    "station.view",
+    "station.join",
     "organization.team.view",
     "auth.user.view",
     "storage.view",
@@ -364,6 +387,8 @@ export async function seedUsersAndProfiles(ctx: SeedContext): Promise<void> {
     "project.chat.view",
     "project.chat.send",
     "project.chat.send_client",
+    "station.view",
+    "station.join",
     "auth.user.view",
     "organization.team.view",
     "storage.view",

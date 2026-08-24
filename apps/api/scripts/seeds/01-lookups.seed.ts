@@ -476,4 +476,56 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     });
     ctx.bdOrderTypes.set(bot.code, record.id);
   }
+
+  // 14. Station Types
+  const STATION_TYPES = [
+    { code: "SALES_PRIMARY", name: "Sales Primary Workstation", description: "Dedicated desk for active inbound/outbound client communications and deal closing", isSales: true, sortOrder: 1 },
+    { code: "SALES_OUTBOUND", name: "Outbound Bidding Desk", description: "High-frequency proposal submission and lead generation station", isSales: true, sortOrder: 2 },
+    { code: "SALES_ROTATIONAL", name: "Rotational Shift Desk", description: "Shared workstation utilized across rotational Day/Night shifts", isSales: true, sortOrder: 3 },
+    { code: "DEV_GENERAL", name: "Engineering Workstation", description: "Technical implementation, sprint execution, and code delivery desk", isSales: false, sortOrder: 4 },
+    { code: "SUPPORT_DESK", name: "Client Operations & Support", description: "Client relationship management and production support desk", isSales: false, sortOrder: 5 },
+  ];
+
+  for (const st of STATION_TYPES) {
+    const record = await prisma.stationType.upsert({
+      where: { code: st.code },
+      update: { name: st.name, description: st.description, isSales: st.isSales, sortOrder: st.sortOrder, isActive: true },
+      create: { code: st.code, name: st.name, description: st.description, isSales: st.isSales, sortOrder: st.sortOrder, isActive: true },
+    });
+    ctx.stationTypes.set(st.code, record.id);
+  }
+
+  // 15. Station Status Lookups
+  const STATION_STATUSES = [
+    { code: "OPERATIONAL", name: "Operational", isOperational: true, isMaintenance: false, color: "#10b981", sortOrder: 1 },
+    { code: "OCCUPIED", name: "In Active Shift", isOperational: true, isMaintenance: false, color: "#3b82f6", sortOrder: 2 },
+    { code: "MAINTENANCE", name: "Under Maintenance", isOperational: false, isMaintenance: true, color: "#f59e0b", sortOrder: 3 },
+    { code: "OFFLINE", name: "Decommissioned / Offline", isOperational: false, isMaintenance: false, color: "#ef4444", sortOrder: 4 },
+  ];
+
+  for (const ss of STATION_STATUSES) {
+    const record = await prisma.stationStatusLookup.upsert({
+      where: { code: ss.code },
+      update: { name: ss.name, isOperational: ss.isOperational, isMaintenance: ss.isMaintenance, color: ss.color, sortOrder: ss.sortOrder, isActive: true },
+      create: { code: ss.code, name: ss.name, isOperational: ss.isOperational, isMaintenance: ss.isMaintenance, color: ss.color, sortOrder: ss.sortOrder, isActive: true },
+    });
+    ctx.stationStatuses.set(ss.code, record.id);
+  }
+
+  // 16. Station Assignment Roles
+  const STATION_ROLES = [
+    { code: "STATION_LEAD", name: "Station Shift Lead", canManageProfiles: true, canOperate: true },
+    { code: "SALES_OPERATOR", name: "Sales Account Operator", canManageProfiles: false, canOperate: true },
+    { code: "DEV_OPERATOR", name: "Developer Operator", canManageProfiles: false, canOperate: true },
+    { code: "MONITOR_ONLY", name: "Shift Observer / Trainee", canManageProfiles: false, canOperate: false },
+  ];
+
+  for (const sr of STATION_ROLES) {
+    const record = await prisma.stationAssignmentRole.upsert({
+      where: { code: sr.code },
+      update: { name: sr.name, canManageProfiles: sr.canManageProfiles, canOperate: sr.canOperate, isActive: true },
+      create: { code: sr.code, name: sr.name, canManageProfiles: sr.canManageProfiles, canOperate: sr.canOperate, isActive: true },
+    });
+    ctx.stationRoles.set(sr.code, record.id);
+  }
 }

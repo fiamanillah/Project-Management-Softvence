@@ -43,6 +43,9 @@ export interface SeedContext {
   notificationTypes: Map<string, string>;
   orderSources: Map<string, string>;
   bdOrderTypes: Map<string, string>;
+  stationTypes: Map<string, string>;
+  stationStatuses: Map<string, string>;
+  stationRoles: Map<string, string>;
 
   // Organization & Security
   branches: Map<string, string>;
@@ -59,6 +62,7 @@ export interface SeedContext {
   components: Map<string, SeedComponentRef>;
   projectGroups: Map<string, string>;
   issues: Map<string, string>;
+  stations: Map<string, string>;
 }
 
 export function createSeedContext(prisma: PrismaClient, clean = false): SeedContext {
@@ -78,6 +82,9 @@ export function createSeedContext(prisma: PrismaClient, clean = false): SeedCont
     notificationTypes: new Map(),
     orderSources: new Map(),
     bdOrderTypes: new Map(),
+    stationTypes: new Map(),
+    stationStatuses: new Map(),
+    stationRoles: new Map(),
     branches: new Map(),
     departments: new Map(),
     teams: new Map(),
@@ -90,5 +97,6 @@ export function createSeedContext(prisma: PrismaClient, clean = false): SeedCont
     components: new Map(),
     projectGroups: new Map(),
     issues: new Map(),
+    stations: new Map(),
   };
 }
