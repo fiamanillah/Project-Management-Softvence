@@ -349,14 +349,90 @@ export class ScopeEvaluator {
       case "OwnProfile": {
         if (!resource?.profileId) return false;
 
+        // 1. Direct profile seller assignment check
         const profileAssignment = await prisma.profileSeller.findFirst({
           where: {
             userId: user.id,
             profileId: resource.profileId,
+            unassignedAt: null,
           },
         });
 
-        return Boolean(profileAssignment);
+        if (profileAssignment) return true;
+
+        // 2. Active station session profile check:
+        // If user is currently operating an active station that hosts this profile
+        const activeStationSession = await prisma.stationSession.findFirst({
+          where: {
+            userId: user.id,
+            isCurrent: true,
+            leftAt: null,
+            station: {
+              deletedAt: null,
+              isActive: true,
+              stationProfiles: {
+                some: {
+                  profileId: resource.profileId,
+                  unassignedAt: null,
+                },
+              },
+            },
+          },
+        });
+
+        return Boolean(activeStationSession);
+      }
+
+      case "OwnStation": {
+        let targetStationId = resource?.stationId;
+
+        // If stationId is not directly provided, check if profileId is attached to user's assigned station
+        if (!targetStationId && resource?.profileId) {
+          const stationProfile = await prisma.stationProfileAssignment.findFirst({
+            where: {
+              profileId: resource.profileId,
+              unassignedAt: null,
+              station: {
+                deletedAt: null,
+                isActive: true,
+                assignedUsers: {
+                  some: {
+                    userId: user.id,
+                    unassignedAt: null,
+                  },
+                },
+              },
+            },
+            select: { stationId: true },
+          });
+
+          if (stationProfile) return true;
+        }
+
+        if (!targetStationId) return false;
+
+        // 1. Check if user is actively assigned to this station
+        const stationAssignment = await prisma.stationUserAssignment.findFirst({
+          where: {
+            userId: user.id,
+            stationId: targetStationId,
+            unassignedAt: null,
+          },
+        });
+
+        if (stationAssignment) return true;
+
+        // 2. Check if user has an active current session on this station
+        const activeSession = await prisma.stationSession.findFirst({
+          where: {
+            userId: user.id,
+            stationId: targetStationId,
+            isCurrent: true,
+            leftAt: null,
+          },
+        });
+
+        return Boolean(activeSession);
       }
 
       case "ExplicitBranches": {
@@ -385,6 +461,11 @@ export class ScopeEvaluator {
       case "ExplicitProjects": {
         if (!resource?.projectId) return false;
         return (grant.scopeTargets.projectIds ?? []).includes(resource.projectId);
+      }
+
+      case "ExplicitStations": {
+        if (!resource?.stationId) return false;
+        return (grant.scopeTargets.stationIds ?? []).includes(resource.stationId);
       }
 
       default:

@@ -33,10 +33,12 @@ enum ScopeResolutionStrategy {
   OwnTeam
   OwnProject
   OwnProfile
+  OwnStation
   ExplicitBranches
   ExplicitDepartments
   ExplicitTeams
   ExplicitProjects
+  ExplicitStations
 }
 
 enum MessageStatus {

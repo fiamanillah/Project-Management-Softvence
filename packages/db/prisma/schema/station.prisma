@@ -1,0 +1,108 @@
+// ==========================================
+// STATIONS & PROFILE WORKSTATION ARCHITECTURE
+// ==========================================
+
+model Station {
+  id                  String              @id @default(uuid()) @db.Uuid
+  code                String              @unique
+  name                String
+  description         String?             @db.Text
+  stationTypeId       String              @map("station_type_id") @db.Uuid
+  statusId            String              @map("status_id") @db.Uuid
+  branchId            String?             @map("branch_id") @db.Uuid
+  departmentId        String?             @map("department_id") @db.Uuid
+  ipWhitelist         String[]            @default([]) @map("ip_whitelist")
+  macAddress          String?             @map("mac_address")
+  maxConcurrentUsers  Int                 @default(1) @map("max_concurrent_users")
+  isActive            Boolean             @default(true) @map("is_active")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime?           @updatedAt @map("updated_at")
+  deletedAt           DateTime?           @map("deleted_at")
+
+  stationType         StationType         @relation(fields: [stationTypeId], references: [id])
+  status              StationStatusLookup @relation(fields: [statusId], references: [id])
+  branch              Branch?             @relation(fields: [branchId], references: [id])
+  department          Department?         @relation(fields: [departmentId], references: [id])
+
+  assignedUsers       StationUserAssignment[]
+  stationProfiles     StationProfileAssignment[]
+  sessions            StationSession[]
+  scopeTargets        RolePermissionScopeTarget[]
+  overrideTargets     UserPermissionOverride[]
+
+  @@index([stationTypeId])
+  @@index([statusId])
+  @@index([branchId])
+  @@index([departmentId])
+  @@index([isActive, deletedAt])
+  @@map("stations")
+}
+
+model StationProfileAssignment {
+  id             String    @id @default(uuid()) @db.Uuid
+  stationId      String    @map("station_id") @db.Uuid
+  profileId      String    @map("profile_id") @db.Uuid
+  assignedById   String    @map("assigned_by_id") @db.Uuid
+  unassignedById String?   @map("unassigned_by_id") @db.Uuid
+  assignedAt     DateTime  @default(now()) @map("assigned_at")
+  unassignedAt   DateTime? @map("unassigned_at")
+  shift          String?
+  isPrimary      Boolean   @default(false) @map("is_primary")
+  note           String?   @db.Text
+
+  station        Station   @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  profile        Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  assignedBy     User      @relation("StationProfileAssigner", fields: [assignedById], references: [id])
+  unassignedBy   User?     @relation("StationProfileUnassigner", fields: [unassignedById], references: [id])
+
+  @@index([stationId, unassignedAt])
+  @@index([profileId, unassignedAt])
+  @@index([assignedById])
+  @@map("station_profile_assignments")
+}
+
+model StationUserAssignment {
+  id             String                @id @default(uuid()) @db.Uuid
+  stationId      String                @map("station_id") @db.Uuid
+  userId         String                @map("user_id") @db.Uuid
+  roleId         String                @map("role_id") @db.Uuid
+  assignedById   String                @map("assigned_by_id") @db.Uuid
+  unassignedById String?               @map("unassigned_by_id") @db.Uuid
+  assignedAt     DateTime              @default(now()) @map("assigned_at")
+  unassignedAt   DateTime?             @map("unassigned_at")
+  shift          String?
+  note           String?
+
+  station        Station               @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  user           User                  @relation("StationUserAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  role           StationAssignmentRole @relation(fields: [roleId], references: [id])
+  assignedBy     User                  @relation("StationUserAssigner", fields: [assignedById], references: [id])
+  unassignedBy   User?                 @relation("StationUserUnassigner", fields: [unassignedById], references: [id])
+
+  @@index([stationId, userId, unassignedAt])
+  @@index([userId, unassignedAt])
+  @@index([roleId])
+  @@map("station_user_assignments")
+}
+
+model StationSession {
+  id             String        @id @default(uuid()) @db.Uuid
+  stationId      String        @map("station_id") @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  refreshTokenId String?       @map("refresh_token_id") @db.Uuid
+  ipAddress      String?       @map("ip_address")
+  deviceInfo     String?       @map("device_info")
+  joinedAt       DateTime      @default(now()) @map("joined_at")
+  leftAt         DateTime?     @map("left_at")
+  lastActiveAt   DateTime      @default(now()) @map("last_active_at")
+  isCurrent      Boolean       @default(true) @map("is_current")
+
+  station        Station       @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  user           User          @relation("UserStationSessions", fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken   RefreshToken? @relation(fields: [refreshTokenId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isCurrent])
+  @@index([stationId, isCurrent])
+  @@index([refreshTokenId])
+  @@map("station_sessions")
+}

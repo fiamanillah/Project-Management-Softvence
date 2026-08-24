@@ -72,6 +72,12 @@ model User {
   assignedProjectMilestones   ProjectMilestone[]               @relation("ProjectMilestoneAssignee")
   addedProjectLinks           ProjectLink[]                    @relation("ProjectLinkAdder")
   editedProjectMessages       ProjectMessageRevision[]         @relation("ProjectMessageEditor")
+  stationAssignments          StationUserAssignment[]          @relation("StationUserAssignee")
+  assignedStationUsers        StationUserAssignment[]          @relation("StationUserAssigner")
+  unassignedStationUsers      StationUserAssignment[]          @relation("StationUserUnassigner")
+  assignedStationProfiles     StationProfileAssignment[]       @relation("StationProfileAssigner")
+  unassignedStationProfiles   StationProfileAssignment[]       @relation("StationProfileUnassigner")
+  stationSessions             StationSession[]                 @relation("UserStationSessions")
 
   @@index([email])
   @@index([roleId])
@@ -91,6 +97,8 @@ model RefreshToken {
   createdAt  DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stationSessions StationSession[]
 
   @@index([userId])
   @@map("refresh_tokens")
@@ -200,18 +208,21 @@ model RolePermissionScopeTarget {
   departmentId     String? @map("department_id") @db.Uuid
   teamId           String? @map("team_id") @db.Uuid
   projectId        String? @map("project_id") @db.Uuid
+  stationId        String? @map("station_id") @db.Uuid
 
   rolePermission RolePermission @relation(fields: [rolePermissionId], references: [id], onDelete: Cascade)
   branch         Branch?        @relation(fields: [branchId], references: [id])
   department     Department?    @relation(fields: [departmentId], references: [id])
   team           Team?          @relation(fields: [teamId], references: [id])
   project        Project?       @relation(fields: [projectId], references: [id])
+  station        Station?       @relation(fields: [stationId], references: [id])
 
   @@index([rolePermissionId])
   @@index([branchId])
   @@index([departmentId])
   @@index([teamId])
   @@index([projectId])
+  @@index([stationId])
   @@map("role_permission_scope_targets")
 }
 
@@ -223,6 +234,7 @@ model UserPermissionOverride {
   departmentId String?   @map("department_id") @db.Uuid
   teamId       String?   @map("team_id") @db.Uuid
   projectId    String?   @map("project_id") @db.Uuid
+  stationId    String?   @map("station_id") @db.Uuid
   isDeny       Boolean   @default(false) @map("is_deny")
   grantedBy    String    @map("granted_by") @db.Uuid
   reason       String?
@@ -235,11 +247,13 @@ model UserPermissionOverride {
   department Department? @relation(fields: [departmentId], references: [id])
   team       Team?       @relation(fields: [teamId], references: [id])
   project    Project?    @relation(fields: [projectId], references: [id])
+  station    Station?    @relation(fields: [stationId], references: [id])
   granter    User        @relation("OverrideGranter", fields: [grantedBy], references: [id])
 
-  @@unique([userId, permissionId, branchId, departmentId, teamId, projectId])
+  @@unique([userId, permissionId, branchId, departmentId, teamId, projectId, stationId])
   @@index([userId, expiresAt])
   @@index([branchId])
+  @@index([stationId])
   @@map("user_permission_overrides")
 }
 

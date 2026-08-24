@@ -210,3 +210,53 @@ model PermissionGroupItem {
   @@unique([permissionGroupId, permissionId])
   @@map("permission_group_items")
 }
+
+// ==========================================
+// DYNAMIC STATION LOOKUP TABLES (Rule BE-11)
+// ==========================================
+
+model StationType {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  name        String
+  description String?
+  isSales     Boolean   @default(true) @map("is_sales")
+  isActive    Boolean   @default(true) @map("is_active")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  stations    Station[]
+
+  @@map("station_types")
+}
+
+model StationStatusLookup {
+  id            String    @id @default(uuid()) @db.Uuid
+  code          String    @unique
+  name          String
+  isOperational Boolean   @default(true) @map("is_operational")
+  isMaintenance Boolean   @default(false) @map("is_maintenance")
+  color         String?
+  sortOrder     Int       @default(0) @map("sort_order")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  stations      Station[]
+
+  @@map("station_status_lookups")
+}
+
+model StationAssignmentRole {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  code               String                  @unique
+  name               String
+  canManageProfiles  Boolean                 @default(false) @map("can_manage_profiles")
+  canOperate         Boolean                 @default(true) @map("can_operate")
+  isActive           Boolean                 @default(true) @map("is_active")
+  createdAt          DateTime                @default(now()) @map("created_at")
+
+  assignments        StationUserAssignment[]
+
+  @@map("station_assignment_roles")
+}

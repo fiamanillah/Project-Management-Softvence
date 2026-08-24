@@ -32,6 +32,7 @@ model Profile {
   platform Platform @relation(fields: [platformId], references: [id])
 
   sellers                ProfileSeller[]
+  stationAssignments     StationProfileAssignment[]
   projects               Project[]
   platformThreadMessages PlatformThreadMessage[]
 

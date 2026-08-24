@@ -198,6 +198,42 @@ export async function buildProjectScopedWhereConditions(
     });
   }
 
+  // 5. Active Station Session Profiles (Station & Sales Desk Context)
+  const activeStationSession = await prisma.stationSession.findFirst({
+    where: { userId: actor.id, isCurrent: true, leftAt: null },
+    select: {
+      station: {
+        select: {
+          stationProfiles: {
+            where: { unassignedAt: null },
+            select: { profileId: true },
+          },
+        },
+      },
+    },
+  });
+
+  const activeStationProfileIds =
+    activeStationSession?.station?.stationProfiles?.map((sp) => sp.profileId) || [];
+
+  if (activeStationProfileIds.length > 0) {
+    scopedConditions.push({
+      profileId: { in: activeStationProfileIds },
+    });
+  }
+
+  // 6. Direct Profile Seller Assignments (OwnProfile)
+  const userProfiles = await prisma.profileSeller.findMany({
+    where: { userId: actor.id, unassignedAt: null },
+    select: { profileId: true },
+  });
+  const userProfileIds = userProfiles.map((p) => p.profileId);
+  if (userProfileIds.length > 0) {
+    scopedConditions.push({
+      profileId: { in: userProfileIds },
+    });
+  }
+
   return scopedConditions;
 }
 

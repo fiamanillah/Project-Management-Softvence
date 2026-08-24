@@ -498,12 +498,14 @@ export class AuthorizationEngine {
       const departmentIds: string[] = [];
       const teamIds: string[] = [];
       const projectIds: string[] = [];
+      const stationIds: string[] = [];
 
       for (const target of dg.scopeTargets) {
         if (target.branchId) branchIds.push(target.branchId);
         if (target.departmentId) departmentIds.push(target.departmentId);
         if (target.teamId) teamIds.push(target.teamId);
         if (target.projectId) projectIds.push(target.projectId);
+        if (target.stationId) stationIds.push(target.stationId);
       }
 
       return {
@@ -515,6 +517,7 @@ export class AuthorizationEngine {
           departmentIds,
           teamIds,
           projectIds,
+          stationIds,
         },
         implies: dg.permission.implies || [],
         dependsOn: dg.permission.dependsOn || [],

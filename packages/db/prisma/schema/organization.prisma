@@ -24,6 +24,7 @@ model Branch {
   departments     Department[]
   users           User[]
   projects        Project[]
+  stations        Station[]
   scopeTargets    RolePermissionScopeTarget[]
   overrideTargets UserPermissionOverride[]
 
@@ -68,6 +69,7 @@ model Department {
   teams           Team[]
   roles           Role[]
   designations    Designation[]
+  stations        Station[]
   scopeTargets    RolePermissionScopeTarget[]
   overrideTargets UserPermissionOverride[]
 

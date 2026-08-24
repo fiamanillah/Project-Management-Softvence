@@ -58,6 +58,30 @@ export const SCOPE_PRESETS = {
   SYSTEM_ONLY: [
     "Global",
   ] as const,
+
+  /**
+   * For workstation/station administration and hierarchy management.
+   * Supports: Global, Own Branch, Own Department, Own Team, and Explicit Target Stations.
+   */
+  STATION_HIERARCHICAL: [
+    "Global",
+    "OwnBranch",
+    "OwnDepartment",
+    "OwnTeam",
+    "OwnStation",
+    "ExplicitStations",
+  ] as const,
+
+  /**
+   * For workstation operational tasks (joining stations, operating station profiles).
+   * Supports: Global, Own Station, Own Department, and Own Team.
+   */
+  STATION_OPERATIONAL: [
+    "Global",
+    "OwnStation",
+    "OwnDepartment",
+    "OwnTeam",
+  ] as const,
 } as const;
 
 export type ScopePresetKey = keyof typeof SCOPE_PRESETS;
@@ -77,6 +101,10 @@ export const SCOPE_WEIGHTS: Record<string, number> = {
   EXPLICIT_TEAMS: 20,
   OwnTeam: 20,
   OWN_TEAM: 20,
+  ExplicitStations: 15,
+  EXPLICIT_STATIONS: 15,
+  OwnStation: 15,
+  OWN_STATION: 15,
   ExplicitProjects: 10,
   EXPLICIT_PROJECTS: 10,
   OwnProject: 10,

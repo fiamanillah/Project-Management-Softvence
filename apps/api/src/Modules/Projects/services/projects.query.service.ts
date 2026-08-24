@@ -25,6 +25,7 @@ export interface GetProjectsQuery {
   serviceLineId?: string;
   platformId?: string;
   profileId?: string;
+  stationId?: string;
   teamId?: string;
   clientId?: string;
   isTerminal?: boolean | string;
@@ -94,6 +95,18 @@ export class ProjectsQueryService {
 
     if (query.profileId && query.profileId !== "all") {
       where.profileId = query.profileId;
+    }
+
+    if (query.stationId && query.stationId !== "all") {
+      where.profile = {
+        ...(where.profile || {}),
+        stationAssignments: {
+          some: {
+            stationId: query.stationId,
+            unassignedAt: null,
+          },
+        },
+      };
     }
 
     if (query.clientId && query.clientId !== "all") {

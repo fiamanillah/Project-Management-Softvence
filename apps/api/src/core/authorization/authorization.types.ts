@@ -19,6 +19,7 @@ export interface AuthorizationResourceContext {
   teamId?: string;
   projectId?: string;
   profileId?: string;
+  stationId?: string;
 }
 
 export interface ScopeTargets {
@@ -26,6 +27,7 @@ export interface ScopeTargets {
   departmentIds?: string[];
   teamIds?: string[];
   projectIds?: string[];
+  stationIds?: string[];
 }
 
 export interface ResolvedRoleGrant {

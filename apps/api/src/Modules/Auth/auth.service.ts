@@ -429,10 +429,17 @@ export class AuthServices {
           where: { id: tokenRecord.id },
         });
 
+        const now = new Date();
+        await this.prisma.stationSession.updateMany({
+          where: { userId: tokenRecord.userId, isCurrent: true },
+          data: { isCurrent: false, leftAt: now },
+        });
+
         if (this.cache) {
           await this.cache.del(`auth:refresh:${tokenHash}`);
           await this.cache.del(`auth:refresh:user:${tokenRecord.userId}:${tokenHash}`);
           await this.cache.del(`auth:sessions:${tokenRecord.userId}`);
+          await this.cache.del(`station:user_active:${tokenRecord.userId}`);
         }
       }
     } else if (userId) {
@@ -735,9 +742,16 @@ export class AuthServices {
       where: { userId },
     });
 
+    const now = new Date();
+    await this.prisma.stationSession.updateMany({
+      where: { userId, isCurrent: true },
+      data: { isCurrent: false, leftAt: now },
+    });
+
     if (this.cache) {
       await this.cache.delByPattern(`auth:refresh:user:${userId}:*`);
       await this.cache.del(`auth:sessions:${userId}`);
+      await this.cache.del(`station:user_active:${userId}`);
     }
   }
 

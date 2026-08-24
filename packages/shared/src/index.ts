@@ -6,3 +6,4 @@ export * from "./schemas/role";
 export * from "./schemas/team";
 export * from "./schemas/project";
 export * from "./schemas/storage";
+export * from "./schemas/station";

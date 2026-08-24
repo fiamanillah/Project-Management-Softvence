@@ -20,6 +20,7 @@ import { TeamsModule } from "./Modules/Teams/TeamsModule";
 import { ProjectsModule } from "./Modules/Projects/ProjectsModule";
 import { PermissionsModule } from "./Modules/Permissions/PermissionsModule";
 import { StorageModule } from "./Modules/Storage/StorageModule";
+import { StationsModule } from "./Modules/Stations/StationsModule";
 
 import { PermissionRegistry } from "./core/permissions/PermissionRegistry";
 
@@ -53,6 +54,7 @@ async function bootstrap() {
     app.registerModule(new UsersModule());
     app.registerModule(new TeamsModule());
     app.registerModule(new ProjectsModule());
+    app.registerModule(new StationsModule());
     app.registerModule(new PermissionsModule());
     app.registerModule(new StorageModule());
     logger.info("✔ All modules registered successfully");
