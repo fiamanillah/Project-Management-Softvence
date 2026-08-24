@@ -18,15 +18,27 @@ import {
   Sparkles,
   ExternalLink,
   Pencil,
+  Trash2,
   History,
   Clock,
   Loader2,
   Check,
   X,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
 import { Textarea } from "@workspace/ui/components/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@workspace/ui/components/alert-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { MessageReactionPicker } from "./MessageReactionPicker";
 import { MessageReplyPreview } from "./MessageReplyPreview";
@@ -37,6 +49,8 @@ import { MessageMeetingSummary } from "./MessageMeetingSummary";
 import { MessageSeenReceipts } from "./MessageSeenReceipts";
 import { FormattedMessageText } from "./FormattedMessageText";
 import { MessageRevisionHistoryPopover } from "./MessageRevisionHistoryPopover";
+import { formatMessageTime, formatMessageFullDateTime } from "./date-utils";
+import { useCountdownTimer } from "./useElapsedTimer";
 import type { ChatMessage, ApprovalWorkflow } from "../types";
 
 interface MessageBubbleProps {
@@ -44,8 +58,11 @@ interface MessageBubbleProps {
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onScrollToMessage?: (messageId: string) => void;
+  onOpenThread?: (messageId: string) => void;
+  onDeleteAttachment?: (messageId: string, attachmentId: string) => void;
   isHighlighted?: boolean;
 }
 
@@ -54,8 +71,11 @@ export function MessageBubble({
   onReply,
   onReact,
   onEdit,
+  onDeleteMessage,
   onUpdateApproval,
   onScrollToMessage,
+  onOpenThread,
+  onDeleteAttachment,
   isHighlighted = false,
 }: MessageBubbleProps) {
   const { user } = useAuth();
@@ -65,6 +85,8 @@ export function MessageBubble({
   const [editText, setEditText] = React.useState(message.text);
   const [editReason, setEditReason] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   React.useEffect(() => {
     setEditText(message.text);
@@ -73,7 +95,16 @@ export function MessageBubble({
   const isCurrentUser = Boolean(user?.id && message.senderId === user.id);
   const align = isCurrentUser ? "end" : "start";
 
-  const canEdit = Boolean(message._capabilities?.canEdit ?? isCurrentUser);
+  const editTimer = useCountdownTimer(message._capabilities?.editTimeRemainingSeconds);
+  const isEditExpired =
+    typeof message._capabilities?.editTimeRemainingSeconds === "number" && editTimer.isExpired;
+
+  const deleteTimer = useCountdownTimer(message._capabilities?.deleteTimeRemainingSeconds);
+  const isDeleteExpired =
+    typeof message._capabilities?.deleteTimeRemainingSeconds === "number" && deleteTimer.isExpired;
+
+  const canEdit = Boolean(message._capabilities?.canEdit ?? isCurrentUser) && !isEditExpired;
+  const canDelete = Boolean(message._capabilities?.canDelete ?? isCurrentUser) && !isDeleteExpired;
 
   const isLongMessage = message.text.length > 200 || message.text.split("\n").length > 3;
   const hasReactions = message.reactions && message.reactions.length > 0;
@@ -81,6 +112,18 @@ export function MessageBubble({
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text);
     toast.success("Message copied to clipboard");
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDeleteMessage?.(message.id);
+      setShowDeleteConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete message");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -211,7 +254,11 @@ export function MessageBubble({
               size="icon-xs"
               variant="ghost"
               className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
-              title="Edit message"
+              title={
+                editTimer.secondsRemaining > 0
+                  ? `Edit message (${editTimer.formatted} left)`
+                  : "Edit message"
+              }
               onClick={() => setIsEditing(true)}
             >
               <Pencil className="size-3" />
@@ -227,6 +274,19 @@ export function MessageBubble({
           >
             <Reply className="size-3 rotate-180" />
           </Button>
+
+          {onOpenThread && (
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
+              title="Reply in thread"
+              onClick={() => onOpenThread(message.id)}
+            >
+              <MessageSquare className="size-3" />
+            </Button>
+          )}
+
           <Button
             size="icon-xs"
             variant="ghost"
@@ -236,6 +296,22 @@ export function MessageBubble({
           >
             <Copy className="size-3" />
           </Button>
+
+          {canDelete && (
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              className="size-6 text-muted-foreground hover:text-destructive cursor-pointer rounded-full"
+              title={
+                deleteTimer.secondsRemaining > 0
+                  ? `Delete message (${deleteTimer.formatted} remaining)`
+                  : "Delete message"
+              }
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 className="size-3" />
+            </Button>
+          )}
         </div>
 
         {/* Main Bubble Surface */}
@@ -276,6 +352,12 @@ export function MessageBubble({
             {/* Inline Edit Form OR Message Text */}
             {isEditing ? (
               <div className="space-y-2 py-1 min-w-[240px] sm:min-w-[320px]">
+                {editTimer.secondsRemaining > 0 && (
+                  <div className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 w-fit">
+                    <Clock className="size-3" />
+                    <span>Edit window expires in {editTimer.formatted}</span>
+                  </div>
+                )}
                 <Textarea
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
@@ -454,7 +536,34 @@ export function MessageBubble({
 
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
-            <MessageAttachmentPreview attachments={message.attachments} />
+            <MessageAttachmentPreview
+              attachments={message.attachments}
+              canDelete={canEdit}
+              onDeleteAttachment={
+                onDeleteAttachment
+                  ? (attId) => onDeleteAttachment(message.id, attId)
+                  : undefined
+              }
+            />
+          )}
+
+          {/* Thread Replies Counter Badge */}
+          {Boolean(message.replyCount && message.replyCount > 0) && (
+            <div className="mt-1 pt-1 border-t border-border/30">
+              <button
+                type="button"
+                onClick={() => onOpenThread?.(message.id)}
+                className={cn(
+                  "inline-flex items-center gap-1 text-[10px] font-bold underline-offset-2 hover:underline cursor-pointer transition-colors",
+                  isCurrentUser ? "text-primary-foreground/90 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
+                )}
+              >
+                <MessageSquare className="size-3" />
+                <span>
+                  {message.replyCount} {message.replyCount === 1 ? "reply" : "replies"}
+                </span>
+              </button>
+            </div>
           )}
 
           {/* Footer: Timestamp, Read Receipts & Delivery Indicator */}
@@ -485,7 +594,12 @@ export function MessageBubble({
               </MessageRevisionHistoryPopover>
             )}
 
-            <span>{message.timestamp}</span>
+            <span
+              title={formatMessageFullDateTime(message.createdAt || message.timestamp)}
+              className="cursor-default select-none transition-opacity hover:opacity-100"
+            >
+              {formatMessageTime(message.createdAt || message.timestamp)}
+            </span>
             {isCurrentUser && (
               <span title="Delivered" className="inline-flex">
                 <CheckCheck className="size-3" />
@@ -518,6 +632,45 @@ export function MessageBubble({
           </BubbleReactions>
         )}
       </Bubble>
+
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="size-5" />
+              Delete message?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs leading-relaxed text-muted-foreground space-y-1">
+              <span>Are you sure you want to delete this message? This action will permanently remove it from the chat stream for all team members.</span>
+              {deleteTimer.secondsRemaining > 0 && (
+                <span className="block font-medium text-amber-600 dark:text-amber-400">
+                  Author deletion window expires in: {deleteTimer.formatted}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel disabled={isDeleting} className="text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-semibold"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" /> Deleting...
+                </>
+              ) : (
+                "Delete message"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

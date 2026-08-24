@@ -1,7 +1,7 @@
-// src/Modules/Projects/services/ProjectApprovalService.ts
-
 import type { PrismaClient } from "@workspace/db";
+import { publishNotification } from "@workspace/message-broker";
 import { AppLogger } from "@/core/logging/logger";
+import { AuditLogService } from "@/core/audit/audit.service";
 import { NotFoundError, ForbiddenError, BadRequestError } from "@/core/errors/AppError";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import { can } from "@/core/authorization/AuthorizationEngine";
@@ -12,7 +12,11 @@ import type {
   RequestRevisionDTO,
   ApprovalWorkflowItem,
 } from "../ProjectDTO";
-import { getProjectResourceContext, findProjectByIdOrCode } from "./projects.capability.helper";
+import {
+  getProjectResourceContext,
+  findProjectByIdOrCode,
+  formatApprovalWorkflowItem,
+} from "./projects.capability.helper";
 
 export class ProjectApprovalService {
   private logger = new AppLogger("ProjectApprovalService");
@@ -103,7 +107,7 @@ export class ProjectApprovalService {
       },
     });
 
-    const workflowItem = this.formatWorkflowItem(updated);
+    const workflowItem = formatApprovalWorkflowItem(updated);
 
     // Broadcast updated approval workflow state to project room
     this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
@@ -121,6 +125,28 @@ export class ProjectApprovalService {
 
     // Broadcast activity bump to assigned users
     await this.broadcastActivityBump(resolvedProjectId, workflowItem, actor);
+
+    // ENT-03: Audit log entry for Lead Review approval
+    AuditLogService.log({
+      module: "PROJECT_APPROVAL",
+      action: "LEAD_APPROVE",
+      entityTable: "message_approval_workflows",
+      entityId: workflow.id,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: { messageId, projectId: resolvedProjectId, notes: dto.notes },
+    }).catch(() => {});
+
+    // FEAT-07: Notify the author of lead approval
+    if (workflow.requestedById && workflow.requestedById !== actor.id) {
+      publishNotification({
+        recipientId: workflow.requestedById,
+        type: "MESSAGE_APPROVED_LEAD",
+        title: "Draft Approved by Reviewer",
+        body: `Your message draft for project ${project?.orderId || "project"} was approved and queued for sales dispatch.`,
+        entityType: "PROJECT_MESSAGE",
+        entityId: messageId,
+      }).catch(() => {});
+    }
 
     this.logger.info(`Lead approval completed for message ${messageId} by user ${actor.id}`);
     return workflowItem;
@@ -211,7 +237,7 @@ export class ProjectApprovalService {
       },
     });
 
-    const workflowItem = this.formatWorkflowItem(updated);
+    const workflowItem = formatApprovalWorkflowItem(updated);
 
     // Broadcast updated approval workflow state to project room
     this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
@@ -229,6 +255,33 @@ export class ProjectApprovalService {
 
     // Broadcast activity bump to assigned users
     await this.broadcastActivityBump(resolvedProjectId, workflowItem, actor);
+
+    // ENT-03: Audit log entry for Sales Dispatch
+    AuditLogService.log({
+      module: "PROJECT_APPROVAL",
+      action: "SALES_DISPATCH",
+      entityTable: "message_approval_workflows",
+      entityId: workflow.id,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: {
+        messageId,
+        projectId: resolvedProjectId,
+        dispatchPlatform: dto.dispatchPlatform,
+        dispatchReferenceId: dto.dispatchReferenceId,
+      },
+    }).catch(() => {});
+
+    // FEAT-07: Notify the author of successful dispatch
+    if (workflow.requestedById && workflow.requestedById !== actor.id) {
+      publishNotification({
+        recipientId: workflow.requestedById,
+        type: "DISPATCH_CONFIRMED",
+        title: "Communication Dispatched to Client",
+        body: `Your message for project ${project?.orderId || "project"} was dispatched via ${dto.dispatchPlatform}.`,
+        entityType: "PROJECT_MESSAGE",
+        entityId: messageId,
+      }).catch(() => {});
+    }
 
     this.logger.info(`Sales dispatch completed for message ${messageId} by user ${actor.id} via ${dto.dispatchPlatform}`);
     return workflowItem;
@@ -326,7 +379,7 @@ export class ProjectApprovalService {
       },
     });
 
-    const workflowItem = this.formatWorkflowItem(updated);
+    const workflowItem = formatApprovalWorkflowItem(updated);
 
     // Broadcast updated approval workflow state to project room
     this.realtimeServer.toProject(resolvedProjectId, "approval:updated", {
@@ -345,8 +398,132 @@ export class ProjectApprovalService {
     // Broadcast activity bump to assigned users
     await this.broadcastActivityBump(resolvedProjectId, workflowItem, actor);
 
+    // ENT-03: Audit log entry for Request Revision
+    AuditLogService.log({
+      module: "PROJECT_APPROVAL",
+      action: "REQUEST_REVISION",
+      entityTable: "message_approval_workflows",
+      entityId: workflow.id,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: { messageId, projectId: resolvedProjectId, reason: dto.rejectionReason },
+    }).catch(() => {});
+
+    // FEAT-07: Notify the author of revision request
+    if (workflow.requestedById) {
+      publishNotification({
+        recipientId: workflow.requestedById,
+        type: "REVISION_REQUESTED",
+        title: "Revision Requested for Client Draft",
+        body: `Revision feedback: "${dto.rejectionReason.slice(0, 120)}"`,
+        entityType: "PROJECT_MESSAGE",
+        entityId: messageId,
+      }).catch(() => {});
+    }
+
     this.logger.info(`Revision requested for message ${messageId} by user ${actor.id}`);
     return workflowItem;
+  }
+
+  /**
+   * ENT-05: SLA monitoring & automated escalation engine.
+   * Identifies pending workflows that are AT_RISK or BREACHED and triggers escalations.
+   */
+  public async checkAndEscalateSLA(projectId?: string): Promise<{
+    checked: number;
+    atRisk: number;
+    breached: number;
+    escalated: number;
+  }> {
+    let resolvedProjectId: string | undefined;
+    if (projectId) {
+      const project = await findProjectByIdOrCode(this.prisma, projectId);
+      resolvedProjectId = project?.id || projectId;
+    }
+
+    const pendingWorkflows = await this.prisma.messageApprovalWorkflow.findMany({
+      where: {
+        status: { isTerminal: false },
+        ...(resolvedProjectId ? { message: { projectId: resolvedProjectId } } : {}),
+      },
+      include: {
+        status: true,
+        message: {
+          include: {
+            project: {
+              include: {
+                teamAssignments: {
+                  where: { unassignedAt: null },
+                  include: { team: { include: { members: { where: { leftAt: null } } } } },
+                },
+              },
+            },
+          },
+        },
+        requestedBy: true,
+        auditTrail: true,
+      },
+    });
+
+    let atRisk = 0;
+    let breached = 0;
+    let escalated = 0;
+
+    for (const wf of pendingWorkflows) {
+      const formatted = formatApprovalWorkflowItem(wf);
+      if (formatted.slaStatus === "AT_RISK") {
+        atRisk += 1;
+      } else if (formatted.slaStatus === "BREACHED") {
+        breached += 1;
+
+        // Check if SLA breach was already recorded in audit trail
+        const alreadyNotified = (wf.auditTrail || []).some((a: any) => a.stageKey === "SLA_BREACH_ESCALATION");
+        if (!alreadyNotified) {
+          escalated += 1;
+
+          // Record escalation event in workflow audit trail
+          await this.prisma.approvalStageAudit.create({
+            data: {
+              workflowId: wf.id,
+              stageKey: "SLA_BREACH_ESCALATION",
+              stageName: "SLA Breached Escalation",
+              actorId: wf.requestedById,
+              actorRole: "SystemSLAEngine",
+              durationMinutes: formatted.currentStageDwellMinutes,
+              notes: `Communication draft exceeded target SLA of ${formatted.slaTargetMinutes}m (dwell: ${formatted.currentStageDwellMinutes}m)`,
+            },
+          }).catch(() => {});
+
+          // Broadcast SLA breach alert to project room
+          this.realtimeServer.toProject(wf.message.projectId, "approval:sla_breached" as any, {
+            projectId: wf.message.projectId,
+            messageId: wf.messageId,
+            dwellMinutes: formatted.currentStageDwellMinutes,
+            slaTargetMinutes: formatted.slaTargetMinutes,
+          } as any);
+
+          // Audit log the breach
+          AuditLogService.log({
+            module: "PROJECT_APPROVAL",
+            action: "SLA_BREACHED",
+            entityTable: "message_approval_workflows",
+            entityId: wf.id,
+            metadata: {
+              messageId: wf.messageId,
+              projectId: wf.message.projectId,
+              dwellMinutes: formatted.currentStageDwellMinutes,
+              slaTargetMinutes: formatted.slaTargetMinutes,
+            },
+          }).catch(() => {});
+        }
+      }
+    }
+
+    return {
+      checked: pendingWorkflows.length,
+      atRisk,
+      breached,
+      escalated,
+    };
   }
 
   private async broadcastActivityBump(
@@ -374,7 +551,7 @@ export class ProjectApprovalService {
       const allRecipientUserIds = Array.from(new Set([...teamMemberUserIds, ...userAssignmentIds, actor.id]));
 
       const attentionType =
-        workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD" || workflow.status === "PENDING_SALES"
+        workflow.status === "IN_REVIEW" || (workflow.status as string) === "PENDING_LEAD" || workflow.status === "PENDING_SALES"
           ? "PENDING_APPROVAL"
           : workflow.status === "REVISION_REQUESTED"
           ? "REVISION_REQUESTED"
@@ -386,90 +563,12 @@ export class ProjectApprovalService {
         attentionType,
       };
 
-      this.realtimeServer.broadcast("project:activity_bump" as any, bumpPayload as any);
+      // INC-05: Target bump notifications to assigned project members only (zero cluster pollution)
+      for (const userId of allRecipientUserIds) {
+        this.realtimeServer.toUser(userId, "project:activity_bump", bumpPayload as any);
+      }
     } catch (err) {
       this.logger.warn("Failed to broadcast approval activity bump:", { error: err });
     }
-  }
-
-  private formatWorkflowItem(wf: any): ApprovalWorkflowItem {
-    const statusCode = wf.status?.code || "IN_REVIEW";
-    const isTerminalStatus = Boolean(wf.status?.isTerminal || statusCode === "DISPATCHED");
-    const nowTime = Date.now();
-
-    let stageStartedDate = new Date(wf.createdAt);
-    if (wf.status?.requiresSalesAction && wf.leadApprovedAt) {
-      stageStartedDate = new Date(wf.leadApprovedAt);
-    } else if (wf.rejectedAt) {
-      stageStartedDate = new Date(wf.rejectedAt);
-    } else if (isTerminalStatus && wf.salesDispatchedAt) {
-      stageStartedDate = new Date(wf.salesDispatchedAt);
-    }
-
-    const dwellMinutes =
-      isTerminalStatus
-        ? 0
-        : Math.max(0, Math.floor((nowTime - stageStartedDate.getTime()) / (1000 * 60)));
-
-    const slaTargetMinutes = wf.slaTargetMinutes || 30;
-    let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
-    if (!isTerminalStatus) {
-      if (dwellMinutes > slaTargetMinutes) {
-        computedSlaStatus = "BREACHED";
-      } else if (dwellMinutes > slaTargetMinutes * 0.75) {
-        computedSlaStatus = "AT_RISK";
-      }
-    }
-
-    return {
-      id: wf.id,
-      status: statusCode as any,
-      clientMessageType: wf.clientMessageType || "GENERAL_NOTICE",
-      requestedBy: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
-      requestedAt: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      targetClient: wf.targetClientName,
-      currentStageDwellMinutes: dwellMinutes,
-      stageStartedAt: stageStartedDate.toISOString(),
-      slaTargetMinutes,
-      slaStatus: computedSlaStatus,
-      leadApprovedBy: wf.leadApprover ? `${wf.leadApprover.firstName} ${wf.leadApprover.lastName}` : null,
-      leadApprovedAt: wf.leadApprovedAt ? new Date(wf.leadApprovedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      salesDispatchedBy: wf.salesDispatcher ? `${wf.salesDispatcher.firstName} ${wf.salesDispatcher.lastName}` : null,
-      salesDispatchedAt: wf.salesDispatchedAt ? new Date(wf.salesDispatchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      dispatchPlatform: wf.dispatchPlatform || null,
-      dispatchReferenceId: wf.dispatchReferenceId || null,
-      rejectedBy: wf.rejector ? `${wf.rejector.firstName} ${wf.rejector.lastName}` : null,
-      rejectedAt: wf.rejectedAt ? new Date(wf.rejectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      rejectionReason: wf.rejectionReason || null,
-      auditTrail: (() => {
-        const mapped = (wf.auditTrail || []).map((aud: any) => ({
-          id: aud.id,
-          stageName: aud.stageName,
-          stageKey: aud.stageKey,
-          actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
-          actorAvatar: aud.actor?.avatarUrl || null,
-          actorRole: aud.actorRole || "Reviewer",
-          timestamp: new Date(aud.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          durationMinutes: aud.durationMinutes || null,
-          notes: aud.notes || null,
-        }));
-
-        const hasDraft = mapped.some((a: any) => a.stageKey === "DRAFTED" || a.stageName === "Draft Created");
-        if (!hasDraft) {
-          mapped.unshift({
-            id: `draft-${wf.id}`,
-            stageName: "Draft Created",
-            stageKey: "DRAFTED",
-            actorName: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
-            actorAvatar: wf.requestedBy?.avatarUrl || null,
-            actorRole: "Author",
-            timestamp: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            durationMinutes: null,
-            notes: `Drafted client communication (${wf.clientMessageType || "General"})`,
-          });
-        }
-        return mapped;
-      })(),
-    };
   }
 }

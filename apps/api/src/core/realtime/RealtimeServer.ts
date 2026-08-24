@@ -8,6 +8,7 @@ import { config } from "@/core/config";
 import { AppLogger } from "@/core/logging/logger";
 import { socketAuthMiddleware } from "./socketAuthMiddleware";
 import { PresenceService } from "./PresenceService";
+import { SocketRateLimiter } from "./SocketRateLimiter";
 import { CoreRealtimeGateway } from "./CoreRealtimeGateway";
 import type {
   AuthenticatedSocket,
@@ -142,6 +143,7 @@ export class RealtimeServer {
 
       if (this.presenceRedisClient) {
         this.presenceService.setRedisClient(this.presenceRedisClient);
+        SocketRateLimiter.getInstance().setRedisClient(this.presenceRedisClient);
       }
     } catch (error) {
       this.logger.warn("Redis adapter initialization encountered error, running in single-node mode:", {

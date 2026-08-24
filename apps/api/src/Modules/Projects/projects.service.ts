@@ -18,6 +18,8 @@ import type {
   CreateQuickOrderSourceDTO,
   CreateProjectMessageDTO,
   EditProjectMessageDTO,
+  SearchProjectMessagesDTO,
+  ExportProjectMessagesDTO,
   ToggleReactionDTO,
   MarkMessagesSeenDTO,
   LeadApproveDTO,
@@ -168,6 +170,13 @@ export class ProjectsService {
     return this.mutation.updateProject(id, dto, actor);
   }
 
+  public async togglePinProject(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ id: string; success: boolean; isPinned: boolean }> {
+    return this.mutation.togglePinProject(id, actor);
+  }
+
   public async deleteProject(
     id: string,
     actor: AuthenticatedUser,
@@ -269,12 +278,67 @@ export class ProjectsService {
     return this.chat.editMessage(projectId, messageId, dto, actor);
   }
 
+  public async deleteMessage(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ success: boolean; messageId: string }> {
+    return this.chat.deleteMessage(projectId, messageId, actor);
+  }
+
+  public async getPinnedMessages(
+    projectId: string,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageItem[]> {
+    return this.chat.getPinnedMessages(projectId, actor);
+  }
+
+  public async getUnreadCount(
+    projectId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ unreadCount: number }> {
+    return this.chat.getUnreadCount(projectId, actor);
+  }
+
   public async getMessageRevisions(
     projectId: string,
     messageId: string,
     actor: AuthenticatedUser,
   ): Promise<ProjectMessageRevisionItem[]> {
     return this.chat.getMessageRevisions(projectId, messageId, actor);
+  }
+
+  public async getMessageThread(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ parentMessage: ProjectMessageItem; replies: ProjectMessageItem[]; replyCount: number }> {
+    return this.chat.getMessageThread(projectId, messageId, actor);
+  }
+
+  public async searchMessages(
+    projectId: string,
+    query: SearchProjectMessagesDTO,
+    actor: AuthenticatedUser,
+  ): Promise<{ messages: ProjectMessageItem[]; total: number }> {
+    return this.chat.searchMessages(projectId, query, actor);
+  }
+
+  public async exportMessages(
+    projectId: string,
+    format: "json" | "csv" | "txt",
+    actor: AuthenticatedUser,
+  ): Promise<{ content: string; contentType: string; filename: string }> {
+    return this.chat.exportMessages(projectId, format, actor);
+  }
+
+  public async deleteAttachment(
+    projectId: string,
+    messageId: string,
+    attachmentId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ success: boolean; attachmentId: string }> {
+    return this.chat.deleteAttachment(projectId, messageId, attachmentId, actor);
   }
 
   // --- Approval Workflows ---
@@ -303,6 +367,15 @@ export class ProjectsService {
     actor: AuthenticatedUser,
   ): Promise<ApprovalWorkflowItem> {
     return this.approval.requestRevision(projectId, messageId, dto, actor);
+  }
+
+  public async checkAndEscalateSLA(projectId?: string): Promise<{
+    checked: number;
+    atRisk: number;
+    breached: number;
+    escalated: number;
+  }> {
+    return this.approval.checkAndEscalateSLA(projectId);
   }
 
   // --- Dynamic Message Types ---

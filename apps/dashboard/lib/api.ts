@@ -1,7 +1,8 @@
 // apps/dashboard/lib/api.ts
 import { toast } from "sonner";
+import { env } from "@/lib/env";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3030";
+const API_BASE_URL = env.NEXT_PUBLIC_API_URL;
 
 export interface ApiResponse<T = any> {
   status: string;

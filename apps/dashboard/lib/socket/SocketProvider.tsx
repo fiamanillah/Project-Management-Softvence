@@ -61,6 +61,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       client.off("connect", handleConnect);
       client.off("disconnect", handleDisconnect);
       client.off("connect_error", handleConnectError);
+      disconnectSocket();
     };
   }, [token, user, isLoading]);
 

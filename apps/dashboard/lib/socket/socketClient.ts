@@ -2,9 +2,10 @@
 
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "@/lib/api";
+import { env } from "@/lib/env";
 
 function getSocketServerUrl(): string {
-  const rawUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3030";
+  const rawUrl = env.NEXT_PUBLIC_WS_URL || env.NEXT_PUBLIC_API_URL || "http://localhost:3030";
   try {
     const parsed = new URL(rawUrl);
     return `${parsed.protocol}//${parsed.host}`;
@@ -41,6 +42,11 @@ export function getSocketClient(): Socket {
 
     socketInstance.on("connect_error", (error) => {
       console.warn("⚠️ [Socket.IO] Connection error:", error.message);
+      // INC-11: Refresh token on auth failure
+      const latestToken = getAccessToken();
+      if (socketInstance && latestToken) {
+        socketInstance.auth = { token: latestToken };
+      }
     });
   }
 

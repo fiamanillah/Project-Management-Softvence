@@ -6,8 +6,10 @@ import { ProjectChatHeader, type ChannelFilterMode } from "./ProjectChatHeader";
 import { PinnedMessageBanner } from "./PinnedMessageBanner";
 import { MessageList } from "./MessageList";
 import { MessageComposer } from "./MessageComposer";
-import { Input } from "@workspace/ui/components/input";
-import { Search, X } from "lucide-react";
+import { ProjectChatSearchDrawer } from "./ProjectChatSearchDrawer";
+import { MessageThreadDrawer } from "./MessageThreadDrawer";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 import type {
   ProjectWorkspaceItem,
   ChatMessage,
@@ -33,14 +35,17 @@ interface ProjectChatPanelProps {
     clientMessageType?: ClientMessageType;
     outboundType?: OutboundMessageType;
     replyTo?: { id: string; senderName: string; text: string };
+    replyToMessageId?: string;
     attachments?: ChatAttachment[];
   }) => void;
   onReact?: (messageId: string, emoji: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onEditMessage?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onMarkSeen?: (messageIds: string[]) => void;
   onTogglePinMessage?: (messageId: string) => void;
+  onTogglePinProject?: (projectId: string) => void;
   onBackMobile?: () => void;
   onMobileBack?: () => void;
   onOpenMobileDetails?: () => void;
@@ -62,9 +67,11 @@ export function ProjectChatPanel({
   onReact,
   onToggleReaction,
   onEditMessage,
+  onDeleteMessage,
   onUpdateApproval,
   onMarkSeen,
   onTogglePinMessage,
+  onTogglePinProject,
   onBackMobile,
   onMobileBack,
   onOpenMobileDetails,
@@ -75,8 +82,8 @@ export function ProjectChatPanel({
   className,
 }: ProjectChatPanelProps) {
   const [replyingTo, setReplyingTo] = React.useState<ChatMessage | null>(null);
-  const [isSearchActive, setIsSearchActive] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const [isSearchDrawerOpen, setIsSearchDrawerOpen] = React.useState(false);
+  const [activeThreadMessageId, setActiveThreadMessageId] = React.useState<string | null>(null);
   const [activeChannel, setActiveChannel] = React.useState<ChannelFilterMode>("all");
   const [internalTargetScrollMessageId, setInternalTargetScrollMessageId] = React.useState<string | null>(null);
 
@@ -111,6 +118,31 @@ export function ProjectChatPanel({
     }
   };
 
+  const handleOpenThread = (messageId: string) => {
+    setActiveThreadMessageId(messageId);
+  };
+
+  const handleDeleteAttachment = async (messageId: string, attachmentId: string) => {
+    try {
+      await api.delete(`/projects/${project.id}/messages/${messageId}/attachments/${attachmentId}`);
+      toast.success("Attachment removed successfully");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to remove attachment");
+    }
+  };
+
+  const handleSendThreadReply = async (payload: {
+    text: string;
+    replyToMessageId: string;
+    purpose: MessagePurpose;
+  }) => {
+    await onSendMessage({
+      text: payload.text,
+      purpose: payload.purpose,
+      replyToMessageId: payload.replyToMessageId,
+    });
+  };
+
   return (
     <div className={`flex h-full flex-col bg-background/50 relative overflow-hidden ${className || ""}`}>
       {/* 1. Chat Header with Project Code & Consolidated Channel Filter + Pinned Dropdown Sub-bar */}
@@ -119,38 +151,16 @@ export function ProjectChatPanel({
         onBackMobile={handleMobileBack}
         isRightSidebarOpen={isRightSidebarOpen}
         onToggleRightSidebar={onToggleRightSidebar}
-        onSearchClick={() => setIsSearchActive((prev) => !prev)}
+        onSearchClick={() => setIsSearchDrawerOpen(true)}
         activeChannel={activeChannel}
         onChannelChange={setActiveChannel}
         pendingApprovalsCount={pendingApprovalsCount}
         onScrollToMessage={handleScrollToMessage}
+        onTogglePinMessage={onTogglePinMessage}
+        onTogglePinProject={onTogglePinProject}
       />
 
-      {/* 2. In-Chat Search Overlay */}
-      {isSearchActive && (
-        <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-2 backdrop-blur-xs shrink-0">
-          <Search className="size-3.5 text-muted-foreground" />
-          <Input
-            autoFocus
-            placeholder={`Search messages in ${project.code}...`}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 text-xs bg-background/80"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setIsSearchActive(false);
-              setSearchQuery("");
-            }}
-            className="text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
-
-      {/* 3. Message List Stream with Infinite Scrolling & Preserved Scroll */}
+      {/* 2. Message List Stream with Infinite Scrolling & Preserved Scroll */}
       <MessageList
         messages={messages}
         projectCode={project.code}
@@ -162,9 +172,11 @@ export function ProjectChatPanel({
         onReply={handleReply}
         onReact={handleReact}
         onEdit={onEditMessage}
+        onDeleteMessage={onDeleteMessage}
         onUpdateApproval={onUpdateApproval}
         onMarkSeen={onMarkSeen}
-        searchFilterQuery={searchQuery}
+        onOpenThread={handleOpenThread}
+        onDeleteAttachment={handleDeleteAttachment}
         channelFilter={activeChannel}
         targetScrollMessageId={effectiveTargetScrollMessageId}
         onTargetScrolled={() => {
@@ -173,14 +185,36 @@ export function ProjectChatPanel({
         }}
       />
 
-      {/* 4. Message Composer with Purpose & Client Workflow */}
+      {/* 3. Message Composer with Purpose & Client Workflow */}
       <MessageComposer
         projectId={project.id}
+        members={project.members}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
         onSendMessage={onSendMessage}
         targetClientName={project.client.name}
         projectCapabilities={project._capabilities}
+      />
+
+      {/* 4. Full-Text In-Chat Search Drawer (FEAT-02-UI) */}
+      <ProjectChatSearchDrawer
+        projectId={project.id}
+        projectCode={project.code}
+        open={isSearchDrawerOpen}
+        onOpenChange={setIsSearchDrawerOpen}
+        onSelectMessage={handleScrollToMessage}
+      />
+
+      {/* 5. Nested Message Thread Drawer (FEAT-03-UI) */}
+      <MessageThreadDrawer
+        projectId={project.id}
+        projectCode={project.code}
+        rootMessageId={activeThreadMessageId}
+        open={Boolean(activeThreadMessageId)}
+        onOpenChange={(open) => {
+          if (!open) setActiveThreadMessageId(null);
+        }}
+        onSendReply={handleSendThreadReply}
       />
     </div>
   );

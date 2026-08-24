@@ -76,3 +76,33 @@ export function useElapsedTimer({
     slaStatus,
   };
 }
+
+export function useCountdownTimer(initialSeconds?: number | null) {
+  const [secondsRemaining, setSecondsRemaining] = React.useState<number>(initialSeconds ?? 0);
+
+  React.useEffect(() => {
+    if (typeof initialSeconds !== "number" || initialSeconds <= 0) {
+      setSecondsRemaining(0);
+      return;
+    }
+    setSecondsRemaining(initialSeconds);
+
+    const interval = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [initialSeconds]);
+
+  return {
+    secondsRemaining,
+    formatted: formatCountdownSeconds(secondsRemaining),
+    isExpired: secondsRemaining <= 0,
+  };
+}

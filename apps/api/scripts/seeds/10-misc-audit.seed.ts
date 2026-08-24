@@ -6,7 +6,7 @@ import type { SeedContext } from "./types";
 export async function seedMiscAndAudit(ctx: SeedContext): Promise<void> {
   const { prisma } = ctx;
 
-  const acmeProj = ctx.projects.get("ORD-2026-001");
+  const acmeProj = ctx.projects.get("PRJ-1048") || ctx.projects.get("ORD-2026-001");
   const priyaUser = ctx.users.get("dev.priya@softvence.com")!;
   const alexUser = ctx.users.get("lead.alex@softvence.com")!;
   const sarahUser = ctx.users.get("pm.sarah@softvence.com")!;
@@ -14,6 +14,7 @@ export async function seedMiscAndAudit(ctx: SeedContext): Promise<void> {
 
   const projAssignedNotifId = ctx.notificationTypes.get("PROJECT_ASSIGNED")!;
   const msgApprovalNotifId = ctx.notificationTypes.get("MESSAGE_APPROVAL_REQUIRED")!;
+  const dispatchConfirmedNotifId = ctx.notificationTypes.get("DISPATCH_CONFIRMED") || msgApprovalNotifId;
 
   // 1. Notifications
   if (acmeProj) {
@@ -27,7 +28,7 @@ export async function seedMiscAndAudit(ctx: SeedContext): Promise<void> {
           recipientId: priyaUser.id,
           notificationTypeId: projAssignedNotifId,
           title: "Assigned to Project: Acme SaaS ERP Portal",
-          body: "You were added to the Acme SaaS ERP engineering squad as Frontend Engineer.",
+          body: "You were assigned to the Acme SaaS ERP engineering squad as Frontend Lead.",
           entityType: "project",
           entityId: acmeProj.id,
           isRead: true,
@@ -44,11 +45,29 @@ export async function seedMiscAndAudit(ctx: SeedContext): Promise<void> {
         data: {
           recipientId: sarahUser.id,
           notificationTypeId: msgApprovalNotifId,
-          title: "Message Approval Request",
-          body: "Priya submitted a Sprint 3 client update message for Acme ERP for review.",
+          title: "Message Approval Required",
+          body: "Priya submitted a Sprint 3 milestone update message for Acme ERP for review.",
           entityType: "project",
           entityId: acmeProj.id,
           isRead: false,
+        },
+      });
+    }
+
+    const existingNotif3 = await prisma.notification.findFirst({
+      where: { recipientId: priyaUser.id, notificationTypeId: dispatchConfirmedNotifId },
+    });
+
+    if (!existingNotif3) {
+      await prisma.notification.create({
+        data: {
+          recipientId: priyaUser.id,
+          notificationTypeId: dispatchConfirmedNotifId,
+          title: "Message Dispatched to Upwork",
+          body: "Rachel Green confirmed delivery of your Sprint 2 deliverable notice to Sarah Jenkins on Upwork.",
+          entityType: "project",
+          entityId: acmeProj.id,
+          isRead: true,
         },
       });
     }
@@ -98,7 +117,7 @@ export async function seedMiscAndAudit(ctx: SeedContext): Promise<void> {
       data: {
         delegatorId: alexUser.id,
         delegateeId: sarahUser.id,
-        scope: "projects:write,messages:approve",
+        scope: "project.edit,project.approval.lead_review",
         validFrom: startAt,
         validUntil: endAt,
         createdBy: alexUser.id,
@@ -108,24 +127,24 @@ export async function seedMiscAndAudit(ctx: SeedContext): Promise<void> {
 
   // 4. Temporary Permission Override
   if (acmeProj) {
-    const projectWritePerm = await prisma.permission.findFirst({
-      where: { code: "projects:write" },
+    const projectEditPerm = await prisma.permission.findFirst({
+      where: { code: "project.edit" },
     });
 
-    if (projectWritePerm) {
+    if (projectEditPerm) {
       const existingOverride = await prisma.userPermissionOverride.findFirst({
-        where: { userId: priyaUser.id, permissionId: projectWritePerm.id, projectId: acmeProj.id },
+        where: { userId: priyaUser.id, permissionId: projectEditPerm.id, projectId: acmeProj.id },
       });
 
       if (!existingOverride) {
         await prisma.userPermissionOverride.create({
           data: {
             userId: priyaUser.id,
-            permissionId: projectWritePerm.id,
+            permissionId: projectEditPerm.id,
             projectId: acmeProj.id,
             isDeny: false,
             grantedBy: superAdminUser.id,
-            reason: "Temporary deployment approval authority for Sprint 3 release",
+            reason: "Temporary deployment authorization for Sprint 3 release cycle",
             expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
           },
         });

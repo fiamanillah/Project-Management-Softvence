@@ -1,12 +1,9 @@
-import dotenv from "dotenv";
 import { createPrismaClient, type ScopeResolutionStrategy } from "@workspace/db";
+import { env } from "@workspace/env/api";
 
-dotenv.config();
-
-const databaseUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/project_management";
 const prisma = createPrismaClient({
-  databaseUrl,
-  isProduction: false,
+  databaseUrl: env.DATABASE_URL,
+  isProduction: env.NODE_ENV === "production",
 });
 
 const SCOPE_TYPES: { code: string; name: string; description: string; resolutionStrategy: ScopeResolutionStrategy }[] = [

@@ -31,21 +31,22 @@ export function ProjectSearchFilter({
   ];
 
   return (
-    <div className="space-y-2.5 p-3 pb-2 border-b border-border/50">
+    <div className="space-y-2.5 px-3 py-2.5 border-b border-border/40 bg-card/40 backdrop-blur-xs">
       {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground/70" />
+      <div className="relative flex items-center">
+        <Search className="absolute left-2.5 size-3.5 text-muted-foreground/60 pointer-events-none" />
         <Input
-          placeholder="Search by PRJ Code (e.g. PRJ-1048), client, name..."
+          placeholder="Search project, code, or client..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-8.5 pl-8 pr-7 text-xs bg-muted/40 border-border/60 focus-visible:bg-background transition-colors rounded-lg font-mono placeholder:font-sans"
+          className="h-8 pl-8 pr-7 text-xs bg-muted/40 hover:bg-muted/60 focus:bg-background border-border/50 focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 transition-all rounded-lg placeholder:text-muted-foreground/60"
         />
         {searchQuery && (
           <button
             type="button"
             onClick={() => onSearchChange("")}
-            className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+            className="absolute right-2 text-muted-foreground hover:text-foreground p-0.5 rounded-sm hover:bg-muted/80 cursor-pointer transition-colors"
+            title="Clear search"
           >
             <X className="size-3.5" />
           </button>
@@ -53,7 +54,7 @@ export function ProjectSearchFilter({
       </div>
 
       {/* Filter Category Pills */}
-      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
         {categories.map(({ key, label }) => {
           const isSelected = selectedCategory === key;
           const count = counts[key] ?? 0;
@@ -63,17 +64,17 @@ export function ProjectSearchFilter({
               type="button"
               onClick={() => onCategoryChange(key)}
               className={cn(
-                "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-all cursor-pointer select-none",
+                "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-all duration-150 cursor-pointer select-none border",
                 isSelected
-                  ? "bg-primary text-primary-foreground font-semibold shadow-2xs"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-primary text-primary-foreground border-primary font-semibold shadow-2xs"
+                  : "bg-muted/40 hover:bg-muted/70 text-muted-foreground hover:text-foreground border-border/40 hover:border-border/60"
               )}
             >
               <span>{label}</span>
               {count > 0 && (
                 <span
                   className={cn(
-                    "rounded-full px-1 text-[9px] font-bold leading-none py-0.5",
+                    "rounded-full px-1.5 py-0.2 text-[9.5px] font-bold leading-none tracking-tight",
                     isSelected
                       ? "bg-primary-foreground/20 text-primary-foreground"
                       : "bg-muted-foreground/15 text-muted-foreground"

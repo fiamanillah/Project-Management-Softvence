@@ -149,7 +149,7 @@ model MessageApprovalWorkflow {
   rejectionReason     String?              @db.Text @map("rejection_reason")
 
   createdAt           DateTime             @default(now()) @map("created_at")
-  updatedAt           DateTime?            @map("updated_at")
+  updatedAt           DateTime?            @updatedAt @map("updated_at")
 
   message             ProjectMessage       @relation(fields: [messageId], references: [id], onDelete: Cascade)
   status              ApprovalStatusLookup @relation(fields: [statusId], references: [id])

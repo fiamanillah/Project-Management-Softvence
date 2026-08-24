@@ -3,14 +3,16 @@ import type { SeedContext } from "./types";
 export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
   const { prisma } = ctx;
 
-  const acmeProj = ctx.projects.get("ORD-2026-001");
-  const finTechProj = ctx.projects.get("ORD-2026-002");
-  const healthPulseProj = ctx.projects.get("ORD-2026-003");
+  const acmeProj = ctx.projects.get("PRJ-1048") || ctx.projects.get("ORD-2026-001");
+  const finTechProj = ctx.projects.get("PRJ-1049") || ctx.projects.get("ORD-2026-002");
+  const healthPulseProj = ctx.projects.get("PRJ-1050") || ctx.projects.get("ORD-2026-003");
+  const apexProj = ctx.projects.get("PRJ-1053") || ctx.projects.get("ORD-2026-006");
 
   const bugTypeId = ctx.issueTypes.get("BUG")!;
   const uiGlitchTypeId = ctx.issueTypes.get("UI_GLITCH")!;
   const securityTypeId = ctx.issueTypes.get("SECURITY")!;
   const featureTypeId = ctx.issueTypes.get("FEATURE")!;
+  const performanceTypeId = ctx.issueTypes.get("PERFORMANCE")!;
 
   const lowPrioId = ctx.priorities.get("LOW")!;
   const medPrioId = ctx.priorities.get("MEDIUM")!;
@@ -31,10 +33,10 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
   const sarahUser = ctx.users.get("pm.sarah@softvence.com")!;
   const annaUser = ctx.users.get("support.anna@softvence.com")!;
 
-  // 1. Issues for Acme ERP
+  // 1. Issues for Acme ERP (PRJ-1048)
   if (acmeProj) {
-    const apiComp = ctx.components.get("ORD-2026-001:Express REST API & Auth Subsystem");
-    const gridComp = ctx.components.get("ORD-2026-001:Next.js Dashboard & Data Grid");
+    const apiComp = ctx.components.get("PRJ-1048:Express REST API & Centralized Auth Subsystem") || ctx.components.get(`${acmeProj.id}:Express REST API & Centralized Auth Subsystem`);
+    const gridComp = ctx.components.get("PRJ-1048:Next.js 15 Data Grid & Analytics Dashboard") || ctx.components.get(`${acmeProj.id}:Next.js 15 Data Grid & Analytics Dashboard`);
 
     // Issue 1: Solved Bug
     const issue1Title = "Stripe Webhook Signature Verification failing on clock drift";
@@ -62,7 +64,7 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
         data: {
           issueId: issue1.id,
           authorId: alexUser.id,
-          content: "Let's increase the tolerance timestamp window from 30s to 120s and add logging on signature mismatch.",
+          content: "Let's increase the tolerance timestamp window from 30s to 120s and add structured logging on signature mismatch.",
         },
       });
 
@@ -125,9 +127,9 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
     }
   }
 
-  // 2. Issues for FinTech Mobile
+  // 2. Issues for FinTech Mobile (PRJ-1049)
   if (finTechProj) {
-    const mobileComp = ctx.components.get("ORD-2026-002:React Native iOS & Android Client");
+    const mobileComp = ctx.components.get("PRJ-1049:React Native iOS & Android Client") || ctx.components.get(`${finTechProj.id}:React Native iOS & Android Client`);
 
     const issue3Title = "Biometric FaceID fallback passcode prompt doesn't trigger on iOS 18 beta";
     let issue3 = await prisma.issue.findFirst({
@@ -159,7 +161,7 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
     ctx.issues.set(issue3Title, issue3.id);
   }
 
-  // 3. Support Tickets for HealthPulse AI
+  // 3. Support Tickets for HealthPulse AI (PRJ-1050)
   if (healthPulseProj) {
     const ticketRef2 = "TIK-2026-002";
     let ticket2 = await prisma.supportTicket.findUnique({
@@ -177,5 +179,36 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
         },
       });
     }
+  }
+
+  // 4. Issues for Apex Logistics (PRJ-1053)
+  if (apexProj) {
+    const issue4Title = "Mapbox clustering marker lag with > 10,000 active telemetry pings";
+    let issue4 = await prisma.issue.findFirst({
+      where: { projectId: apexProj.id, title: issue4Title },
+    });
+
+    if (!issue4) {
+      issue4 = await prisma.issue.create({
+        data: {
+          projectId: apexProj.id,
+          authorId: tomUser.id,
+          title: issue4Title,
+          content: "Rendering 10k real-time GPS pings simultaneously causes 40fps frame drops on Chrome GPU layer.",
+          status: "WIP",
+          priorityId: highPrioId,
+          issueTypeId: performanceTypeId,
+        },
+      });
+
+      await prisma.issueComment.create({
+        data: {
+          issueId: issue4.id,
+          authorId: jamesUser.id,
+          content: "Moving GeoJSON spatial indexing to Web Workers and using Supercluster binary point tree.",
+        },
+      });
+    }
+    ctx.issues.set(issue4Title, issue4.id);
   }
 }

@@ -106,6 +106,7 @@ model ApprovalStatusLookup {
   name                     String
   requiresLeadAction       Boolean                   @default(false) @map("requires_lead_action")
   requiresSalesAction      Boolean                   @default(false) @map("requires_sales_action")
+  requiresAuthorRevision   Boolean                   @default(false) @map("requires_author_revision")
   requiresAutoApproveCheck Boolean                   @default(false) @map("requires_auto_approve_check")
   isTerminal               Boolean                   @default(false) @map("is_terminal")
   color                    String?

@@ -27,11 +27,15 @@ import {
   Send,
   MessageSquare,
   Pin,
+  Download,
   ChevronDown,
   ChevronRight,
   Building2,
 } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
+import { toast } from "sonner";
+import { ExportChatDialog } from "./ExportChatDialog";
+import { PinnedMessagesModal } from "./PinnedMessagesModal";
 import type { ProjectWorkspaceItem, ProjectPinnedAnnouncement } from "../types";
 
 export type ChannelFilterMode = "all" | "internal" | "client" | "approvals";
@@ -46,6 +50,8 @@ interface ProjectChatHeaderProps {
   onChannelChange: (channel: ChannelFilterMode) => void;
   pendingApprovalsCount?: number;
   onScrollToMessage?: (messageId: string) => void;
+  onTogglePinMessage?: (messageId: string) => void;
+  onTogglePinProject?: (projectId: string) => void;
 }
 
 export function ProjectChatHeader({
@@ -58,7 +64,12 @@ export function ProjectChatHeader({
   onChannelChange,
   pendingApprovalsCount = 0,
   onScrollToMessage,
+  onTogglePinMessage,
+  onTogglePinProject,
 }: ProjectChatHeaderProps) {
+  const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
+  const [isPinnedModalOpen, setIsPinnedModalOpen] = React.useState(false);
+
   const initials = project.name
     .split(" ")
     .slice(0, 2)
@@ -89,6 +100,14 @@ export function ProjectChatHeader({
     }
     return [];
   }, [project.pinnedAnnouncements, project.pinnedAnnouncement]);
+
+  const handleShareProject = () => {
+    if (typeof window !== "undefined") {
+      const shareUrl = `${window.location.origin}/dashboard/manage-projects?projectId=${project.id}`;
+      navigator.clipboard.writeText(shareUrl);
+      toast.success(`Project ${project.code} link copied to clipboard`);
+    }
+  };
 
   return (
     <div className="border-b border-border/60 bg-card/90 backdrop-blur-md select-none shrink-0 w-full overflow-hidden">
@@ -225,18 +244,28 @@ export function ProjectChatHeader({
                 </Button>
               }
             />
-            <DropdownMenuContent align="end" className="w-48 text-xs">
+            <DropdownMenuContent align="end" className="w-52 text-xs">
               <DropdownMenuItem onClick={onToggleRightSidebar} className="gap-2">
                 <FolderOpen className="size-3.5 text-muted-foreground" />
                 Project Information & Files
               </DropdownMenuItem>
+              {onTogglePinProject && (
+                <DropdownMenuItem onClick={() => onTogglePinProject(project.id)} className="gap-2">
+                  <Pin className={cn("size-3.5 text-muted-foreground", project.isPinned && "text-amber-500 fill-amber-500/20")} />
+                  {project.isPinned ? "Unpin Project" : "Pin Project"}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem className="gap-2">
                 <Users className="size-3.5 text-muted-foreground" />
                 Manage Team Roster
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2">
+              <DropdownMenuItem onClick={handleShareProject} className="gap-2">
                 <Share2 className="size-3.5 text-muted-foreground" />
                 Share Project Link
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsExportDialogOpen(true)} className="gap-2">
+                <Download className="size-3.5 text-muted-foreground" />
+                Export Conversation
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="gap-2">
@@ -400,6 +429,24 @@ export function ProjectChatHeader({
           </DropdownMenu>
         )}
       </div>
+
+      {/* Export Conversation Dialog */}
+      <ExportChatDialog
+        projectId={project.id}
+        projectCode={project.code}
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
+      />
+
+      {/* Pinned Announcements Modal */}
+      <PinnedMessagesModal
+        projectCode={project.code}
+        pinnedList={pinnedList}
+        open={isPinnedModalOpen}
+        onOpenChange={setIsPinnedModalOpen}
+        onSelectMessage={onScrollToMessage}
+        onUnpinMessage={onTogglePinMessage}
+      />
     </div>
   );
 }

@@ -5,12 +5,13 @@ import { Button } from "@workspace/ui/components/button";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@workspace/ui/components/tooltip";
 import {
-  Plus,
   FolderKanban,
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
   Loader2,
+  Pin,
+  MessageSquare,
 } from "lucide-react";
 import { ProjectListItem } from "./ProjectListItem";
 import { ProjectSearchFilter, type ProjectFilterCategory } from "./ProjectSearchFilter";
@@ -21,6 +22,7 @@ interface ProjectListSidebarProps {
   projects: ProjectWorkspaceItem[];
   selectedProjectId: string | null;
   onSelectProject: (project: ProjectWorkspaceItem) => void;
+  onTogglePinProject?: (projectId: string) => void;
   onNewProject?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -63,6 +65,7 @@ export function ProjectListSidebar({
   projects,
   selectedProjectId,
   onSelectProject,
+  onTogglePinProject,
   onNewProject,
   isCollapsed = false,
   onToggleCollapse,
@@ -154,12 +157,12 @@ export function ProjectListSidebar({
       <TooltipProvider delay={100}>
         <div
           className={cn(
-            "flex h-full w-16 xl:w-[68px] flex-col items-center bg-card/60 backdrop-blur-xs border-r border-border/60 select-none py-2 shrink-0 transition-all duration-300",
+            "flex h-full w-16 xl:w-[68px] flex-col items-center bg-card/70 backdrop-blur-xs border-r border-border/50 select-none py-2 shrink-0 transition-all duration-300",
             className
           )}
         >
           {/* Collapsed Top Header (Single Expand Button) */}
-          <div className="flex flex-col items-center justify-center pb-2 border-b border-border/50 w-full px-2">
+          <div className="flex flex-col items-center justify-center pb-2 border-b border-border/40 w-full px-2">
             {onToggleCollapse && (
               <Tooltip>
                 <TooltipTrigger
@@ -168,7 +171,7 @@ export function ProjectListSidebar({
                       size="icon-xs"
                       variant="ghost"
                       onClick={onToggleCollapse}
-                      className="size-8.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/80 cursor-pointer"
+                      className="size-8.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/80 cursor-pointer transition-colors"
                       title="Expand sidebar"
                     >
                       <PanelLeftOpen className="size-4" />
@@ -206,20 +209,20 @@ export function ProjectListSidebar({
   return (
     <div
       className={cn(
-        "flex h-full flex-col bg-card/60 backdrop-blur-xs border-r border-border/60 select-none transition-all duration-300",
+        "flex h-full flex-col bg-card/60 backdrop-blur-xs border-r border-border/50 select-none transition-all duration-300",
         className
       )}
     >
       {/* Top Header */}
-      <div className="flex items-center justify-between px-3.5 py-3 border-b border-border/50 gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/40 gap-2">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="flex size-7.5 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 border border-primary/20">
             <FolderKanban className="size-4" />
           </div>
           <div className="min-w-0">
             <h2 className="text-xs font-bold tracking-tight text-foreground flex items-center gap-1.5 truncate">
-              Manage Projects
-              <span className="rounded-full bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.2">
+              Projects & Channels
+              <span className="rounded-full bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.2 border border-primary/25">
                 {projects.length}
               </span>
             </h2>
@@ -231,7 +234,7 @@ export function ProjectListSidebar({
             size="icon-xs"
             variant="ghost"
             onClick={onToggleCollapse}
-            className="size-7 text-muted-foreground hover:text-foreground cursor-pointer rounded-lg hover:bg-muted/80 shrink-0"
+            className="size-7 text-muted-foreground hover:text-foreground cursor-pointer rounded-lg hover:bg-muted/80 shrink-0 transition-colors"
             title="Collapse sidebar"
           >
             <PanelLeftClose className="size-4" />
@@ -263,8 +266,14 @@ export function ProjectListSidebar({
             {/* Pinned section if any */}
             {pinnedProjects.length > 0 && (
               <div className="space-y-1">
-                <div className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground/70">
-                  Pinned Channels
+                <div className="flex items-center justify-between px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase text-muted-foreground/75">
+                  <div className="flex items-center gap-1.5">
+                    <Pin className="size-3 text-amber-500 fill-amber-500/20 rotate-45 shrink-0" />
+                    <span>Pinned Channels</span>
+                  </div>
+                  <span className="text-[9.5px] font-semibold bg-muted/70 text-muted-foreground px-1.5 py-0.2 rounded-full border border-border/40">
+                    {pinnedProjects.length}
+                  </span>
                 </div>
                 <div className="space-y-1">
                   {pinnedProjects.map((proj) => (
@@ -273,6 +282,7 @@ export function ProjectListSidebar({
                       project={proj}
                       isSelected={selectedProjectId === proj.id}
                       onSelect={onSelectProject}
+                      onTogglePin={onTogglePinProject}
                       isCollapsed={false}
                       isRecentlyUpdated={proj.id === recentlyUpdatedId}
                     />
@@ -285,8 +295,14 @@ export function ProjectListSidebar({
             {unpinnedProjects.length > 0 && (
               <div className="space-y-1">
                 {pinnedProjects.length > 0 && (
-                  <div className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground/70">
-                    All Conversations
+                  <div className="flex items-center justify-between px-2.5 py-1 pt-2 text-[10px] font-bold tracking-wider uppercase text-muted-foreground/75 border-t border-border/30">
+                    <div className="flex items-center gap-1.5">
+                      <MessageSquare className="size-3 text-muted-foreground/70 shrink-0" />
+                      <span>All Conversations</span>
+                    </div>
+                    <span className="text-[9.5px] font-semibold bg-muted/70 text-muted-foreground px-1.5 py-0.2 rounded-full border border-border/40">
+                      {unpinnedProjects.length}
+                    </span>
                   </div>
                 )}
                 <div className="space-y-1">
@@ -296,6 +312,7 @@ export function ProjectListSidebar({
                       project={proj}
                       isSelected={selectedProjectId === proj.id}
                       onSelect={onSelectProject}
+                      onTogglePin={onTogglePinProject}
                       isCollapsed={false}
                       isRecentlyUpdated={proj.id === recentlyUpdatedId}
                     />

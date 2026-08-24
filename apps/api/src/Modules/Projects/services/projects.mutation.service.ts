@@ -20,6 +20,7 @@ import {
   getProjectResourceContext,
   generateProjectCode,
   validateHierarchyNoCycles,
+  findProjectByIdOrCode,
 } from "./projects.capability.helper";
 import type { ProjectsQueryService } from "./projects.query.service";
 
@@ -308,6 +309,7 @@ export class ProjectsMutationService {
     if (dto.startDate !== undefined) updateData.startDate = dto.startDate ? new Date(dto.startDate) : null;
     if (dto.deliveryDate !== undefined)
       updateData.deliveryDate = dto.deliveryDate ? new Date(dto.deliveryDate) : null;
+    if (dto.isPinned !== undefined) updateData.isPinned = dto.isPinned;
 
     if (dto.parentId !== undefined) {
       if (dto.parentId) {
@@ -357,6 +359,58 @@ export class ProjectsMutationService {
     });
 
     return this.queryService.getProjectById(updated.id, actor);
+  }
+
+  /**
+   * Toggles the pinned status of a project.
+   */
+  public async togglePinProject(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ id: string; success: boolean; isPinned: boolean }> {
+    const existing = await findProjectByIdOrCode(this.prisma, id, {
+      teamAssignments: { where: { unassignedAt: null }, include: { team: true } },
+    });
+
+    if (!existing) {
+      throw new NotFoundError("Project not found");
+    }
+
+    const resourceContext = getProjectResourceContext(existing);
+    const hasEditPermission = await can(actor, "project.edit", resourceContext);
+    if (!hasEditPermission) {
+      throw new AuthorizationError("You don't have access to this resource");
+    }
+
+    const updated = await this.prisma.project.update({
+      where: { id: existing.id },
+      data: {
+        isPinned: !existing.isPinned,
+        updatedAt: new Date(),
+      },
+      select: { id: true, isPinned: true },
+    });
+
+    AuditLogService.log({
+      module: "Projects",
+      action: "PROJECT_PIN_TOGGLE",
+      entityTable: "projects",
+      entityId: updated.id,
+      actor: {
+        id: actor.id,
+        email: actor.email,
+        role: actor.systemRole,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+      },
+      metadata: {
+        isPinned: updated.isPinned,
+        orderId: existing.orderId,
+      },
+      status: "SUCCESS",
+    }).catch(() => {});
+
+    return { id: updated.id, success: true, isPinned: updated.isPinned };
   }
 
   /**

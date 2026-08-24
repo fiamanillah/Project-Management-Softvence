@@ -13,6 +13,7 @@ export async function seedBdOrders(ctx: SeedContext): Promise<void> {
   const enterpriseRfpId = ctx.bdOrderTypes.get("ENTERPRISE_RFP")!;
   const upworkProposalId = ctx.bdOrderTypes.get("UPWORK_PROPOSAL")!;
   const fiverrGigId = ctx.bdOrderTypes.get("FIVERR_GIG")!;
+  const directLeadId = ctx.bdOrderTypes.get("DIRECT_LEAD") || enterpriseRfpId;
 
   const upworkPlatId = ctx.platforms.get("UPWORK")!;
   const fiverrPlatId = ctx.platforms.get("FIVERR")!;
@@ -65,6 +66,20 @@ export async function seedBdOrders(ctx: SeedContext): Promise<void> {
       createdBy: kevinUser.id,
       assignments: [
         { userId: kevinUser.id, roleId: memberRoleId, note: "Account Manager" },
+      ],
+    },
+    {
+      title: "IoT Fleet Logistics Vehicle Telematics Inquiry ($80k USD)",
+      orderTypeId: directLeadId,
+      platformId: directPlatId,
+      teamId: growthTeamId,
+      statusId: inProgressStatusId,
+      description: "Inbound discovery query for 500+ commercial truck fleet telematics tracking portal.",
+      targetUrl: "https://hubspot.softvence.com/deals/88219",
+      createdBy: rachelUser.id,
+      assignments: [
+        { userId: rachelUser.id, roleId: teamLeadRoleId, note: "Closer" },
+        { userId: alexUser.id, roleId: srDevRoleId, note: "Systems Architect" },
       ],
     },
   ];

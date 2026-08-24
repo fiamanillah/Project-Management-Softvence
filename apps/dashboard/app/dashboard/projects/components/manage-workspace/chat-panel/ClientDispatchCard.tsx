@@ -26,16 +26,29 @@ import {
   Calendar,
   MessageSquare,
   Pencil,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@workspace/ui/components/alert-dialog";
 import { ClientDispatchModal } from "./ClientDispatchModal";
 import { MessageAttachmentPreview } from "./MessageAttachmentPreview";
 import { MessageSeenReceipts } from "./MessageSeenReceipts";
 import { MessageReactionPicker } from "./MessageReactionPicker";
 import { FormattedMessageText } from "./FormattedMessageText";
 import { MessageRevisionHistoryPopover } from "./MessageRevisionHistoryPopover";
-import { useElapsedTimer } from "./useElapsedTimer";
+import { useElapsedTimer, useCountdownTimer } from "./useElapsedTimer";
+import { formatMessageTime, formatMessageFullDateTime } from "./date-utils";
 import { getMessageTheme } from "../message-theme";
 import type {
   ApprovalWorkflow,
@@ -52,6 +65,7 @@ interface ClientDispatchCardProps {
   workflow: ApprovalWorkflow;
   onUpdateApproval: (updated: ApprovalWorkflow) => void;
   onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   isCurrentUser: boolean;
   messageText: string;
   attachments?: ChatAttachment[];
@@ -74,6 +88,7 @@ export function ClientDispatchCard({
   workflow,
   onUpdateApproval,
   onEdit,
+  onDeleteMessage,
   isCurrentUser,
   messageText,
   attachments,
@@ -92,6 +107,8 @@ export function ClientDispatchCard({
 }: ClientDispatchCardProps) {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const outboundType = workflow.outboundType || workflow.clientMessageType || "GENERAL_NOTICE";
   const theme = getMessageTheme(outboundType, "OUTBOUND");
@@ -105,11 +122,33 @@ export function ClientDispatchCard({
     isTerminal,
   });
 
-  const canEdit = Boolean(capabilities?.canEdit ?? isCurrentUser);
+  const editTimer = useCountdownTimer(capabilities?.editTimeRemainingSeconds);
+  const isEditExpired =
+    typeof capabilities?.editTimeRemainingSeconds === "number" && editTimer.isExpired;
+
+  const deleteTimer = useCountdownTimer(capabilities?.deleteTimeRemainingSeconds);
+  const isDeleteExpired =
+    typeof capabilities?.deleteTimeRemainingSeconds === "number" && deleteTimer.isExpired;
+
+  const canEdit = Boolean(capabilities?.canEdit ?? isCurrentUser) && !isEditExpired;
+  const canDelete = Boolean(capabilities?.canDelete ?? isCurrentUser) && !isDeleteExpired;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(messageText);
-    toast.success("Outbound message copied to clipboard");
+    toast.success("Message copied to clipboard");
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteMessage?.(id);
+      setShowDeleteConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete message");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const hasReactions = reactions && reactions.length > 0;
@@ -194,7 +233,11 @@ export function ClientDispatchCard({
                   size="icon-xs"
                   variant="ghost"
                   className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
-                  title="Edit draft"
+                  title={
+                    editTimer.secondsRemaining > 0
+                      ? `Edit draft (${editTimer.formatted} left)`
+                      : "Edit draft"
+                  }
                   onClick={() => setModalOpen(true)}
                 >
                   <Pencil className="size-3" />
@@ -219,6 +262,22 @@ export function ClientDispatchCard({
               >
                 <Copy className="size-3" />
               </Button>
+
+              {canDelete && id && (
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className="size-6 text-muted-foreground hover:text-destructive cursor-pointer rounded-full"
+                  title={
+                    deleteTimer.secondsRemaining > 0
+                      ? `Delete message (${deleteTimer.formatted} remaining)`
+                      : "Delete message"
+                  }
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              )}
             </div>
 
             {/* Outbound Card Surface with One-Side Theme Border and Header Tint */}
@@ -376,7 +435,12 @@ export function ClientDispatchCard({
                 {/* Left: Timestamp + Seen By + (edited) tag + Timeline Trigger */}
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
                   <div className="flex items-center gap-1.5 shrink-0 font-medium">
-                    <span>{timestamp}</span>
+                    <span
+                      title={formatMessageFullDateTime(timestamp)}
+                      className="cursor-default select-none transition-opacity hover:opacity-100"
+                    >
+                      {formatMessageTime(timestamp)}
+                    </span>
                     {(isEdited || (revisions && revisions.length > 0)) && (
                       <MessageRevisionHistoryPopover message={mockMessage} align="end">
                         <button
@@ -534,6 +598,45 @@ export function ClientDispatchCard({
         isCurrentUser={isCurrentUser}
         revisions={revisions}
       />
+
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="size-5" />
+              Delete outbound message?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs leading-relaxed text-muted-foreground space-y-1">
+              <span>Are you sure you want to delete this draft/outbound message? This action will remove it from the approval pipeline and chat stream.</span>
+              {deleteTimer.secondsRemaining > 0 && (
+                <span className="block font-medium text-amber-600 dark:text-amber-400">
+                  Author deletion window expires in: {deleteTimer.formatted}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel disabled={isDeleting} className="text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-semibold"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" /> Deleting...
+                </>
+              ) : (
+                "Delete message"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

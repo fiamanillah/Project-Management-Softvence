@@ -39,6 +39,7 @@
         "@socket.io/redis-adapter": "^8.3.0",
         "@workspace/cache": "workspace:*",
         "@workspace/db": "workspace:*",
+        "@workspace/env": "workspace:*",
         "@workspace/logger": "workspace:*",
         "@workspace/message-broker": "workspace:*",
         "@workspace/shared": "workspace:*",

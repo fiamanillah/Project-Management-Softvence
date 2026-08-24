@@ -15,16 +15,28 @@ import type {
 export class ProjectMessageTypeService {
   private logger = new AppLogger("ProjectMessageTypeService");
   private realtimeServer = RealtimeServer.getInstance();
+  private cache = new Map<string, { data: MessageTypeItem[]; expiresAt: number }>();
+  private readonly CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes TTL
 
   constructor(private readonly prisma: PrismaClient) {}
 
+  private invalidateCache(): void {
+    this.cache.clear();
+  }
+
   /**
-   * Retrieves active message types (filterable by direction: INTERNAL, OUTBOUND, INBOUND).
+   * Retrieves active message types (filterable by direction: INTERNAL, OUTBOUND, INBOUND) with caching (OPT-02).
    */
   public async getMessageTypes(
     direction?: string,
     actor?: AuthenticatedUser,
   ): Promise<MessageTypeItem[]> {
+    const cacheKey = direction || "ALL";
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     const where: any = { isActive: true };
     if (direction) {
       where.direction = direction;
@@ -35,7 +47,7 @@ export class ProjectMessageTypeService {
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
 
-    return types.map((t) => ({
+    const results = types.map((t) => ({
       id: t.id,
       code: t.code,
       label: t.label || t.name,
@@ -48,6 +60,9 @@ export class ProjectMessageTypeService {
       isActive: t.isActive,
       sortOrder: t.sortOrder,
     }));
+
+    this.cache.set(cacheKey, { data: results, expiresAt: Date.now() + this.CACHE_TTL_MS });
+    return results;
   }
 
   /**
@@ -98,6 +113,9 @@ export class ProjectMessageTypeService {
       isActive: created.isActive,
       sortOrder: created.sortOrder,
     };
+
+    // Invalidate cached message types
+    this.invalidateCache();
 
     // Broadcast new message type to all connected clients
     this.realtimeServer.broadcast("system:event", {
@@ -158,6 +176,9 @@ export class ProjectMessageTypeService {
       sortOrder: updated.sortOrder,
     };
 
+    // Invalidate cached message types
+    this.invalidateCache();
+
     this.realtimeServer.broadcast("system:event", {
       event: "message_type:updated",
       payload: item,
@@ -182,6 +203,9 @@ export class ProjectMessageTypeService {
       where: { id },
       data: { isActive: false },
     });
+
+    // Invalidate cached message types
+    this.invalidateCache();
 
     return { success: true };
   }

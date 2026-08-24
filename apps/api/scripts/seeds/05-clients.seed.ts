@@ -13,11 +13,11 @@ export async function seedClients(ctx: SeedContext): Promise<void> {
       name: "Acme Global Technologies",
       platformId: upworkPlatId,
       email: "sarah.j@acmetech.io",
-      company: "Acme Corp",
+      company: "Acme Corp (San Francisco, CA)",
       phone: "+1-415-555-0192",
       country: "United States",
       website: "https://acmetech.io",
-      contactNotes: "Primary POC: Sarah Jenkins (VP Engineering). Tier-1 Enterprise account.",
+      contactNotes: "Primary POC: Sarah Jenkins (VP Engineering). Tier-1 Enterprise client on Upwork Enterprise. Multi-phase SaaS ERP contract.",
     },
     {
       name: "FinTech NextGen Ltd",
@@ -27,7 +27,7 @@ export async function seedClients(ctx: SeedContext): Promise<void> {
       phone: "+44-20-7946-0912",
       country: "United Kingdom",
       website: "https://nextgenfin.co.uk",
-      contactNotes: "Open banking integration and merchant settlement dashboard.",
+      contactNotes: "Open banking integration, biometric security, and merchant settlement mobile application.",
     },
     {
       name: "HealthPulse AI Corp",
@@ -37,7 +37,7 @@ export async function seedClients(ctx: SeedContext): Promise<void> {
       phone: "+1-604-555-0144",
       country: "Canada",
       website: "https://healthpulse.ai",
-      contactNotes: "Direct agency client. Telemedicine video portal with HIPAA compliance.",
+      contactNotes: "Direct agency client. Telemedicine video portal with HIPAA compliance and AI real-time transcription.",
     },
     {
       name: "RetailCloud E-Commerce",
@@ -47,7 +47,7 @@ export async function seedClients(ctx: SeedContext): Promise<void> {
       phone: "+49-30-123456",
       country: "Germany",
       website: "https://retailcloud.de",
-      contactNotes: "Custom headless e-commerce store with Shopify & Stripe.",
+      contactNotes: "Custom headless e-commerce store with Shopify, Stripe, and high-performance design system.",
     },
     {
       name: "EduStream Global Academy",
@@ -57,7 +57,17 @@ export async function seedClients(ctx: SeedContext): Promise<void> {
       phone: "+61-2-9876-5432",
       country: "Australia",
       website: "https://edustream.org",
-      contactNotes: "Real-time interactive classroom portal with video streaming.",
+      contactNotes: "Real-time interactive classroom portal with video streaming and collaborative canvas.",
+    },
+    {
+      name: "Apex Fleet Logistics LLC",
+      platformId: upworkPlatId,
+      email: "operations@apexfleet.com",
+      company: "Apex Global Logistics",
+      phone: "+1-312-555-8821",
+      country: "United States",
+      website: "https://apexfleet.com",
+      contactNotes: "Fleet telematics, GPS vehicle live tracking, route optimization, and maintenance dispatcher portal.",
     },
   ];
 

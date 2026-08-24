@@ -4,7 +4,7 @@ import type { SeedContext } from "./types";
 export async function seedRolesAndDesignations(ctx: SeedContext): Promise<void> {
   const { prisma } = ctx;
 
-  // 1. Sync Permission Registry
+  // 1. Sync Permission Registry against declared manifests
   const registry = PermissionRegistry.getInstance();
   await registry.sync(prisma);
 

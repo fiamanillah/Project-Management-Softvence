@@ -78,15 +78,13 @@ export class CoreRealtimeGateway extends BaseSocketGateway {
 
   /**
    * Evaluates if a socket user is authorized to join a specific room.
+   * Gated strictly via canSocket / AuthorizationEngine with Deny-by-Default (Rule BE-1, SEC-06).
    */
   private async evaluateRoomAccess(socket: AuthenticatedSocket, room: string): Promise<boolean> {
     const user = socket.data.user;
-    if (!user) return false;
+    if (!user || !user.id) return false;
 
-    // SuperAdmin bypass for any room
-    if (user.systemRole === "SuperAdmin") return true;
-
-    // 1. Personal room: 'user:{id}' -> only that user
+    // 1. Personal room: 'user:{id}' -> only that exact user
     if (room.startsWith("user:")) {
       return room === `user:${user.id}`;
     }
@@ -97,26 +95,30 @@ export class CoreRealtimeGateway extends BaseSocketGateway {
       const projectId = parts[1];
       if (!projectId) return false;
 
-      // Check project view permission
+      // Check project view permission through centralized AuthorizationEngine
       return canSocket(socket, "project.view", { projectId });
     }
 
     // 3. Organization / Branch / Department rooms
     if (room.startsWith("branch:")) {
       const branchId = room.split(":")[1];
+      if (!branchId) return false;
       return user.branchId === branchId || (await canSocket(socket, "organization.branch.view", { branchId }));
     }
 
     if (room.startsWith("dept:")) {
       const departmentId = room.split(":")[1];
+      if (!departmentId) return false;
       return await canSocket(socket, "organization.department.view", { departmentId });
     }
 
-    // 4. General broadcast room 'global' or 'announcements'
+    // 4. General broadcast room 'global' or 'announcements' (authenticated users only)
     if (room === "global" || room === "announcements") {
       return true;
     }
 
-    return true;
+    // SEC-06: Explicit Deny-by-Default for all unrecognized room prefixes
+    this.logger.warn(`Access denied: Unrecognized or unauthorized room pattern '${room}' for user ${user.id}`);
+    return false;
   }
 }

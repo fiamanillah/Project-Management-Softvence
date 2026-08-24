@@ -21,6 +21,7 @@
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.2.0",
     "@prisma/client-runtime-utils": "^7.9.1",
+    "@workspace/env": "workspace:*",
     "dotenv": "^17.2.3",
     "mongoose": "^8.9.0",
     "pg": "^8.16.3",

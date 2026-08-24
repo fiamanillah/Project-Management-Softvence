@@ -14,6 +14,7 @@ import {
   FileText,
   Copy,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
@@ -27,12 +28,19 @@ import type { ChatAttachment } from "../types";
 interface MessageAttachmentPreviewProps {
   attachments: ChatAttachment[];
   className?: string;
+  canDelete?: boolean;
+  onDeleteAttachment?: (attachmentId: string) => void;
 }
 
 const MAX_VISIBLE_IMAGES = 4;
 const MAX_VISIBLE_FILES = 2;
 
-export function MessageAttachmentPreview({ attachments, className }: MessageAttachmentPreviewProps) {
+export function MessageAttachmentPreview({
+  attachments,
+  className,
+  canDelete = false,
+  onDeleteAttachment,
+}: MessageAttachmentPreviewProps) {
   // Gallery Dialog state
   const [galleryOpen, setGalleryOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"all" | "images" | "documents">("all");
@@ -308,6 +316,23 @@ export function MessageAttachmentPreview({ attachments, className }: MessageAtta
                   >
                     <Download className="size-3" />
                   </Button>
+
+                  {canDelete && onDeleteAttachment && file.id && (
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      className="size-6.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 shadow-2xs shrink-0 cursor-pointer"
+                      title="Delete Attachment"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete attachment "${file.name}"?`)) {
+                          onDeleteAttachment(file.id!);
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  )}
                 </div>
               </div>
             );

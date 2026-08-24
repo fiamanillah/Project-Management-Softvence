@@ -107,6 +107,13 @@ export const projectsPermissions: PermissionManifestItem[] = [
     implies: ["project.chat.view", "project.view"],
   },
   {
+    code: "project.chat.delete",
+    module: "Project Messaging",
+    description: "Delete any discussion or client message within scoped projects",
+    supportedScopes: SCOPE_PRESETS.PROJECT_HIERARCHICAL,
+    implies: ["project.chat.view", "project.view"],
+  },
+  {
     code: "project.chat.manage_types",
     module: "Project Messaging",
     description: "Create and configure custom message types for project conversations",

@@ -102,24 +102,48 @@ export function MessageApprovalCard({
           </span>
         </div>
 
-        <div>
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          {workflow.slaStatus && workflow.status !== "DISPATCHED" && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[9px] font-mono font-bold px-1.5 py-0 gap-1 rounded shrink-0",
+                workflow.slaStatus === "BREACHED"
+                  ? "bg-destructive/15 text-destructive border-destructive/40 animate-pulse"
+                  : workflow.slaStatus === "AT_RISK"
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40"
+                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+              )}
+              title={`Dwell: ${workflow.currentStageDwellMinutes || 0}m / SLA Target: ${workflow.slaTargetMinutes || 30}m`}
+            >
+              <Clock className="size-2.5" />
+              <span>
+                {workflow.slaStatus === "BREACHED"
+                  ? "SLA BREACHED"
+                  : workflow.slaStatus === "AT_RISK"
+                  ? `SLA AT RISK (${workflow.currentStageDwellMinutes}m)`
+                  : `SLA OK (${workflow.currentStageDwellMinutes || 0}/${workflow.slaTargetMinutes || 30}m)`}
+              </span>
+            </Badge>
+          )}
+
           {(workflow.status === "IN_REVIEW" || workflow.status === "PENDING_LEAD") && (
-            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-semibold">
+            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-semibold shrink-0">
               <Clock className="size-3" /> In Review
             </Badge>
           )}
           {workflow.status === "PENDING_SALES" && (
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] gap-1 font-semibold">
+            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] gap-1 font-semibold shrink-0">
               <Clock className="size-3" /> Awaiting Sales Dispatch
             </Badge>
           )}
           {workflow.status === "DISPATCHED" && (
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1 font-semibold">
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1 font-semibold shrink-0">
               <CheckCircle2 className="size-3" /> Dispatched to Client
             </Badge>
           )}
           {workflow.status === "REVISION_REQUESTED" && (
-            <Badge variant="outline" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 text-[10px] gap-1 font-semibold">
+            <Badge variant="outline" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 text-[10px] gap-1 font-semibold shrink-0">
               <AlertTriangle className="size-3" /> Revision Requested
             </Badge>
           )}

@@ -19,8 +19,11 @@ interface MessageListProps {
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onMarkSeen?: (messageIds: string[]) => void;
+  onOpenThread?: (messageId: string) => void;
+  onDeleteAttachment?: (messageId: string, attachmentId: string) => void;
   searchFilterQuery?: string;
   channelFilter?: "all" | "internal" | "client" | "approvals";
   targetScrollMessageId?: string | null;
@@ -38,8 +41,11 @@ export function MessageList({
   onReply,
   onReact,
   onEdit,
+  onDeleteMessage,
   onUpdateApproval,
   onMarkSeen,
+  onOpenThread,
+  onDeleteAttachment,
   searchFilterQuery = "",
   channelFilter = "all",
   targetScrollMessageId,
@@ -346,8 +352,11 @@ export function MessageList({
                     onReply={onReply}
                     onReact={onReact}
                     onEdit={onEdit}
+                    onDeleteMessage={onDeleteMessage}
                     onUpdateApproval={onUpdateApproval}
                     onScrollToMessage={scrollToMessage}
+                    onOpenThread={onOpenThread}
+                    onDeleteAttachment={onDeleteAttachment}
                     highlightedMessageId={highlightedId}
                   />
                 );

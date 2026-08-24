@@ -118,6 +118,7 @@ export const updateProjectSchema = z.object({
     .or(z.literal("")),
   startDate: z.string().datetime().optional().nullable().or(z.literal("")),
   deliveryDate: z.string().datetime().optional().nullable().or(z.literal("")),
+  isPinned: z.boolean().optional(),
 });
 
 export const assignProjectTeamSchema = z.object({
@@ -235,6 +236,7 @@ export interface ProjectCapabilities {
   canSalesDispatch?: boolean;
   canRequestRevision?: boolean;
   canManageCollateral?: boolean;
+  canPinProject?: boolean;
 }
 
 export interface ProjectStatusItem {
@@ -425,6 +427,7 @@ export interface ProjectItem {
   orderSheetUrl: string | null;
   startDate: string | Date | null;
   deliveryDate: string | Date | null;
+  isPinned?: boolean;
   createdAt: string | Date;
   updatedAt?: string | Date | null;
   deletedAt?: string | Date | null;
@@ -517,54 +520,47 @@ export interface ProjectLookups {
 // REAL-TIME MESSAGING, APPROVAL & WORKSPACE SCHEMAS
 // ============================================================================
 
+export const projectMessageAttachmentInputSchema = z.object({
+  name: z.string().min(1, "Attachment name is required").max(255),
+  type: z.string().max(100),
+  url: z
+    .string()
+    .url("Must be a valid URL")
+    .refine((url) => {
+      const lower = url.trim().toLowerCase();
+      return !lower.startsWith("javascript:") && !lower.startsWith("data:") && !lower.startsWith("vbscript:");
+    }, "Attachment URL protocol is not permitted"),
+  thumbnailUrl: z.string().url("Must be a valid thumbnail URL").optional().nullable().or(z.literal("")),
+  fileSizeBytes: z.number().max(100 * 1024 * 1024, "File size cannot exceed 100MB").optional().nullable(),
+  extension: z.string().max(20).optional().nullable(),
+  mimeType: z.string().max(100).optional().nullable(),
+});
+
 export const createProjectMessageSchema = z.object({
-  text: z.string().default(""),
+  text: z.string().max(10000, "Message cannot exceed 10,000 characters").default(""),
   purpose: z.enum(["INTERNAL_DISCUSSION", "CLIENT_COMMUNICATION"]).default("INTERNAL_DISCUSSION"),
   clientDirection: z.enum(["INBOUND", "OUTBOUND"]).optional().nullable(),
-  clientMessageType: z.string().optional().nullable(),
-  messageTypeId: z.string().uuid().optional().nullable(),
-  variant: z.string().optional().nullable(),
-  replyToMessageId: z.string().optional().nullable(),
-  attachments: z
-    .array(
-      z.object({
-        name: z.string(),
-        type: z.string(),
-        url: z.string(),
-        thumbnailUrl: z.string().optional().nullable(),
-        fileSizeBytes: z.number().optional().nullable(),
-        extension: z.string().optional().nullable(),
-        mimeType: z.string().optional().nullable(),
-      }),
-    )
-    .optional(),
+  clientMessageType: z.string().max(100).optional().nullable(),
+  messageTypeId: z.string().uuid("Invalid message type ID format").optional().nullable(),
+  variant: z.string().max(50).optional().nullable(),
+  replyToMessageId: z.string().uuid("Invalid reply message ID format").optional().nullable(),
+  attachments: z.array(projectMessageAttachmentInputSchema).max(20, "Maximum 20 attachments allowed").optional(),
+  idempotencyKey: z.string().max(100).optional().nullable(),
   metadata: z.record(z.string(), z.any()).optional().nullable(),
 });
 
 export const editProjectMessageSchema = z.object({
-  text: z.string().min(1, "Message content cannot be empty"),
-  reason: z.string().max(500).optional().nullable(),
-  attachments: z
-    .array(
-      z.object({
-        name: z.string(),
-        type: z.string(),
-        url: z.string(),
-        thumbnailUrl: z.string().optional().nullable(),
-        fileSizeBytes: z.number().optional().nullable(),
-        extension: z.string().optional().nullable(),
-        mimeType: z.string().optional().nullable(),
-      }),
-    )
-    .optional(),
+  text: z.string().min(1, "Message content cannot be empty").max(10000, "Message cannot exceed 10,000 characters"),
+  reason: z.string().max(500, "Edit reason cannot exceed 500 characters").optional().nullable(),
+  attachments: z.array(projectMessageAttachmentInputSchema).max(20, "Maximum 20 attachments allowed").optional(),
 });
 
 export const toggleReactionSchema = z.object({
-  emoji: z.string().min(1, "Emoji is required"),
+  emoji: z.string().min(1, "Emoji is required").max(50, "Invalid emoji format"),
 });
 
 export const markMessagesSeenSchema = z.object({
-  messageIds: z.array(z.string().uuid("Invalid message ID format")).min(1),
+  messageIds: z.array(z.string().uuid("Invalid message ID format")).min(1, "At least one message ID is required").max(100, "Cannot process more than 100 messages at once"),
 });
 
 export const leadApproveSchema = z.object({
@@ -579,6 +575,17 @@ export const salesDispatchSchema = z.object({
 
 export const requestRevisionSchema = z.object({
   rejectionReason: z.string().min(1, "Revision feedback is required").max(1000),
+});
+
+export const searchProjectMessagesSchema = z.object({
+  q: z.string().min(1, "Search query is required").max(200),
+  purpose: z.enum(["INTERNAL_DISCUSSION", "CLIENT_COMMUNICATION"]).optional(),
+  limit: z.coerce.number().min(1).max(100).default(20),
+});
+
+export const exportProjectMessagesSchema = z.object({
+  format: z.enum(["json", "csv", "txt"]).default("json"),
+  purpose: z.enum(["INTERNAL_DISCUSSION", "CLIENT_COMMUNICATION"]).optional(),
 });
 
 export const createMessageTypeSchema = z.object({
@@ -640,6 +647,8 @@ export type UpdateMessageTypeDTO = z.infer<typeof updateMessageTypeSchema>;
 export type CreateProjectMilestoneDTO = z.infer<typeof createProjectMilestoneSchema>;
 export type UpdateProjectMilestoneDTO = z.infer<typeof updateProjectMilestoneSchema>;
 export type CreateProjectLinkDTO = z.infer<typeof createProjectLinkSchema>;
+export type SearchProjectMessagesDTO = z.infer<typeof searchProjectMessagesSchema>;
+export type ExportProjectMessagesDTO = z.infer<typeof exportProjectMessagesSchema>;
 
 export interface MessageReactionItem {
   emoji: string;
@@ -734,6 +743,7 @@ export interface ProjectMessageCapabilities {
   canDelete?: boolean;
   canEdit?: boolean;
   editTimeRemainingSeconds?: number;
+  deleteTimeRemainingSeconds?: number;
 }
 
 export interface ProjectMessageItem {
@@ -752,6 +762,7 @@ export interface ProjectMessageItem {
   editHistoryCount?: number;
   text: string;
   timestamp: string;
+  createdAt?: string | null;
   dateGroup: string;
   purpose: "INTERNAL_DISCUSSION" | "CLIENT_COMMUNICATION";
   clientDirection?: "INBOUND" | "OUTBOUND" | null;
@@ -762,6 +773,7 @@ export interface ProjectMessageItem {
     senderName: string;
     text: string;
   } | null;
+  replyCount?: number;
   attachments?: ProjectMessageAttachmentItem[];
   reactions?: MessageReactionItem[];
   seenBy?: MessageReadReceiptItem[];

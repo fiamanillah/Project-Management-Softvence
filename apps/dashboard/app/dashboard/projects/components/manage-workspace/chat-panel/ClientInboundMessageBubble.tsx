@@ -10,20 +10,35 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Trash2,
   History,
   Loader2,
   Check,
   X,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
 import { Textarea } from "@workspace/ui/components/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@workspace/ui/components/alert-dialog";
+import { useAuth } from "@/lib/auth-context";
 import { MessageReplyPreview } from "./MessageReplyPreview";
 import { MessageAttachmentPreview } from "./MessageAttachmentPreview";
 import { MessageReactionPicker } from "./MessageReactionPicker";
 import { MessageSeenReceipts } from "./MessageSeenReceipts";
 import { FormattedMessageText } from "./FormattedMessageText";
 import { MessageRevisionHistoryPopover } from "./MessageRevisionHistoryPopover";
+import { formatMessageTime, formatMessageFullDateTime } from "./date-utils";
+import { useCountdownTimer } from "./useElapsedTimer";
 import { getMessageTheme } from "../message-theme";
 import type { ChatMessage } from "../types";
 
@@ -32,6 +47,7 @@ interface ClientInboundMessageBubbleProps {
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   onScrollToMessage?: (messageId: string) => void;
   isHighlighted?: boolean;
 }
@@ -41,26 +57,51 @@ export function ClientInboundMessageBubble({
   onReply,
   onReact,
   onEdit,
+  onDeleteMessage,
   onScrollToMessage,
   isHighlighted = false,
 }: ClientInboundMessageBubbleProps) {
+  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
   const [editText, setEditText] = React.useState(message.text);
   const [editReason, setEditReason] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   React.useEffect(() => {
     setEditText(message.text);
   }, [message.text]);
 
-  const canEdit = Boolean(message._capabilities?.canEdit);
+  const editTimer = useCountdownTimer(message._capabilities?.editTimeRemainingSeconds);
+  const isEditExpired =
+    typeof message._capabilities?.editTimeRemainingSeconds === "number" && editTimer.isExpired;
+
+  const deleteTimer = useCountdownTimer(message._capabilities?.deleteTimeRemainingSeconds);
+  const isDeleteExpired =
+    typeof message._capabilities?.deleteTimeRemainingSeconds === "number" && deleteTimer.isExpired;
+
+  const canEdit = Boolean(message._capabilities?.canEdit) && !isEditExpired;
+  const canDelete = Boolean(message._capabilities?.canDelete) && !isDeleteExpired;
   const relay = message.clientInboundRelay;
   const isLongMessage = message.text.length > 200 || message.text.split("\n").length > 3;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text);
     toast.success("Client message copied to clipboard");
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDeleteMessage?.(message.id);
+      setShowDeleteConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete message");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -108,6 +149,35 @@ export function ClientInboundMessageBubble({
         isHighlighted ? "ring-2 ring-primary ring-offset-2 bg-primary/10" : ""
       )}
     >
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="size-5" />
+              Delete relayed client message?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs leading-relaxed text-muted-foreground space-y-1">
+              <span>Are you sure you want to delete this relayed message? This action cannot be undone.</span>
+              {deleteTimer.secondsRemaining > 0 && (
+                <span className="block font-medium text-amber-600 dark:text-amber-400">
+                  Deletion window expires in: {deleteTimer.formatted}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="size-4 animate-spin" /> : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* 1. Sender Avatar (Aligned with top of sender header) */}
       <Avatar className="size-8 sm:size-9 rounded-xl ring-2 ring-sky-500/30 border border-sky-500/20 shrink-0 shadow-2xs mt-0.5">
         <AvatarImage src={clientAvatar} alt={clientName} />
@@ -138,7 +208,7 @@ export function ClientInboundMessageBubble({
 
         {/* Inbound Card Wrapper (Anchors Floating Action Bar and Reactions directly to the Card) */}
         <div className={cn("group/inbound-card relative w-full rounded-2xl min-w-0", hasReactions ? "mb-2" : "")}>
-          {/* Floating Action Bar on Hover (Reaction, Reply, Edit, Copy) */}
+          {/* Floating Action Bar on Hover (Reaction, Reply, Edit, Copy, Delete) */}
           <div className="absolute -top-3 right-3 z-30 opacity-0 group-hover/inbound-card:opacity-100 transition-opacity duration-150 pointer-events-none group-hover/inbound-card:pointer-events-auto flex items-center gap-0.5 rounded-full border border-border/80 bg-background/95 px-1.5 py-0.5 shadow-md backdrop-blur-md">
             <MessageReactionPicker onSelectEmoji={(emoji) => onReact(message.id, emoji)} />
 
@@ -147,7 +217,11 @@ export function ClientInboundMessageBubble({
                 size="icon-xs"
                 variant="ghost"
                 className="size-6 text-muted-foreground hover:text-foreground cursor-pointer rounded-full"
-                title="Edit relayed message"
+                title={
+                  editTimer.secondsRemaining > 0
+                    ? `Edit relayed message (${editTimer.formatted} left)`
+                    : "Edit relayed message"
+                }
                 onClick={() => setIsEditing(true)}
               >
                 <Pencil className="size-3" />
@@ -172,6 +246,22 @@ export function ClientInboundMessageBubble({
             >
               <Copy className="size-3" />
             </Button>
+            
+            {canDelete && (
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                className="size-6 text-muted-foreground hover:text-destructive cursor-pointer rounded-full"
+                title={
+                  deleteTimer.secondsRemaining > 0
+                    ? `Delete message (${deleteTimer.formatted} remaining)`
+                    : "Delete message"
+                }
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="size-3" />
+              </Button>
+            )}
           </div>
 
           {/* Inbound Card Surface with One-Side Border (Identical to Outbound Structure) */}
@@ -223,6 +313,12 @@ export function ClientInboundMessageBubble({
               {/* Inline Edit Form OR Message Text */}
               {isEditing ? (
                 <div className="space-y-2 py-1">
+                  {editTimer.secondsRemaining > 0 && (
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 w-fit">
+                      <Clock className="size-3" />
+                      <span>Edit window expires in {editTimer.formatted}</span>
+                    </div>
+                  )}
                   <Textarea
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
@@ -317,7 +413,12 @@ export function ClientInboundMessageBubble({
             {/* Card Footer: Timestamp, Edited Tag & Seen Receipts */}
             <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-muted/20 border-t border-border/40 text-[10px] text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <span>{message.timestamp}</span>
+                <span
+                  title={formatMessageFullDateTime(message.createdAt || message.timestamp)}
+                  className="cursor-default select-none transition-opacity hover:opacity-100"
+                >
+                  {formatMessageTime(message.createdAt || message.timestamp)}
+                </span>
 
                 {(message.isEdited || (message.revisions && message.revisions.length > 0)) && (
                   <MessageRevisionHistoryPopover message={message} align="start">

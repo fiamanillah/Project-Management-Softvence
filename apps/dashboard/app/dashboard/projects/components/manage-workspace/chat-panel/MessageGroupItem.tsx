@@ -7,6 +7,7 @@ import { Crown, Send } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { MessageBubble } from "./MessageBubble";
+import { formatMessageTime, formatMessageFullDateTime } from "./date-utils";
 import type { ChatMessage, ApprovalWorkflow } from "../types";
 
 interface MessageGroupItemProps {
@@ -14,8 +15,11 @@ interface MessageGroupItemProps {
   onReply: (message: ChatMessage) => void;
   onReact: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, text: string, reason?: string) => Promise<void> | void;
+  onDeleteMessage?: (messageId: string) => Promise<void> | void;
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
   onScrollToMessage?: (messageId: string) => void;
+  onOpenThread?: (messageId: string) => void;
+  onDeleteAttachment?: (messageId: string, attachmentId: string) => void;
   highlightedMessageId?: string | null;
 }
 
@@ -24,8 +28,11 @@ export function MessageGroupItem({
   onReply,
   onReact,
   onEdit,
+  onDeleteMessage,
   onUpdateApproval,
   onScrollToMessage,
+  onOpenThread,
+  onDeleteAttachment,
   highlightedMessageId,
 }: MessageGroupItemProps) {
   const { user } = useAuth();
@@ -52,8 +59,11 @@ export function MessageGroupItem({
             onReply={onReply}
             onReact={onReact}
             onEdit={onEdit}
+            onDeleteMessage={onDeleteMessage}
             onUpdateApproval={onUpdateApproval}
             onScrollToMessage={onScrollToMessage}
+            onOpenThread={onOpenThread}
+            onDeleteAttachment={onDeleteAttachment}
             isHighlighted={highlightedMessageId === msg.id}
           />
         ))}
@@ -125,6 +135,12 @@ export function MessageGroupItem({
                 {firstMsg.senderDesignation}
               </span>
             )}
+            <span
+              title={formatMessageFullDateTime(firstMsg.createdAt || firstMsg.timestamp)}
+              className="text-[10px] text-muted-foreground/60 ml-0.5 font-normal select-none cursor-default"
+            >
+              {formatMessageTime(firstMsg.createdAt || firstMsg.timestamp)}
+            </span>
           </div>
         )}
 
@@ -137,8 +153,11 @@ export function MessageGroupItem({
               onReply={onReply}
               onReact={onReact}
               onEdit={onEdit}
+              onDeleteMessage={onDeleteMessage}
               onUpdateApproval={onUpdateApproval}
               onScrollToMessage={onScrollToMessage}
+              onOpenThread={onOpenThread}
+              onDeleteAttachment={onDeleteAttachment}
               isHighlighted={highlightedMessageId === msg.id}
             />
           ))}

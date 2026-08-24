@@ -1,7 +1,7 @@
-// src/Modules/Projects/services/ProjectChatService.ts
-
 import type { PrismaClient } from "@workspace/db";
+import { publishNotification } from "@workspace/message-broker";
 import { AppLogger } from "@/core/logging/logger";
+import { AuditLogService } from "@/core/audit/audit.service";
 import { NotFoundError, ForbiddenError, BadRequestError } from "@/core/errors/AppError";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import { can } from "@/core/authorization/AuthorizationEngine";
@@ -13,12 +13,14 @@ import type {
   ProjectMessageRevisionItem,
   ToggleReactionDTO,
   MarkMessagesSeenDTO,
+  SearchProjectMessagesDTO,
 } from "../ProjectDTO";
 import {
   getProjectResourceContext,
   sanitizeAndDecorateMessage,
   findProjectByIdOrCode,
 } from "./projects.capability.helper";
+import { sanitizeMessageText, isSafeAttachmentUrl } from "@/utils/sanitize";
 
 export class ProjectChatService {
   private logger = new AppLogger("ProjectChatService");
@@ -261,6 +263,56 @@ export class ProjectChatService {
       }
     }
 
+    // ENT-04: Message Idempotency deduplication check
+    if (dto.idempotencyKey) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existingMessage = await this.prisma.projectMessage.findFirst({
+        where: {
+          projectId: resolvedProjectId,
+          senderId: actor.id,
+          createdAt: { gte: fiveMinutesAgo },
+          deletedAt: null,
+          metadata: { path: ["idempotencyKey"], equals: dto.idempotencyKey },
+        },
+        include: {
+          sender: {
+            include: {
+              role: { include: { department: true } },
+              designation: true,
+            },
+          },
+          messageType: true,
+          replyTo: {
+            include: { sender: true },
+          },
+          attachments: true,
+          reactions: true,
+          reads: {
+            include: {
+              user: { include: { designation: true } },
+            },
+          },
+          approvalWorkflow: {
+            include: {
+              status: true,
+              requestedBy: true,
+              leadApprover: true,
+              salesDispatcher: true,
+              rejector: true,
+              auditTrail: {
+                include: { actor: true },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          },
+        },
+      });
+
+      if (existingMessage) {
+        return sanitizeAndDecorateMessage(existingMessage, actor, project);
+      }
+    }
+
     // Database transaction to create message and approval workflow
     const created = await this.prisma.$transaction(async (tx) => {
       let validReplyToId: string | null = null;
@@ -272,7 +324,15 @@ export class ProjectChatService {
         validReplyToId = existingReply?.id || null;
       }
 
-      const messageText = dto.text?.trim() || (dto.attachments && dto.attachments.length > 0 ? "Shared attachments" : "");
+      const rawText = sanitizeMessageText(dto.text);
+      const messageText = rawText || (dto.attachments && dto.attachments.length > 0 ? "Shared attachments" : "");
+
+      const safeAttachments = (dto.attachments || []).filter((att) => isSafeAttachmentUrl(att.url));
+
+      const messageMetadata: Record<string, any> = {
+        ...(dto.metadata || {}),
+        ...(dto.idempotencyKey ? { idempotencyKey: dto.idempotencyKey } : {}),
+      };
 
       const msg = await tx.projectMessage.create({
         data: {
@@ -285,10 +345,10 @@ export class ProjectChatService {
           variant: dto.variant || (isClientInbound ? "tinted" : isClientOutbound ? "outline" : "default"),
           replyToMessageId: validReplyToId,
           isFromClient: Boolean(isClientInbound),
-          metadata: (dto.metadata ?? undefined) as any,
-          attachments: dto.attachments && dto.attachments.length > 0
+          metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : undefined,
+          attachments: safeAttachments.length > 0
             ? {
-                create: dto.attachments.map((att) => ({
+                create: safeAttachments.map((att) => ({
                   name: att.name,
                   type: att.type,
                   url: att.url,
@@ -446,10 +506,77 @@ export class ProjectChatService {
         attentionType,
       };
 
-      // Broadcast activity bump to all active connections in workspace cluster
-      this.realtimeServer.broadcast("project:activity_bump" as any, bumpPayload as any);
+      // INC-05: Broadcast activity bump to targeted project member user rooms
+      for (const userId of allRecipientUserIds) {
+        this.realtimeServer.toUser(userId, "project:activity_bump", bumpPayload as any);
+      }
     } catch (bumpErr) {
       this.logger.warn("Failed to broadcast project activity bump:", { error: bumpErr });
+    }
+
+    // FEAT-08: Extract @mentions and notify mentioned users
+    try {
+      const mentionRegex = /@\[([a-f0-9\-]{36})\]|@([a-zA-Z0-9_\.\-]+)/g;
+      let match: RegExpExecArray | null;
+      const mentionedIdentifiers: string[] = [];
+      while ((match = mentionRegex.exec(created.text || "")) !== null) {
+        const identifier = match[1] || match[2];
+        if (identifier && !mentionedIdentifiers.includes(identifier)) {
+          mentionedIdentifiers.push(identifier);
+        }
+      }
+
+      if (mentionedIdentifiers.length > 0) {
+        const mentionedUsers = await this.prisma.user.findMany({
+          where: {
+            OR: [
+              { id: { in: mentionedIdentifiers } },
+              { email: { in: mentionedIdentifiers } },
+              { employeeId: { in: mentionedIdentifiers } },
+            ],
+            isActive: true,
+          },
+          select: { id: true, email: true },
+        });
+
+        for (const u of mentionedUsers) {
+          if (u.id !== actor.id) {
+            publishNotification({
+              recipientId: u.id,
+              type: "CHAT_MENTION",
+              title: `Mentioned in ${project.orderId || project.projectName || "Project"}`,
+              body: `${actor.email?.split("@")[0] || "A team member"} mentioned you: "${created.text.slice(0, 100)}"`,
+              entityType: "PROJECT_MESSAGE",
+              entityId: created.id,
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (mentionErr) {
+      this.logger.warn("Failed to process @mentions for message:", { error: mentionErr });
+    }
+
+    // FEAT-07: When client outbound message requires approval review, notify reviewers
+    if (isClientOutbound && !isAutoApproved && initialApprovalStatusId) {
+      try {
+        const reviewers = ((project as any).teamAssignments || []).flatMap((ta: any) =>
+          (ta.team?.members || []).map((m: any) => m.userId)
+        );
+        for (const reviewerId of reviewers) {
+          if (reviewerId !== actor.id) {
+            publishNotification({
+              recipientId: reviewerId,
+              type: "MESSAGE_APPROVAL_REQUIRED",
+              title: `Review Required: ${project.orderId || "Client Draft"}`,
+              body: `New client communication draft requires your review before dispatch.`,
+              entityType: "PROJECT_MESSAGE",
+              entityId: created.id,
+            }).catch(() => {});
+          }
+        }
+      } catch (reviewNotifErr) {
+        this.logger.warn("Failed to dispatch approval review notification:", { error: reviewNotifErr });
+      }
     }
 
     this.logger.info(`Message sent in project ${resolvedProjectId} by user ${actor.id} (msgId=${created.id})`);
@@ -561,41 +688,57 @@ export class ProjectChatService {
       throw new NotFoundError("User not found");
     }
 
-    for (const messageId of dto.messageIds) {
-      await this.prisma.projectMessageReadReceipt.upsert({
-        where: {
-          messageId_userId: {
+    const now = new Date();
+
+    // INC-04: Batch upsert all read receipts in parallel
+    await Promise.all(
+      dto.messageIds.map((messageId) =>
+        this.prisma.projectMessageReadReceipt.upsert({
+          where: {
+            messageId_userId: {
+              messageId,
+              userId: actor.id,
+            },
+          },
+          create: {
             messageId,
             userId: actor.id,
+            seenAt: now,
           },
-        },
-        create: {
-          messageId,
-          userId: actor.id,
-        },
-        update: {
-          seenAt: new Date(),
-        },
-      });
+          update: {
+            seenAt: now,
+          },
+        }),
+      ),
+    );
 
-      // Fetch updated seen receipts for broadcasting
-      const receipts = await this.prisma.projectMessageReadReceipt.findMany({
-        where: { messageId },
-        include: { user: { include: { designation: true } } },
-      });
+    // Fetch and broadcast updated seen receipts per message
+    const allReceipts = await this.prisma.projectMessageReadReceipt.findMany({
+      where: { messageId: { in: dto.messageIds } },
+      include: { user: { include: { designation: true } } },
+    });
 
-      const seenBy = receipts.map((r) => ({
+    const receiptsByMessage = new Map<string, typeof allReceipts>();
+    for (const r of allReceipts) {
+      const list = receiptsByMessage.get(r.messageId) || [];
+      list.push(r);
+      receiptsByMessage.set(r.messageId, list);
+    }
+
+    for (const messageId of dto.messageIds) {
+      const messageReceipts = receiptsByMessage.get(messageId) || [];
+      const seenBy = messageReceipts.map((r) => ({
         userId: r.userId,
         userName: r.user ? `${r.user.firstName} ${r.user.lastName}` : "User",
         userAvatar: r.user?.avatarUrl || null,
         userDesignation: r.user?.designation?.name || null,
-        seenAt: new Date(r.seenAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        seenAt: new Date(r.seenAt).toISOString(),
       }));
 
       this.realtimeServer.toProject(resolvedProjectId, "chat:seen_receipts_updated", {
         messageId,
         seenBy,
-      } as any);
+      });
     }
 
     return { success: true };
@@ -671,6 +814,16 @@ export class ProjectChatService {
 
     const decorated = await sanitizeAndDecorateMessage(updated, actor, message.project);
 
+    // ENT-03: Audit log pin/unpin action
+    AuditLogService.log({
+      module: "PROJECT_CHAT",
+      action: newPinnedState ? "MESSAGE_PIN" : "MESSAGE_UNPIN",
+      entityTable: "project_messages",
+      entityId: messageId,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: { projectId: resolvedProjectId, isPinned: newPinnedState },
+    }).catch(() => {});
+
     // Broadcast updated message to room
     this.realtimeServer.toProject(projectId, "chat:message_updated", decorated as any);
 
@@ -718,7 +871,7 @@ export class ProjectChatService {
     const createdAtTime = new Date(message.createdAt).getTime();
     const nowTime = Date.now();
     const elapsedMs = Math.max(0, nowTime - createdAtTime);
-    const internalEditWindowMs = 15 * 60 * 1000; // 15 minutes window
+    const internalEditWindowMs = 10 * 60 * 1000; // 10 minutes window (Rule BE-1)
     const isWithinEditWindow = elapsedMs <= internalEditWindowMs;
 
     const [canLeadApprove, canSalesDispatch, canEditGlobal, canSendClient] = await Promise.all([
@@ -733,9 +886,15 @@ export class ProjectChatService {
 
     if (isClientOutbound && message.approvalWorkflow) {
       const statusObj = message.approvalWorkflow.status;
-      if (statusObj?.requiresLeadAction || statusObj?.code === "REVISION_REQUESTED") {
+      const isRevisionOrReview =
+        statusObj && !statusObj.isTerminal && !statusObj.requiresSalesAction;
+
+      if (statusObj?.requiresLeadAction || isRevisionOrReview) {
         if (!isAuthor && !canLeadApprove && !canEditGlobal) {
           throw new ForbiddenError("You do not have permission to edit this message draft");
+        }
+        if (isAuthor && !isWithinEditWindow && !canLeadApprove && !canEditGlobal) {
+          throw new ForbiddenError("Edit window expired (message drafts can only be edited within 10 minutes).");
         }
       } else if (statusObj?.requiresSalesAction || statusObj?.isTerminal) {
         // Once approved, ordinary senders cannot edit. Only leaders or users with approval permissions can edit.
@@ -745,7 +904,7 @@ export class ProjectChatService {
       }
     } else if (isClientInbound) {
       if (!isWithinEditWindow && !canSendClient && !canEditGlobal) {
-        throw new ForbiddenError("Edit window expired (client relays can only be edited within 15 minutes).");
+        throw new ForbiddenError("Edit window expired (client relays can only be edited within 10 minutes).");
       }
       if (!isAuthor && !canSendClient && !canEditGlobal) {
         throw new ForbiddenError("You do not have permission to edit this relayed client message");
@@ -753,14 +912,14 @@ export class ProjectChatService {
     } else {
       // Internal Discussion
       if (!isWithinEditWindow && !canEditGlobal) {
-        throw new ForbiddenError("Edit window expired (internal messages can only be edited within 15 minutes of sending).");
+        throw new ForbiddenError("Edit window expired (internal messages can only be edited within 10 minutes of sending).");
       }
       if (!isAuthor && !canEditGlobal) {
         throw new ForbiddenError("You can only edit your own messages");
       }
     }
 
-    const newText = dto.text.trim();
+    const newText = sanitizeMessageText(dto.text);
     if (!newText) {
       throw new BadRequestError("Message text cannot be empty");
     }
@@ -798,7 +957,7 @@ export class ProjectChatService {
           !currentStatus.requiresSalesAction;
 
         // If author resubmitted a rejected / revision requested message
-        if (isRevisionState || currentStatus?.code === "REVISION_REQUESTED") {
+        if (isRevisionState) {
           const [canAutoApprove, canLead] = await Promise.all([
             can(actor, "project.approval.auto_approve", resourceContext),
             can(actor, "project.approval.lead_review", resourceContext),
@@ -926,6 +1085,16 @@ export class ProjectChatService {
       } as any);
     }
 
+    // ENT-03: Audit log message edit
+    AuditLogService.log({
+      module: "PROJECT_CHAT",
+      action: "MESSAGE_EDIT",
+      entityTable: "project_messages",
+      entityId: messageId,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: { projectId: resolvedProjectId, reason: dto.reason },
+    }).catch(() => {});
+
     this.logger.info(`Message ${messageId} in project ${resolvedProjectId} edited by user ${actor.id}`);
     return decorated;
   }
@@ -960,12 +1129,8 @@ export class ProjectChatService {
       orderBy: { createdAt: "desc" },
       include: {
         editor: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-            designation: { select: { name: true } },
+          include: {
+            designation: true,
           },
         },
       },
@@ -982,5 +1147,554 @@ export class ProjectChatService {
       reason: rev.reason || null,
       createdAt: rev.createdAt.toISOString(),
     }));
+  }
+
+  /**
+   * Soft deletes a message from the project conversation (FEAT-01).
+   */
+  public async deleteMessage(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ success: boolean; messageId: string }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundError("Project not found");
+    }
+
+    const resolvedProjectId = project.id;
+    const resourceContext = getProjectResourceContext(project);
+
+    const message = await this.prisma.projectMessage.findFirst({
+      where: { id: messageId, projectId: resolvedProjectId, deletedAt: null },
+    });
+
+    if (!message) {
+      throw new NotFoundError("Message not found");
+    }
+
+    const isAuthor = message.senderId === actor.id;
+    const [canDeleteChat, canDeleteGlobal, canEditGlobal] = await Promise.all([
+      can(actor, "project.chat.delete", resourceContext),
+      can(actor, "project.delete", resourceContext),
+      can(actor, "project.edit", resourceContext),
+    ]);
+
+    const hasElevatedDeleteScope = canDeleteChat || canDeleteGlobal || canEditGlobal;
+
+    if (!hasElevatedDeleteScope) {
+      if (!isAuthor) {
+        throw new ForbiddenError("You do not have permission to delete this message");
+      }
+
+      // Check author delete window (10 minutes = 600 seconds)
+      const createdAtTime = new Date(message.createdAt).getTime();
+      const elapsedMs = Date.now() - createdAtTime;
+      const internalDeleteWindowMs = 10 * 60 * 1000; // 10 minutes (Rule BE-1)
+
+      if (elapsedMs > internalDeleteWindowMs) {
+        throw new ForbiddenError(
+          "The deletion window for this message has expired (10 minutes). Contact a team lead or project manager to delete older messages."
+        );
+      }
+    }
+
+    const now = new Date();
+    await this.prisma.projectMessage.update({
+      where: { id: messageId },
+      data: {
+        deletedAt: now,
+        updatedAt: now,
+      },
+    });
+
+    // ENT-03: Audit log message deletion
+    AuditLogService.log({
+      module: "PROJECT_CHAT",
+      action: "MESSAGE_DELETE",
+      entityTable: "project_messages",
+      entityId: messageId,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: { projectId: resolvedProjectId },
+    }).catch(() => {});
+
+    // Broadcast deletion event to active project rooms
+    this.realtimeServer.toProject(resolvedProjectId, "chat:message_deleted", {
+      projectId: resolvedProjectId,
+      messageId,
+    });
+    if (projectId !== resolvedProjectId) {
+      this.realtimeServer.toProject(projectId, "chat:message_deleted", {
+        projectId: resolvedProjectId,
+        messageId,
+      });
+    }
+
+    this.logger.info(`Message ${messageId} soft-deleted in project ${resolvedProjectId} by user ${actor.id}`);
+    return { success: true, messageId };
+  }
+
+  /**
+   * Retrieves full nested message thread for a given parent or reply message (FEAT-03).
+   */
+  public async getMessageThread(
+    projectId: string,
+    messageId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{
+    parentMessage: ProjectMessageItem;
+    replies: ProjectMessageItem[];
+    replyCount: number;
+  }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) throw new NotFoundError("Project not found");
+    const resolvedProjectId = project.id;
+
+    const resourceContext = getProjectResourceContext(project);
+    const hasViewPermission = await can(actor, "project.chat.view", resourceContext);
+    if (!hasViewPermission) {
+      throw new ForbiddenError("You do not have permission to view this project conversation");
+    }
+
+    const targetMessage = await this.prisma.projectMessage.findFirst({
+      where: { id: messageId, projectId: resolvedProjectId, deletedAt: null },
+      include: {
+        sender: { include: { role: { include: { department: true } }, designation: true } },
+        messageType: true,
+        replyTo: { include: { sender: true } },
+        attachments: true,
+        reactions: true,
+        reads: { include: { user: { include: { designation: true } } } },
+        approvalWorkflow: {
+          include: {
+            status: true,
+            requestedBy: true,
+            leadApprover: true,
+            salesDispatcher: true,
+            rejector: true,
+            auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+    });
+
+    if (!targetMessage) throw new NotFoundError("Message not found");
+
+    // Find root parent if target is a reply
+    let rootParent = targetMessage;
+    if (targetMessage.replyToMessageId) {
+      const root = await this.prisma.projectMessage.findFirst({
+        where: { id: targetMessage.replyToMessageId, projectId: resolvedProjectId, deletedAt: null },
+        include: {
+          sender: { include: { role: { include: { department: true } }, designation: true } },
+          messageType: true,
+          replyTo: { include: { sender: true } },
+          attachments: true,
+          reactions: true,
+          reads: { include: { user: { include: { designation: true } } } },
+          approvalWorkflow: {
+            include: {
+              status: true,
+              requestedBy: true,
+              leadApprover: true,
+              salesDispatcher: true,
+              rejector: true,
+              auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+            },
+          },
+        },
+      });
+      if (root) rootParent = root;
+    }
+
+    // Fetch all active replies to root parent
+    const replyRows = await this.prisma.projectMessage.findMany({
+      where: {
+        replyToMessageId: rootParent.id,
+        projectId: resolvedProjectId,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: "asc" },
+      include: {
+        sender: { include: { role: { include: { department: true } }, designation: true } },
+        messageType: true,
+        replyTo: { include: { sender: true } },
+        attachments: true,
+        reactions: true,
+        reads: { include: { user: { include: { designation: true } } } },
+        approvalWorkflow: {
+          include: {
+            status: true,
+            requestedBy: true,
+            leadApprover: true,
+            salesDispatcher: true,
+            rejector: true,
+            auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+    });
+
+    const [parentDecorated, repliesDecorated] = await Promise.all([
+      sanitizeAndDecorateMessage(rootParent, actor, project),
+      Promise.all(replyRows.map((r) => sanitizeAndDecorateMessage(r, actor, project))),
+    ]);
+
+    return {
+      parentMessage: parentDecorated,
+      replies: repliesDecorated,
+      replyCount: repliesDecorated.length,
+    };
+  }
+
+  /**
+   * Searches messages in a project conversation (FEAT-02).
+   */
+  public async searchMessages(
+    projectId: string,
+    query: SearchProjectMessagesDTO,
+    actor: AuthenticatedUser,
+  ): Promise<{ messages: ProjectMessageItem[]; total: number }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) throw new NotFoundError("Project not found");
+    const resolvedProjectId = project.id;
+
+    const resourceContext = getProjectResourceContext(project);
+    const hasViewPermission = await can(actor, "project.chat.view", resourceContext);
+    if (!hasViewPermission) {
+      throw new ForbiddenError("You do not have permission to search this project conversation");
+    }
+
+    const sanitizedQ = sanitizeMessageText(query.q);
+    const whereClause: any = {
+      projectId: resolvedProjectId,
+      deletedAt: null,
+      text: { contains: sanitizedQ, mode: "insensitive" },
+      ...(query.purpose ? { purpose: query.purpose } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.projectMessage.findMany({
+        where: whereClause,
+        take: query.limit || 20,
+        orderBy: { createdAt: "desc" },
+        include: {
+          sender: { include: { role: { include: { department: true } }, designation: true } },
+          messageType: true,
+          replyTo: { include: { sender: true } },
+          attachments: true,
+          reactions: true,
+          reads: { include: { user: { include: { designation: true } } } },
+          approvalWorkflow: {
+            include: {
+              status: true,
+              requestedBy: true,
+              leadApprover: true,
+              salesDispatcher: true,
+              rejector: true,
+              auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+            },
+          },
+        },
+      }),
+      this.prisma.projectMessage.count({ where: whereClause }),
+    ]);
+
+    const messages = await Promise.all(
+      rows.map((row) => sanitizeAndDecorateMessage(row, actor, project)),
+    );
+
+    return { messages, total };
+  }
+
+  /**
+   * Exports project messages to JSON, CSV, or formatted TXT (FEAT-12).
+   */
+  public async exportMessages(
+    projectId: string,
+    format: "json" | "csv" | "txt" = "json",
+    actor: AuthenticatedUser,
+  ): Promise<{ content: string; contentType: string; filename: string }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) throw new NotFoundError("Project not found");
+    const resolvedProjectId = project.id;
+
+    const resourceContext = getProjectResourceContext(project);
+    const hasExportPermission = await can(actor, "project.chat.view", resourceContext);
+    if (!hasExportPermission) {
+      throw new ForbiddenError("You do not have permission to export project messages");
+    }
+
+    const messages = await this.prisma.projectMessage.findMany({
+      where: { projectId: resolvedProjectId, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+      include: {
+        sender: true,
+        messageType: true,
+        attachments: true,
+      },
+    });
+
+    const code = project.orderId || project.projectName || "project";
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (format === "csv") {
+      const header = "Timestamp,Sender,Role,Purpose,Type,Message,Attachments\n";
+      const rows = messages.map((m) => {
+        const timestamp = `"${m.createdAt.toISOString()}"`;
+        const sender = `"${m.sender ? `${m.sender.firstName} ${m.sender.lastName}` : "User"}"`;
+        const role = `"${m.isFromClient ? "Client" : "Team"}"`;
+        const purpose = `"${m.purpose}"`;
+        const type = `"${(m.messageType as any)?.label || (m.messageType as any)?.name || (m.purpose === "CLIENT_COMMUNICATION" ? "Client" : "Standard")}"`;
+        const text = `"${m.text.replace(/"/g, '""')}"`;
+        const atts = `"${(m.attachments || []).map((a) => a.name).join("; ")}"`;
+        return [timestamp, sender, role, purpose, type, text, atts].join(",");
+      });
+      return {
+        content: header + rows.join("\n"),
+        contentType: "text/csv; charset=utf-8",
+        filename: `${code}-chat-${dateStr}.csv`,
+      };
+    } else if (format === "txt") {
+      const lines = messages.map((m) => {
+        const sender = m.sender ? `${m.sender.firstName} ${m.sender.lastName}` : "User";
+        const attStr = m.attachments?.length ? ` [Attachments: ${m.attachments.map((a) => a.name).join(", ")}]` : "";
+        return `[${m.createdAt.toISOString()}] ${sender} (${m.purpose}): ${m.text}${attStr}`;
+      });
+      return {
+        content: lines.join("\n"),
+        contentType: "text/plain; charset=utf-8",
+        filename: `${code}-chat-${dateStr}.txt`,
+      };
+    } else {
+      const exportData = messages.map((m) => ({
+        id: m.id,
+        createdAt: m.createdAt.toISOString(),
+        sender: m.sender ? { id: m.sender.id, name: `${m.sender.firstName} ${m.sender.lastName}`, email: m.sender.email } : null,
+        purpose: m.purpose,
+        direction: m.clientDirection,
+        text: m.text,
+        attachments: m.attachments.map((a) => ({ name: a.name, url: a.url, type: a.type })),
+      }));
+      return {
+        content: JSON.stringify(exportData, null, 2),
+        contentType: "application/json; charset=utf-8",
+        filename: `${code}-chat-${dateStr}.json`,
+      };
+    }
+  }
+
+  /**
+   * Deletes an individual attachment from a message (FEAT-16).
+   */
+  public async deleteAttachment(
+    projectId: string,
+    messageId: string,
+    attachmentId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ success: boolean; attachmentId: string }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+    if (!project) throw new NotFoundError("Project not found");
+    const resolvedProjectId = project.id;
+
+    const message = await this.prisma.projectMessage.findFirst({
+      where: { id: messageId, projectId: resolvedProjectId, deletedAt: null },
+      include: { attachments: true },
+    });
+    if (!message) throw new NotFoundError("Message not found");
+
+    const attachment = message.attachments.find((a) => a.id === attachmentId);
+    if (!attachment) throw new NotFoundError("Attachment not found");
+
+    const isAuthor = message.senderId === actor.id;
+    const resourceContext = getProjectResourceContext(project);
+    const canDeleteGlobal = await can(actor, "project.delete", resourceContext);
+
+    if (!isAuthor && !canDeleteGlobal) {
+      throw new ForbiddenError("You do not have permission to delete this attachment");
+    }
+
+    await this.prisma.projectMessageAttachment.delete({
+      where: { id: attachmentId },
+    });
+
+    AuditLogService.log({
+      module: "PROJECT_CHAT",
+      action: "ATTACHMENT_DELETE",
+      entityTable: "project_message_attachments",
+      entityId: attachmentId,
+      actor: { id: actor.id, email: actor.email, role: actor.systemRole },
+      metadata: { messageId, projectId: resolvedProjectId, fileName: attachment.name },
+    }).catch(() => {});
+
+    const updatedMessage = await this.prisma.projectMessage.findUnique({
+      where: { id: messageId },
+      include: {
+        sender: { include: { role: { include: { department: true } }, designation: true } },
+        messageType: true,
+        replyTo: { include: { sender: true } },
+        attachments: true,
+        reactions: true,
+        reads: { include: { user: { include: { designation: true } } } },
+        approvalWorkflow: {
+          include: {
+            status: true,
+            requestedBy: true,
+            leadApprover: true,
+            salesDispatcher: true,
+            rejector: true,
+            auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+    });
+
+    if (updatedMessage) {
+      const decorated = await sanitizeAndDecorateMessage(updatedMessage, actor, project);
+      this.realtimeServer.toProject(resolvedProjectId, "chat:message_updated", decorated as any);
+    }
+
+    return { success: true, attachmentId };
+  }
+
+  /**
+   * Retrieves all pinned messages in the project conversation (FEAT-15).
+   */
+  public async getPinnedMessages(
+    projectId: string,
+    actor: AuthenticatedUser,
+  ): Promise<ProjectMessageItem[]> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId, {
+      teamAssignments: {
+        where: { unassignedAt: null },
+        include: { team: { include: { department: true } } },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundError("Project not found");
+    }
+
+    const resourceContext = getProjectResourceContext(project);
+    const hasViewPermission = await can(actor, "project.chat.view", resourceContext);
+    if (!hasViewPermission) {
+      throw new ForbiddenError("You do not have permission to view this project conversation");
+    }
+
+    const messages = await this.prisma.projectMessage.findMany({
+      where: {
+        projectId: project.id,
+        isPinned: true,
+        deletedAt: null,
+      },
+      orderBy: { pinnedAt: "desc" },
+      include: {
+        sender: {
+          include: {
+            role: { include: { department: true } },
+            designation: true,
+          },
+        },
+        messageType: true,
+        replyTo: { include: { sender: true } },
+        attachments: true,
+        reactions: true,
+        reads: { include: { user: { include: { designation: true } } } },
+        approvalWorkflow: {
+          include: {
+            status: true,
+            requestedBy: true,
+            leadApprover: true,
+            salesDispatcher: true,
+            rejector: true,
+            auditTrail: { include: { actor: true }, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+    });
+
+    return Promise.all(messages.map((m) => sanitizeAndDecorateMessage(m, actor, project)));
+  }
+
+  /**
+   * Retrieves unread message count for a project for the requesting user (FEAT-04).
+   */
+  public async getUnreadCount(
+    projectId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ unreadCount: number }> {
+    const project = await findProjectByIdOrCode(this.prisma, projectId);
+    if (!project) {
+      return { unreadCount: 0 };
+    }
+
+    const latestRead = await this.prisma.projectMessageReadReceipt.findFirst({
+      where: {
+        userId: actor.id,
+        message: { projectId: project.id, deletedAt: null },
+      },
+      orderBy: { seenAt: "desc" },
+      select: { seenAt: true },
+    });
+
+    const where: any = {
+      projectId: project.id,
+      senderId: { not: actor.id },
+      deletedAt: null,
+    };
+
+    if (latestRead?.seenAt) {
+      where.createdAt = { gt: latestRead.seenAt };
+    }
+
+    const count = await this.prisma.projectMessage.count({ where });
+    return { unreadCount: count };
+  }
+
+  /**
+   * Retrieves user display name with caching (INC-07).
+   */
+  public async getUserDisplayName(userId: string): Promise<string> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true },
+      });
+      if (user && (user.firstName || user.lastName)) {
+        return `${user.firstName || ""} ${user.lastName || ""}`.trim();
+      }
+    } catch {
+      // Fallback
+    }
+    return "Team Member";
   }
 }

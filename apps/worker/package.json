@@ -11,11 +11,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@workspace/db": "workspace:*",
-    "@workspace/shared": "workspace:*",
-    "@workspace/message-broker": "workspace:*",
-    "@workspace/logger": "workspace:*",
     "@workspace/cache": "workspace:*",
+    "@workspace/db": "workspace:*",
+    "@workspace/env": "workspace:*",
+    "@workspace/logger": "workspace:*",
+    "@workspace/message-broker": "workspace:*",
+    "@workspace/shared": "workspace:*",
     "amqplib": "^0.10.9",
     "dotenv": "^17.2.3",
     "mongoose": "^8.9.0",

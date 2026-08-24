@@ -5,12 +5,60 @@ export async function seedOrganization(ctx: SeedContext): Promise<void> {
 
   // 1. Branches (Betopia Group Multi-Branch Tree)
   const BRANCHES = [
-    { code: "BET-HQ", name: "Betopia Group (Headquarters)", parentCode: null, description: "Holding enterprise parent headquarters" },
-    { code: "BET-SA", name: "Softvence Alpha", parentCode: "BET-HQ", description: "Primary software & digital solutions flagship branch" },
-    { code: "BET-SA-DHAKA", name: "Softvence Alpha - Dhaka R&D Hub", parentCode: "BET-SA", description: "Core engineering, product & AI innovation center" },
-    { code: "BET-SA-SYLHET", name: "Softvence Alpha - Sylhet Tech Hub", parentCode: "BET-SA", description: "Operations, client onboarding & regional delivery" },
-    { code: "BET-UK", name: "Betopia Overseas (London)", parentCode: "BET-HQ", description: "European sales & enterprise client partner branch" },
-    { code: "BET-MEDIA", name: "Betopia Creative & Media Lab", parentCode: "BET-HQ", description: "Sister concern for branding, video & multimedia design" },
+    {
+      code: "BET-HQ",
+      name: "Betopia Group (Headquarters)",
+      parentCode: null,
+      description: "Holding enterprise parent headquarters",
+      email: "hq@betopiagroup.com",
+      phone: "+880-2-9876543",
+      address: "Betopia Tower, Level 14, Gulshan-2, Dhaka",
+    },
+    {
+      code: "BET-SA",
+      name: "Softvence Alpha",
+      parentCode: "BET-HQ",
+      description: "Primary software & digital solutions flagship branch",
+      email: "alpha@softvence.com",
+      phone: "+880-2-8877665",
+      address: "Softvence Campus, Plot 42, Banani C/A, Dhaka",
+    },
+    {
+      code: "BET-SA-DHAKA",
+      name: "Softvence Alpha - Dhaka R&D Hub",
+      parentCode: "BET-SA",
+      description: "Core engineering, product & AI innovation center",
+      email: "rnd.dhaka@softvence.com",
+      phone: "+880-2-5544332",
+      address: "Tech Zone, Block B, Niketan, Gulshan-1, Dhaka",
+    },
+    {
+      code: "BET-SA-SYLHET",
+      name: "Softvence Alpha - Sylhet Tech Hub",
+      parentCode: "BET-SA",
+      description: "Operations, client onboarding & regional delivery hub",
+      email: "sylhet.hub@softvence.com",
+      phone: "+880-821-712345",
+      address: "Hi-Tech Park, Companiganj, Sylhet",
+    },
+    {
+      code: "BET-UK",
+      name: "Betopia Overseas (London)",
+      parentCode: "BET-HQ",
+      description: "European sales & enterprise client partner branch",
+      email: "london@betopiagroup.co.uk",
+      phone: "+44-20-7946-0123",
+      address: "30 St Mary Axe, London EC3A 8EP, United Kingdom",
+    },
+    {
+      code: "BET-MEDIA",
+      name: "Betopia Creative & Media Lab",
+      parentCode: "BET-HQ",
+      description: "Sister concern for branding, video & multimedia design",
+      email: "creative@betopiamedia.com",
+      phone: "+880-2-9988776",
+      address: "Studio 4, Creative Enclave, Uttara Sector 3, Dhaka",
+    },
   ];
 
   for (const b of BRANCHES) {
@@ -26,6 +74,9 @@ export async function seedOrganization(ctx: SeedContext): Promise<void> {
           name: b.name,
           parentId,
           description: b.description,
+          email: b.email,
+          phone: b.phone,
+          address: b.address,
           isActive: true,
           deletedAt: null,
         },
@@ -37,6 +88,9 @@ export async function seedOrganization(ctx: SeedContext): Promise<void> {
           name: b.name,
           parentId,
           description: b.description,
+          email: b.email,
+          phone: b.phone,
+          address: b.address,
           isActive: true,
         },
       });
@@ -78,7 +132,7 @@ export async function seedOrganization(ctx: SeedContext): Promise<void> {
     ctx.departments.set(dept.code, record.id);
   }
 
-  // 2. Teams
+  // 3. Teams
   const engDeptId = ctx.departments.get("ENG")!;
   const desDeptId = ctx.departments.get("DES")!;
   const bdDeptId = ctx.departments.get("BD")!;

@@ -65,7 +65,79 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.projectStatuses.set(status.code, record.id);
   }
 
-  // 4. Platforms
+  // 4. Approval Status Lookups (Approval State Machine)
+  const APPROVAL_STATUSES = [
+    {
+      code: "IN_REVIEW",
+      name: "In Review",
+      requiresLeadAction: true,
+      requiresSalesAction: false,
+      requiresAutoApproveCheck: false,
+      isTerminal: false,
+      sortOrder: 1,
+      color: "#f59e0b",
+    },
+    {
+      code: "PENDING_SALES",
+      name: "Awaiting Dispatch",
+      requiresLeadAction: false,
+      requiresSalesAction: true,
+      requiresAutoApproveCheck: false,
+      isTerminal: false,
+      sortOrder: 2,
+      color: "#3b82f6",
+    },
+    {
+      code: "DISPATCHED",
+      name: "Dispatched",
+      requiresLeadAction: false,
+      requiresSalesAction: false,
+      requiresAutoApproveCheck: false,
+      isTerminal: true,
+      sortOrder: 3,
+      color: "#10b981",
+    },
+    {
+      code: "REVISION_REQUESTED",
+      name: "Revision Requested",
+      requiresLeadAction: false,
+      requiresSalesAction: false,
+      requiresAutoApproveCheck: false,
+      isTerminal: false,
+      sortOrder: 4,
+      color: "#ef4444",
+    },
+  ];
+
+  for (const as of APPROVAL_STATUSES) {
+    const record = await prisma.approvalStatusLookup.upsert({
+      where: { code: as.code },
+      update: {
+        name: as.name,
+        requiresLeadAction: as.requiresLeadAction,
+        requiresSalesAction: as.requiresSalesAction,
+        requiresAutoApproveCheck: as.requiresAutoApproveCheck,
+        isTerminal: as.isTerminal,
+        sortOrder: as.sortOrder,
+        color: as.color,
+        isActive: true,
+      },
+      create: {
+        code: as.code,
+        name: as.name,
+        requiresLeadAction: as.requiresLeadAction,
+        requiresSalesAction: as.requiresSalesAction,
+        requiresAutoApproveCheck: as.requiresAutoApproveCheck,
+        isTerminal: as.isTerminal,
+        sortOrder: as.sortOrder,
+        color: as.color,
+        isActive: true,
+      },
+    });
+    ctx.approvalStatuses.set(as.code, record.id);
+  }
+
+  // 5. Platforms
   const PLATFORMS = [
     { code: "UPWORK", name: "Upwork" },
     { code: "FIVERR", name: "Fiverr" },
@@ -82,13 +154,14 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.platforms.set(plat.code, record.id);
   }
 
-  // 5. Service Lines
+  // 6. Service Lines
   const SERVICE_LINES = [
     { name: "Web Application Development", slug: "web-app-dev" },
     { name: "Mobile App Development", slug: "mobile-app-dev" },
     { name: "UI/UX & Product Design", slug: "ui-ux-design" },
     { name: "AI & Machine Learning Engineering", slug: "ai-ml-engineering" },
     { name: "DevOps & Cloud Infrastructure", slug: "devops-cloud" },
+    { name: "Enterprise ERP & Solutions", slug: "enterprise-erp" },
   ];
 
   for (const sl of SERVICE_LINES) {
@@ -100,7 +173,7 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.serviceLines.set(sl.slug, record.id);
   }
 
-  // 6. Priorities
+  // 7. Priorities
   const PRIORITIES = [
     { code: "LOW", name: "Low", level: 1, color: "#64748b" },
     { code: "MEDIUM", name: "Medium", level: 2, color: "#3b82f6" },
@@ -118,7 +191,7 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.priorities.set(prio.code, record.id);
   }
 
-  // 7. Issue Types
+  // 8. Issue Types
   const ISSUE_TYPES = [
     { code: "BUG", name: "Bug / Defect" },
     { code: "FEATURE", name: "Feature Request" },
@@ -137,7 +210,7 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.issueTypes.set(it.code, record.id);
   }
 
-  // 8. Support Ticket Statuses
+  // 9. Support Ticket Statuses
   const TICKET_STATUSES = [
     { code: "OPEN", name: "Open", isTerminal: false, sortOrder: 1 },
     { code: "IN_PROGRESS", name: "In Progress", isTerminal: false, sortOrder: 2 },
@@ -155,31 +228,204 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.ticketStatuses.set(ts.code, record.id);
   }
 
-  // 9. Message Types
+  // 10. Modern Dynamic Message Types (Unified Conversation & Approval Pipeline)
   const MESSAGE_TYPES = [
-    { code: "CLIENT_UPDATE", name: "Client Status Update" },
-    { code: "INTERNAL_NOTE", name: "Internal Team Note" },
-    { code: "DELIVERY_NOTICE", name: "Milestone Delivery Notice" },
-    { code: "REQUIREMENT_CLARIFICATION", name: "Requirement Clarification" },
-    { code: "ESCALATION", name: "Escalation & Blocking Issue" },
+    {
+      code: "INTERNAL_NOTE",
+      name: "Internal Discussion Note",
+      label: "Internal Note",
+      direction: "INTERNAL",
+      colorHex: "#64748b",
+      description: "Squad engineering discussion, standup note, or internal technical query",
+      requiresApproval: false,
+      isSystem: true,
+      sortOrder: 1,
+    },
+    {
+      code: "TECH_UPDATE",
+      name: "Technical Standup & Architecture",
+      label: "Tech Standup",
+      direction: "INTERNAL",
+      colorHex: "#0ea5e9",
+      description: "Technical architectural decision, PR deployment note, or test report",
+      requiresApproval: false,
+      isSystem: false,
+      sortOrder: 2,
+    },
+    {
+      code: "STATUS_UPDATE",
+      name: "Client Milestone Status Update",
+      label: "Status Update",
+      direction: "OUTBOUND",
+      colorHex: "#3b82f6",
+      description: "Sprint / milestone progress update for the client",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 3,
+    },
+    {
+      code: "DELIVERY",
+      name: "Milestone Deliverable Handover",
+      label: "Delivery Notice",
+      direction: "OUTBOUND",
+      colorHex: "#10b981",
+      description: "Official completed milestone submission and deliverables handover",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 4,
+    },
+    {
+      code: "EXTENSION_REQUEST",
+      name: "Timeline Extension Request",
+      label: "Extension Request",
+      direction: "OUTBOUND",
+      colorHex: "#f59e0b",
+      description: "Formal request for deadline extension or milestone rescheduling",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 5,
+    },
+    {
+      code: "SCOPE_REVISION",
+      name: "Scope Clarification & Revision",
+      label: "Scope Revision",
+      direction: "OUTBOUND",
+      colorHex: "#8b5cf6",
+      description: "Scope change proposal or requirement clarification notice",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 6,
+    },
+    {
+      code: "GENERAL_NOTICE",
+      name: "General Client Notice",
+      label: "General Notice",
+      direction: "OUTBOUND",
+      colorHex: "#6366f1",
+      description: "General outbound communication or query to client",
+      requiresApproval: true,
+      isSystem: true,
+      sortOrder: 7,
+    },
+    {
+      code: "CLIENT_REPLY",
+      name: "Client Inquiry Response",
+      label: "Client Reply",
+      direction: "OUTBOUND",
+      colorHex: "#14b8a6",
+      description: "Response to client feedback, comments, or inquiries",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 8,
+    },
+    {
+      code: "PAYMENT_ESCROW",
+      name: "Escrow Milestone Activation",
+      label: "Escrow Request",
+      direction: "OUTBOUND",
+      colorHex: "#84cc16",
+      description: "Request to activate or fund next project escrow milestone",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 9,
+    },
+    {
+      code: "MEETING_SUMMARY",
+      name: "Client Meeting Summary & Action Items",
+      label: "Meeting Summary",
+      direction: "OUTBOUND",
+      colorHex: "#a855f7",
+      description: "Post-call meeting notes, agreed scope, and next steps",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 10,
+    },
+    {
+      code: "CLIENT_INBOUND",
+      name: "Inbound Client Message Relay",
+      label: "Client Inbound",
+      direction: "INBOUND",
+      colorHex: "#ec4899",
+      description: "Relayed message received from external client platform (Upwork, Fiverr, etc.)",
+      requiresApproval: false,
+      isSystem: true,
+      sortOrder: 11,
+    },
+    {
+      code: "BUG_REPORT",
+      name: "Inbound Client Defect / Bug Report",
+      label: "Bug Report",
+      direction: "INBOUND",
+      colorHex: "#ef4444",
+      description: "Defect or issue reported by client during testing or UAT",
+      requiresApproval: false,
+      isSystem: false,
+      sortOrder: 12,
+    },
+    // Legacy aliases for backwards compatibility
+    {
+      code: "CLIENT_UPDATE",
+      name: "Client Status Update (Legacy)",
+      label: "Status Update",
+      direction: "OUTBOUND",
+      colorHex: "#3b82f6",
+      description: "Legacy status update code",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 13,
+    },
+    {
+      code: "DELIVERY_NOTICE",
+      name: "Milestone Delivery Notice (Legacy)",
+      label: "Delivery Notice",
+      direction: "OUTBOUND",
+      colorHex: "#10b981",
+      description: "Legacy milestone delivery notice",
+      requiresApproval: true,
+      isSystem: false,
+      sortOrder: 14,
+    },
   ];
 
   for (const mt of MESSAGE_TYPES) {
     const record = await prisma.messageType.upsert({
       where: { code: mt.code },
-      update: { name: mt.name, isActive: true },
-      create: { code: mt.code, name: mt.name, isActive: true },
+      update: {
+        name: mt.name,
+        label: mt.label,
+        direction: mt.direction,
+        colorHex: mt.colorHex,
+        description: mt.description,
+        requiresApproval: mt.requiresApproval,
+        isSystem: mt.isSystem,
+        sortOrder: mt.sortOrder,
+        isActive: true,
+      },
+      create: {
+        code: mt.code,
+        name: mt.name,
+        label: mt.label,
+        direction: mt.direction,
+        colorHex: mt.colorHex,
+        description: mt.description,
+        requiresApproval: mt.requiresApproval,
+        isSystem: mt.isSystem,
+        sortOrder: mt.sortOrder,
+        isActive: true,
+      },
     });
     ctx.messageTypes.set(mt.code, record.id);
   }
 
-  // 10. Notification Types
+  // 11. Notification Types
   const NOTIFICATION_TYPES = [
     { code: "PROJECT_ASSIGNED", name: "Project Assigned", defaultTitleTemplate: "You have been assigned to project: {{projectName}}" },
     { code: "ISSUE_CREATED", name: "Issue Created", defaultTitleTemplate: "New issue #{{issueId}} created on {{projectName}}" },
     { code: "MESSAGE_APPROVAL_REQUIRED", name: "Message Approval Required", defaultTitleTemplate: "Pending message approval for project {{projectName}}" },
     { code: "TASK_DUE_SOON", name: "Milestone Due Soon", defaultTitleTemplate: "Milestone is due within 24 hours" },
     { code: "SYSTEM_ALERT", name: "System Alert", defaultTitleTemplate: "System notice: {{alertMessage}}" },
+    { code: "DISPATCH_CONFIRMED", name: "Message Dispatched", defaultTitleTemplate: "Outbound message dispatched to {{clientName}}" },
+    { code: "REVISION_REQUIRED", name: "Revision Requested", defaultTitleTemplate: "Revision requested on your message draft" },
   ];
 
   for (const nt of NOTIFICATION_TYPES) {
@@ -191,7 +437,7 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.notificationTypes.set(nt.code, record.id);
   }
 
-  // 11. Order Sources
+  // 12. Order Sources
   const ORDER_SOURCES = [
     { code: "BID_PROPOSAL_ORDER", name: "Bid/Proposal Order", description: "Direct competitive bid on platform" },
     { code: "BRIEF_INVITATION", name: "Brief/Invitation", description: "Direct client invite or private brief" },
@@ -213,7 +459,7 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.orderSources.set(os.code, record.id);
   }
 
-  // 12. BD Order Types
+  // 13. BD Order Types
   const BD_ORDER_TYPES = [
     { code: "DIRECT_LEAD", name: "Direct Client Inbound" },
     { code: "UPWORK_PROPOSAL", name: "Upwork Custom Proposal" },

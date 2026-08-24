@@ -8,6 +8,7 @@ import { Input } from "@workspace/ui/components/input";
 import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { Progress } from "@workspace/ui/components/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import {
   Paperclip,
   SendHorizontal,
@@ -102,6 +103,7 @@ interface MessageComposerProps {
     attachments?: ChatAttachment[];
   }) => void;
   projectId?: string;
+  members?: Array<{ id: string; name: string; avatar?: string; designation?: string; role?: string }>;
   targetClientName: string;
   projectCapabilities?: ProjectCapabilities;
 }
@@ -110,6 +112,7 @@ const EMOJI_LIST = ["👍", "❤️", "🚀", "🔥", "👏", "🎉", "💯", "�
 
 export function MessageComposer({
   projectId,
+  members,
   replyingTo,
   onCancelReply,
   onSendMessage,
@@ -117,6 +120,10 @@ export function MessageComposer({
   projectCapabilities,
 }: MessageComposerProps) {
   const [text, setText] = React.useState("");
+
+  // Mention autocomplete state
+  const [mentionQuery, setMentionQuery] = React.useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = React.useState<number>(0);
 
   // Single active composer stream mode
   const [streamMode, setStreamMode] = React.useState<ComposerStreamMode>("INTERNAL");
@@ -179,12 +186,57 @@ export function MessageComposer({
     return () => clearInterval(interval);
   }, [isRecordingVoice]);
 
-  // Adjust height on input
+  // Matching members for @mentions
+  const matchingMembers = React.useMemo(() => {
+    if (mentionQuery === null || !members) return [];
+    return members
+      .filter(
+        (m) =>
+          m.name.toLowerCase().includes(mentionQuery) ||
+          (m.designation && m.designation.toLowerCase().includes(mentionQuery))
+      )
+      .slice(0, 6);
+  }, [mentionQuery, members]);
+
+  const handleSelectMention = (member: { id: string; name: string }) => {
+    if (!textareaRef.current) return;
+    const cursorPos = textareaRef.current.selectionStart || text.length;
+    const textBeforeCursor = text.slice(0, cursorPos);
+    const textAfterCursor = text.slice(cursorPos);
+    const words = textBeforeCursor.split(/\s/);
+    words[words.length - 1] = `@${member.name} `;
+    const newText = words.join(" ") + textAfterCursor;
+    setText(newText);
+    setMentionQuery(null);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const newPos = (words.join(" ") + " ").length;
+        textareaRef.current.setSelectionRange(newPos, newPos);
+      }
+    }, 10);
+  };
+
+  // Adjust height on input & detect @mention
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    const val = e.target.value;
+    setText(val);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
+    }
+
+    // Check for @mention trigger
+    const cursorPos = e.target.selectionStart || val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const words = textBeforeCursor.split(/\s/);
+    const lastWord = words[words.length - 1] || "";
+
+    if (lastWord.startsWith("@")) {
+      setMentionQuery(lastWord.slice(1).toLowerCase());
+      setMentionIndex(0);
+    } else {
+      setMentionQuery(null);
     }
   };
 
@@ -425,6 +477,33 @@ export function MessageComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Keyboard navigation when mention popup is open
+    if (mentionQuery !== null && matchingMembers.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev + 1) % matchingMembers.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev - 1 + matchingMembers.length) % matchingMembers.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const selectedMember = matchingMembers[mentionIndex] || matchingMembers[0];
+        if (selectedMember) {
+          handleSelectMention(selectedMember);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -713,6 +792,50 @@ export function MessageComposer({
             <span className="text-xs sm:text-sm font-bold text-primary">
               Drop images or documents to attach
             </span>
+          </div>
+        )}
+
+        {/* Mention Suggestions Popup Card */}
+        {mentionQuery !== null && matchingMembers.length > 0 && (
+          <div className="absolute bottom-[calc(100%+8px)] left-2 z-50 w-64 rounded-xl border border-border/80 bg-popover/95 p-1 shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+            <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40">
+              Mention Member
+            </div>
+            <div className="py-1 space-y-0.5 max-h-48 overflow-y-auto">
+              {matchingMembers.map((member, idx) => (
+                <button
+                  key={member.id}
+                  type="button"
+                  onClick={() => handleSelectMention(member)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition-colors cursor-pointer",
+                    idx === mentionIndex
+                      ? "bg-primary text-primary-foreground font-semibold"
+                      : "hover:bg-muted text-foreground"
+                  )}
+                >
+                  <Avatar className="size-5 border border-border/40 shrink-0">
+                    <AvatarImage src={member.avatar} />
+                    <AvatarFallback className="text-[9px] font-bold">
+                      {member.name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium leading-tight">{member.name}</p>
+                    {member.designation && (
+                      <p
+                        className={cn(
+                          "text-[10px] truncate",
+                          idx === mentionIndex ? "text-primary-foreground/80" : "text-muted-foreground"
+                        )}
+                      >
+                        {member.designation}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

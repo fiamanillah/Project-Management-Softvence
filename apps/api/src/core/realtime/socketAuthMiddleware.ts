@@ -32,9 +32,14 @@ export function socketAuthMiddleware(
       }
     }
 
-    // 3. Handshake query fallback (e.g. for simple websocket debuggers)
-    if (!token && typeof socket.handshake.query?.token === "string") {
-      token = socket.handshake.query.token;
+    // 3. SEC-04: Reject query string tokens to prevent token leakage in proxy/CDN access logs
+    if (!token && socket.handshake.query?.token) {
+      logger.warn(`Rejected insecure socket connection with query-string token: ${socket.id}`);
+      return next(
+        new Error(
+          "Authentication error: Passing auth tokens in query parameters is disallowed. Use auth.token instead.",
+        ),
+      );
     }
 
     if (!token) {

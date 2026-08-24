@@ -38,6 +38,7 @@ interface ProjectDetailsSidebarProps {
   project: ProjectWorkspaceItem;
   messages?: ChatMessage[];
   onUpdateApproval?: (messageId: string, workflow: ApprovalWorkflow) => void;
+  onTogglePin?: (projectId: string) => void;
   onScrollToMessage?: (messageId: string) => void;
   onClose?: () => void;
   className?: string;
@@ -47,6 +48,7 @@ export function ProjectDetailsSidebar({
   project,
   messages = [],
   onUpdateApproval,
+  onTogglePin,
   onScrollToMessage,
   onClose,
   className,
@@ -322,7 +324,7 @@ export function ProjectDetailsSidebar({
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
           {/* Profile Card & Quick Actions (Fixed at Top) */}
           <div className="shrink-0">
-            <ProjectProfileHeader project={project} />
+            <ProjectProfileHeader project={project} onTogglePin={onTogglePin} />
           </div>
 
           {/* Fixed Tab Navigation Bar (Completely separate from ScrollArea and scrollbars) */}

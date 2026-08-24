@@ -16,6 +16,7 @@ interface UseProjectSocketOptions {
   projectId: string | null;
   onNewMessage?: (message: ProjectMessageItem) => void;
   onMessageUpdated?: (message: ProjectMessageItem) => void;
+  onMessageDeleted?: (data: { projectId: string; messageId: string }) => void;
   onReactionUpdated?: (data: { messageId: string; reactions: MessageReactionItem[] }) => void;
   onSeenReceiptsUpdated?: (data: { messageId: string; seenBy: MessageReadReceiptItem[] }) => void;
   onApprovalUpdated?: (data: { projectId: string; messageId: string; workflow: ApprovalWorkflowItem }) => void;
@@ -33,6 +34,7 @@ export function useProjectSocket({
   projectId,
   onNewMessage,
   onMessageUpdated,
+  onMessageDeleted,
   onReactionUpdated,
   onSeenReceiptsUpdated,
   onApprovalUpdated,
@@ -42,6 +44,47 @@ export function useProjectSocket({
   const { socket, isConnected } = useSocket();
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // OPT-04: Stable ref for callback props to avoid tearing down listeners on parent re-renders
+  const callbacksRef = useRef({
+    onNewMessage,
+    onMessageUpdated,
+    onMessageDeleted,
+    onReactionUpdated,
+    onSeenReceiptsUpdated,
+    onApprovalUpdated,
+    onProjectActivityBump,
+    onPresenceSync,
+  });
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onNewMessage,
+      onMessageUpdated,
+      onMessageDeleted,
+      onReactionUpdated,
+      onSeenReceiptsUpdated,
+      onApprovalUpdated,
+      onProjectActivityBump,
+      onPresenceSync,
+    };
+  });
+
+  // FEAT-18: Periodic presence heartbeat emission (every 2.5 minutes while connected)
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    // Send initial heartbeat
+    socket.emit("presence:heartbeat");
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        socket.emit("presence:heartbeat");
+      }
+    }, 150000); // 2.5 minutes (well within 5-min TTL)
+
+    return () => clearInterval(interval);
+  }, [socket, isConnected]);
 
   // Join ONLY the active selected project room (zero over-subscription)
   useEffect(() => {
@@ -60,23 +103,27 @@ export function useProjectSocket({
     if (!socket) return;
 
     const handleNewMessage = (msg: ProjectMessageItem) => {
-      onNewMessage?.(msg);
+      callbacksRef.current.onNewMessage?.(msg);
     };
 
     const handleMessageUpdated = (msg: ProjectMessageItem) => {
-      onMessageUpdated?.(msg);
+      callbacksRef.current.onMessageUpdated?.(msg);
+    };
+
+    const handleMessageDeleted = (data: { projectId: string; messageId: string }) => {
+      callbacksRef.current.onMessageDeleted?.(data);
     };
 
     const handleReactionUpdated = (data: { messageId: string; reactions: MessageReactionItem[] }) => {
-      onReactionUpdated?.(data);
+      callbacksRef.current.onReactionUpdated?.(data);
     };
 
     const handleSeenReceiptsUpdated = (data: { messageId: string; seenBy: MessageReadReceiptItem[] }) => {
-      onSeenReceiptsUpdated?.(data);
+      callbacksRef.current.onSeenReceiptsUpdated?.(data);
     };
 
     const handleApprovalUpdated = (data: { projectId: string; messageId: string; workflow: ApprovalWorkflowItem }) => {
-      onApprovalUpdated?.(data);
+      callbacksRef.current.onApprovalUpdated?.(data);
     };
 
     const handleProjectActivityBump = (data: {
@@ -86,7 +133,7 @@ export function useProjectSocket({
       attentionType?: any;
       pendingApprovalsCount?: number;
     }) => {
-      onProjectActivityBump?.(data);
+      callbacksRef.current.onProjectActivityBump?.(data);
     };
 
     const handleUserTyping = (data: { projectId: string; userId: string; userName: string }) => {
@@ -107,46 +154,38 @@ export function useProjectSocket({
 
     const handleUserStoppedTyping = (data: { projectId: string; userId: string }) => {
       if (data.projectId === projectId) {
-        // Will clear upon timeout or immediate
+        // Will clear automatically upon timeout
       }
     };
 
     const handlePresenceSync = (data: { onlineUserIds: string[] }) => {
-      onPresenceSync?.(data);
+      callbacksRef.current.onPresenceSync?.(data);
     };
 
-    socket.on("chat:new_message" as any, handleNewMessage);
-    socket.on("chat:message_updated" as any, handleMessageUpdated);
-    socket.on("chat:reaction_updated" as any, handleReactionUpdated);
-    socket.on("chat:seen_receipts_updated" as any, handleSeenReceiptsUpdated);
-    socket.on("approval:updated" as any, handleApprovalUpdated);
-    socket.on("project:activity_bump" as any, handleProjectActivityBump);
-    socket.on("chat:user_typing" as any, handleUserTyping);
-    socket.on("chat:user_stopped_typing" as any, handleUserStoppedTyping);
-    socket.on("presence:sync" as any, handlePresenceSync);
+    socket.on("chat:new_message", handleNewMessage);
+    socket.on("chat:message_updated", handleMessageUpdated);
+    socket.on("chat:message_deleted", handleMessageDeleted);
+    socket.on("chat:reaction_updated", handleReactionUpdated);
+    socket.on("chat:seen_receipts_updated", handleSeenReceiptsUpdated);
+    socket.on("approval:updated", handleApprovalUpdated);
+    socket.on("project:activity_bump", handleProjectActivityBump);
+    socket.on("chat:user_typing", handleUserTyping);
+    socket.on("chat:user_stopped_typing", handleUserStoppedTyping);
+    socket.on("presence:sync", handlePresenceSync);
 
     return () => {
-      socket.off("chat:new_message" as any, handleNewMessage);
-      socket.off("chat:message_updated" as any, handleMessageUpdated);
-      socket.off("chat:reaction_updated" as any, handleReactionUpdated);
-      socket.off("chat:seen_receipts_updated" as any, handleSeenReceiptsUpdated);
-      socket.off("approval:updated" as any, handleApprovalUpdated);
-      socket.off("project:activity_bump" as any, handleProjectActivityBump);
-      socket.off("chat:user_typing" as any, handleUserTyping);
-      socket.off("chat:user_stopped_typing" as any, handleUserStoppedTyping);
-      socket.off("presence:sync" as any, handlePresenceSync);
+      socket.off("chat:new_message", handleNewMessage);
+      socket.off("chat:message_updated", handleMessageUpdated);
+      socket.off("chat:message_deleted", handleMessageDeleted);
+      socket.off("chat:reaction_updated", handleReactionUpdated);
+      socket.off("chat:seen_receipts_updated", handleSeenReceiptsUpdated);
+      socket.off("approval:updated", handleApprovalUpdated);
+      socket.off("project:activity_bump", handleProjectActivityBump);
+      socket.off("chat:user_typing", handleUserTyping);
+      socket.off("chat:user_stopped_typing", handleUserStoppedTyping);
+      socket.off("presence:sync", handlePresenceSync);
     };
-  }, [
-    socket,
-    projectId,
-    onNewMessage,
-    onMessageUpdated,
-    onReactionUpdated,
-    onSeenReceiptsUpdated,
-    onApprovalUpdated,
-    onProjectActivityBump,
-    onPresenceSync,
-  ]);
+  }, [socket, projectId]);
 
   // Actions
   const sendMessage = useCallback(
@@ -156,14 +195,20 @@ export function useProjectSocket({
           return reject(new Error("Socket not connected or no project selected"));
         }
 
+        const idempotencyKey =
+          dto.idempotencyKey ||
+          (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `idemp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+
         const timer = setTimeout(() => {
           reject(new Error("Socket message send timeout"));
-        }, 4000);
+        }, 8000);
 
         socket.emit(
           "chat:send_message",
-          { projectId, ...dto },
-          (res: { success: boolean; data?: ProjectMessageItem; error?: string }) => {
+          { projectId, ...dto, idempotencyKey },
+          (res: { success: boolean; data?: ProjectMessageItem; error?: string; retryAfterMs?: number }) => {
             clearTimeout(timer);
             if (res?.success && res.data) {
               resolve(res.data);
@@ -219,7 +264,7 @@ export function useProjectSocket({
 
         const timer = setTimeout(() => {
           reject(new Error("Socket approval action timeout"));
-        }, 4000);
+        }, 5000);
 
         socket.emit(
           "approval:action",
@@ -247,7 +292,7 @@ export function useProjectSocket({
 
         const timer = setTimeout(() => {
           reject(new Error("Socket message edit timeout"));
-        }, 4000);
+        }, 5000);
 
         socket.emit(
           "chat:edit_message",
@@ -266,11 +311,40 @@ export function useProjectSocket({
     [socket, projectId],
   );
 
+  const deleteMessage = useCallback(
+    (messageId: string): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        if (!socket || !projectId) {
+          return reject(new Error("Socket not connected or no project selected"));
+        }
+
+        const timer = setTimeout(() => {
+          reject(new Error("Socket message delete timeout"));
+        }, 5000);
+
+        socket.emit(
+          "chat:delete_message",
+          { projectId, messageId },
+          (res: { success: boolean; error?: string }) => {
+            clearTimeout(timer);
+            if (res?.success) {
+              resolve();
+            } else {
+              reject(new Error(res?.error || "Failed to delete message"));
+            }
+          },
+        );
+      });
+    },
+    [socket, projectId],
+  );
+
   return {
     isConnected,
     typingUsers,
     sendMessage,
     editMessage,
+    deleteMessage,
     sendReaction,
     markSeen,
     startTyping,

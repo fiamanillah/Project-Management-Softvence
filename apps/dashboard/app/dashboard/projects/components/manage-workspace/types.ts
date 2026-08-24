@@ -317,6 +317,7 @@ export interface ProjectMessageCapabilities {
   canDelete?: boolean;
   canEdit?: boolean;
   editTimeRemainingSeconds?: number;
+  deleteTimeRemainingSeconds?: number;
 }
 
 export interface ChatMessage {
@@ -350,6 +351,8 @@ export interface ChatMessage {
     senderName: string;
     text: string;
   };
+  replyCount?: number;
+  createdAt?: string;
   attachments?: ChatAttachment[];
   deliverableUpdate?: ChatDeliverableUpdate;
   meetingSummary?: ChatMeetingSummary;

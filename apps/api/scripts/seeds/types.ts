@@ -33,6 +33,7 @@ export interface SeedContext {
   scopeTypes: Map<string, string>;
   assignmentRoles: Map<string, string>;
   projectStatuses: Map<string, string>;
+  approvalStatuses: Map<string, string>;
   platforms: Map<string, string>;
   serviceLines: Map<string, string>;
   priorities: Map<string, string>;
@@ -67,6 +68,7 @@ export function createSeedContext(prisma: PrismaClient, clean = false): SeedCont
     scopeTypes: new Map(),
     assignmentRoles: new Map(),
     projectStatuses: new Map(),
+    approvalStatuses: new Map(),
     platforms: new Map(),
     serviceLines: new Map(),
     priorities: new Map(),

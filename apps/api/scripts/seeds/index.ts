@@ -1,5 +1,5 @@
-import dotenv from "dotenv";
 import { createPrismaClient } from "@workspace/db";
+import { env } from "@workspace/env/api";
 import { createSeedContext, type SeedContext } from "./types";
 import { seedLookups } from "./01-lookups.seed";
 import { seedOrganization } from "./02-organization.seed";
@@ -12,15 +12,9 @@ import { seedIssuesAndTickets } from "./08-issues-tickets.seed";
 import { seedBdOrders } from "./09-bd-orders.seed";
 import { seedMiscAndAudit } from "./10-misc-audit.seed";
 
-dotenv.config();
-
-const databaseUrl =
-  process.env.DATABASE_URL ||
-  "postgresql://fiamanillah:fiamanillah@localhost:5439/manage_project?schema=public";
-
 const prisma = createPrismaClient({
-  databaseUrl,
-  isProduction: false,
+  databaseUrl: env.DATABASE_URL,
+  isProduction: env.NODE_ENV === "production",
 });
 
 async function main() {
@@ -72,9 +66,11 @@ async function main() {
     clientCount,
     projectCount,
     componentCount,
+    milestoneCount,
+    linkCount,
+    projectMessageCount,
+    workflowCount,
     issueCount,
-    messageCount,
-    chatCount,
     bdOrderCount,
   ] = await Promise.all([
     prisma.user.count(),
@@ -83,9 +79,11 @@ async function main() {
     prisma.client.count(),
     prisma.project.count(),
     prisma.projectComponent.count(),
+    prisma.projectMilestone.count(),
+    prisma.projectLink.count(),
+    prisma.projectMessage.count(),
+    prisma.messageApprovalWorkflow.count(),
     prisma.issue.count(),
-    prisma.message.count(),
-    prisma.chatMessage.count(),
     prisma.bdOrder.count(),
   ]);
 
@@ -99,38 +97,46 @@ async function main() {
 
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
-  const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
-  const envAdminPassword = process.env.ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD || "adminpassword123";
+  const envAdminEmail = (env.ADMIN_EMAIL || env.DEFAULT_ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
+  const envAdminPassword = env.ADMIN_PASSWORD || env.DEFAULT_ADMIN_PASSWORD || "adminpassword123";
 
   console.log("\n============================================================");
   console.log("🎉  DATABASE SEEDING COMPLETED SUCCESSFULLY!");
   console.log(`⏱   Total execution time: ${totalTime}s`);
   console.log("------------------------------------------------------------");
   console.log("📊  Database Entity Summary:");
-  console.log(`    • Users:              ${userCount}`);
-  console.log(`    • Departments:        ${deptCount}`);
-  console.log(`    • Teams:              ${teamCount}`);
-  console.log(`    • Clients:            ${clientCount}`);
-  console.log(`    • Projects:           ${projectCount}`);
-  console.log(`    • Project Components: ${componentCount}`);
-  console.log(`    • Issues:             ${issueCount}`);
-  console.log(`    • Approval Messages:  ${messageCount}`);
-  console.log(`    • Chat Messages:      ${chatCount}`);
-  console.log(`    • BD Orders:          ${bdOrderCount}`);
+  console.log(`    • Users:                ${userCount}`);
+  console.log(`    • Departments:          ${deptCount}`);
+  console.log(`    • Teams:                ${teamCount}`);
+  console.log(`    • Clients:              ${clientCount}`);
+  console.log(`    • Projects:             ${projectCount}`);
+  console.log(`    • Project Components:   ${componentCount}`);
+  console.log(`    • Project Milestones:   ${milestoneCount}`);
+  console.log(`    • Project Resource Links:${linkCount}`);
+  console.log(`    • Project Messages:     ${projectMessageCount}`);
+  console.log(`    • Approval Workflows:   ${workflowCount}`);
+  console.log(`    • Issues & Defects:     ${issueCount}`);
+  console.log(`    • BD Orders & Deals:    ${bdOrderCount}`);
   console.log("------------------------------------------------------------");
-  console.log("🔑  SuperAdmin & Standard Test Accounts:");
-  console.log(`    • SuperAdmin (Env):   ${envAdminEmail} (Password: ${envAdminPassword})`);
+  console.log("🔑  Persona Test Accounts (Password: Password123!):");
+  console.log(`    • SuperAdmin (Env):     ${envAdminEmail} (Password: ${envAdminPassword})`);
   if (envAdminEmail !== "superadmin@softvence.com") {
-    console.log("    • SuperAdmin (Demo):  superadmin@softvence.com (Password: Password123!)");
+    console.log("    • SuperAdmin (Demo):    superadmin@softvence.com");
   }
-  console.log("    • Eng Director:       director.tech@softvence.com (Password: Password123!)");
-  console.log("    • Project Manager:    pm.sarah@softvence.com (Password: Password123!)");
-  console.log("    • Tech Lead:          lead.alex@softvence.com (Password: Password123!)");
-  console.log("    • Senior Developer:   dev.james@softvence.com (Password: Password123!)");
-  console.log("    • Frontend Engineer:  dev.priya@softvence.com (Password: Password123!)");
-  console.log("    • UI/UX Designer:     designer.lisa@softvence.com (Password: Password123!)");
-  console.log("    • QA Specialist:      qa.tom@softvence.com (Password: Password123!)");
-  console.log("    • BD Manager:         bd.rachel@softvence.com (Password: Password123!)");
+  console.log("    • Engineering Director: director.tech@softvence.com");
+  console.log("    • Project Manager:      pm.sarah@softvence.com");
+  console.log("    • Project Manager #2:   pm.david@softvence.com");
+  console.log("    • Squad Tech Lead:      lead.alex@softvence.com");
+  console.log("    • Lead UI/UX Designer:  lead.elena@softvence.com");
+  console.log("    • Senior Backend Dev:   dev.james@softvence.com");
+  console.log("    • Frontend React Dev:   dev.priya@softvence.com");
+  console.log("    • Mobile Lead:          dev.marcus@softvence.com");
+  console.log("    • UI/UX Designer:       designer.lisa@softvence.com");
+  console.log("    • QA Automation Lead:   qa.tom@softvence.com");
+  console.log("    • QA Test Engineer:     qa.emily@softvence.com");
+  console.log("    • BD Growth Manager:    bd.rachel@softvence.com");
+  console.log("    • BD Bidder / Account:  bd.kevin@softvence.com");
+  console.log("    • Support Specialist:   support.anna@softvence.com");
   console.log("============================================================\n");
 }
 

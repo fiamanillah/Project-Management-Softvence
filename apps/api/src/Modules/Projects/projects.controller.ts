@@ -107,12 +107,70 @@ export class ProjectsController extends BaseController {
     return this.sendResponse(req, res, "Message updated successfully", 200, message);
   }
 
+  public async deleteMessage(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const result = await this.projectsService.deleteMessage(projectId, messageId, actor);
+    return this.sendResponse(req, res, "Message deleted successfully", 200, result);
+  }
+
+  public async getPinnedMessages(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const pinned = await this.projectsService.getPinnedMessages(projectId, actor);
+    return this.sendResponse(req, res, "Pinned messages retrieved successfully", 200, pinned);
+  }
+
+  public async getUnreadCount(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const count = await this.projectsService.getUnreadCount(projectId, actor);
+    return this.sendResponse(req, res, "Unread count retrieved successfully", 200, count);
+  }
+
   public async getMessageRevisions(req: Request, res: Response) {
     const actor = getActor(req);
     const projectId = req.params.id as string;
     const messageId = req.params.messageId as string;
     const revisions = await this.projectsService.getMessageRevisions(projectId, messageId, actor);
     return this.sendResponse(req, res, "Message revision history retrieved successfully", 200, revisions);
+  }
+
+  public async getMessageThread(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const thread = await this.projectsService.getMessageThread(projectId, messageId, actor);
+    return this.sendResponse(req, res, "Message thread retrieved successfully", 200, thread);
+  }
+
+  public async searchMessages(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const query = req.validatedBody || (req.query as any);
+    const result = await this.projectsService.searchMessages(projectId, query, actor);
+    return this.sendResponse(req, res, "Search results retrieved successfully", 200, result);
+  }
+
+  public async exportMessages(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const format = (req.query.format as "json" | "csv" | "txt") || "json";
+    const result = await this.projectsService.exportMessages(projectId, format, actor);
+
+    res.setHeader("Content-Type", result.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
+    return res.status(200).send(result.content);
+  }
+
+  public async deleteAttachment(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const messageId = req.params.messageId as string;
+    const attachmentId = req.params.attachmentId as string;
+    const result = await this.projectsService.deleteAttachment(projectId, messageId, attachmentId, actor);
+    return this.sendResponse(req, res, "Attachment deleted successfully", 200, result);
   }
 
   // --- Approval State Machine ---
@@ -141,6 +199,12 @@ export class ProjectsController extends BaseController {
     const dto = req.validatedBody as RequestRevisionDTO;
     const workflow = await this.projectsService.requestRevision(projectId, messageId, dto, actor);
     return this.sendResponse(req, res, "Revision requested from message author", 200, workflow);
+  }
+
+  public async checkAndEscalateSLA(req: Request, res: Response) {
+    const projectId = req.params.id as string | undefined;
+    const result = await this.projectsService.checkAndEscalateSLA(projectId);
+    return this.sendResponse(req, res, "SLA check completed", 200, result);
   }
 
   // --- Dynamic Message Types ---
@@ -259,6 +323,19 @@ export class ProjectsController extends BaseController {
     const dto = req.validatedBody as UpdateProjectDTO;
     const updated = await this.projectsService.updateProject(projectId, dto, actor);
     return this.sendResponse(req, res, "Project updated successfully", 200, updated);
+  }
+
+  public async togglePinProject(req: Request, res: Response) {
+    const actor = getActor(req);
+    const projectId = req.params.id as string;
+    const result = await this.projectsService.togglePinProject(projectId, actor);
+    return this.sendResponse(
+      req,
+      res,
+      result.isPinned ? "Project pinned successfully" : "Project unpinned successfully",
+      200,
+      result,
+    );
   }
 
   public async deleteProject(req: Request, res: Response) {

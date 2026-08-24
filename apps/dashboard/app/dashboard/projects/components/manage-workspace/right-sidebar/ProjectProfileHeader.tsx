@@ -13,10 +13,11 @@ import type { ProjectWorkspaceItem } from "../types";
 interface ProjectProfileHeaderProps {
   project: ProjectWorkspaceItem;
   onEdit?: () => void;
+  onTogglePin?: (projectId: string) => void;
 }
 
-export function ProjectProfileHeader({ project, onEdit }: ProjectProfileHeaderProps) {
-  const [isPinned, setIsPinned] = React.useState(project.isPinned ?? false);
+export function ProjectProfileHeader({ project, onEdit, onTogglePin }: ProjectProfileHeaderProps) {
+  const isPinned = project.isPinned ?? false;
   const [isMuted, setIsMuted] = React.useState(false);
 
   const initials = project.name
@@ -27,8 +28,11 @@ export function ProjectProfileHeader({ project, onEdit }: ProjectProfileHeaderPr
     .toUpperCase();
 
   const handleTogglePin = () => {
-    setIsPinned(!isPinned);
-    toast.success(isPinned ? "Project unpinned" : `Project ${project.code} pinned to top`);
+    if (onTogglePin) {
+      onTogglePin(project.id);
+    } else {
+      toast.success(isPinned ? "Project unpinned" : `Project ${project.code} pinned to top`);
+    }
   };
 
   const handleToggleMute = () => {
@@ -37,8 +41,11 @@ export function ProjectProfileHeader({ project, onEdit }: ProjectProfileHeaderPr
   };
 
   const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    toast.success(`Project ${project.code} link copied to clipboard`);
+    if (typeof window !== "undefined") {
+      const shareUrl = `${window.location.origin}/dashboard/manage-projects?projectId=${project.id}`;
+      navigator.clipboard.writeText(shareUrl);
+      toast.success(`Project ${project.code} link copied to clipboard`);
+    }
   };
 
   return (

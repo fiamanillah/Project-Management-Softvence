@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { FormattedMessageText } from "../FormattedMessageText";
 import { MessageAttachmentPreview } from "../MessageAttachmentPreview";
+import { formatMessageRelativeTime } from "../date-utils";
 import type {
   ApprovalWorkflow,
   ChatAttachment,
@@ -249,7 +250,11 @@ export function DispatchMessageCanvas({
               </span>
               <div className="flex items-center -space-x-1.5">
                 {seenBy.slice(0, 6).map((r) => (
-                  <Avatar key={r.userId} className="size-5 rounded-full ring-2 ring-background border border-border/40" title={`${r.userName} (${r.seenAt})`}>
+                  <Avatar
+                    key={r.userId}
+                    className="size-5 rounded-full ring-2 ring-background border border-border/40"
+                    title={`${r.userName} (${formatMessageRelativeTime(r.seenAt) || r.seenAt})`}
+                  >
                     <AvatarImage src={r.userAvatar} alt={r.userName} />
                     <AvatarFallback className="text-[8px] font-bold">
                       {r.userName.slice(0, 1)}

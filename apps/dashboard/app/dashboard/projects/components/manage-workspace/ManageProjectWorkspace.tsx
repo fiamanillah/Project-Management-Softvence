@@ -34,7 +34,13 @@ export function ManageProjectWorkspace({
   onNewProject,
 }: ManageProjectWorkspaceProps) {
   const [projects, setProjects] = React.useState<ProjectWorkspaceItem[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(initialProjectId || null);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("projectId") || initialProjectId || null;
+    }
+    return initialProjectId || null;
+  });
   const [isLoadingProjects, setIsLoadingProjects] = React.useState<boolean>(true);
   const [isLoadingMoreProjects, setIsLoadingMoreProjects] = React.useState<boolean>(false);
   const [currentPage, setCurrentPage] = React.useState<number>(1);
@@ -89,12 +95,19 @@ export function ManageProjectWorkspace({
 
         if (sorted.length > 0) {
           setSelectedProjectId((current) => {
-            if (initialProjectId && sorted.some((p) => p.id === initialProjectId)) {
-              return initialProjectId;
-            }
+            // 1. If currently selected project exists in loaded projects, maintain it!
             if (current && sorted.some((p) => p.id === current)) {
               return current;
             }
+            // 2. If URL or initialProjectId matches a project, select it
+            const targetId =
+              (typeof window !== "undefined"
+                ? new URLSearchParams(window.location.search).get("projectId")
+                : null) || initialProjectId;
+            if (targetId && sorted.some((p) => p.id === targetId)) {
+              return targetId;
+            }
+            // 3. Fallback to first available project
             return sorted[0]?.id ?? null;
           });
         }
@@ -115,6 +128,33 @@ export function ManageProjectWorkspace({
     fetchWorkspaceProjects();
   }, [fetchWorkspaceProjects]);
 
+  // Keep URL bar synced with active project UUID for direct linking & sharing
+  React.useEffect(() => {
+    if (selectedProjectId && typeof window !== "undefined") {
+      const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.get("projectId") !== selectedProjectId) {
+        currentUrl.searchParams.set("projectId", selectedProjectId);
+        window.history.replaceState(null, "", currentUrl.toString());
+      }
+    }
+  }, [selectedProjectId]);
+
+  // Support browser back/forward history navigation
+  React.useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const pId = params.get("projectId");
+        if (pId) {
+          setSelectedProjectId((current) => (current !== pId ? pId : current));
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const handleLoadMoreProjects = React.useCallback(() => {
     // All active projects loaded in workspace mode
   }, []);
@@ -128,40 +168,38 @@ export function ManageProjectWorkspace({
   const currentMessages = (selectedProject && messagesByProject[selectedProject.id]) || [];
 
   // 2. Fetch live initial messages when selectedProjectId changes
-  React.useEffect(() => {
-    let isMounted = true;
-    async function loadProjectMessages() {
-      if (!selectedProjectId) return;
-      setIsLoadingMessages(true);
-      try {
-        const res = await api.get<any>(`/projects/${selectedProjectId}/messages?limit=30`);
-        const data = res?.data || res;
-        if (isMounted && data && Array.isArray(data.messages)) {
-          setMessagesByProject((prev) => ({
-            ...prev,
-            [selectedProjectId]: data.messages,
-          }));
-          setNextCursorByProject((prev) => ({
-            ...prev,
-            [selectedProjectId]: data.nextCursor || null,
-          }));
-          setHasMoreByProject((prev) => ({
-            ...prev,
-            [selectedProjectId]: Boolean(data.nextCursor),
-          }));
-        }
-      } catch (err: any) {
-        console.error("Failed to load project messages:", err);
-      } finally {
-        if (isMounted) setIsLoadingMessages(false);
+  const fetchProjectMessages = React.useCallback(async (projectId: string) => {
+    if (!projectId) return;
+    setIsLoadingMessages(true);
+    try {
+      const res = await api.get<any>(`/projects/${projectId}/messages?limit=30`);
+      const data = res?.data || res;
+      if (data && Array.isArray(data.messages)) {
+        setMessagesByProject((prev) => ({
+          ...prev,
+          [projectId]: data.messages,
+        }));
+        setNextCursorByProject((prev) => ({
+          ...prev,
+          [projectId]: data.nextCursor || null,
+        }));
+        setHasMoreByProject((prev) => ({
+          ...prev,
+          [projectId]: Boolean(data.nextCursor),
+        }));
       }
+    } catch (err: any) {
+      console.error("Failed to load project messages:", err);
+    } finally {
+      setIsLoadingMessages(false);
     }
+  }, []);
 
-    loadProjectMessages();
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedProjectId]);
+  React.useEffect(() => {
+    if (selectedProjectId) {
+      fetchProjectMessages(selectedProjectId);
+    }
+  }, [selectedProjectId, fetchProjectMessages]);
 
   // 3. Real-Time WebSocket Hook Integration with Zero Over-Subscription
   const socketClient = useProjectSocket({
@@ -242,6 +280,12 @@ export function ManageProjectWorkspace({
         [updatedMsg.projectId]: (prev[updatedMsg.projectId] || []).map((m) =>
           m.id === updatedMsg.id ? updatedMsg : m
         ),
+      }));
+    },
+    onMessageDeleted: ({ projectId, messageId }: any) => {
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [projectId]: (prev[projectId] || []).filter((m) => m.id !== messageId),
       }));
     },
     onReactionUpdated: ({ messageId, reactions }: any) => {
@@ -391,6 +435,12 @@ return sortProjectsByActivity(updated);
   const handleSelectProject = (project: ProjectWorkspaceItem) => {
     setSelectedProjectId(project.id);
     setMobileActiveScreen("chat");
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("projectId", project.id);
+      window.history.replaceState(null, "", url.toString());
+    }
 
     // Clear unread count & reset non-approval attention for selected project
     setProjects((prev) =>
@@ -598,6 +648,37 @@ return sortProjectsByActivity(updated);
     [selectedProjectId, socketClient]
   );
 
+  // Handle deleting a message (WebSocket with REST fallback)
+  const handleDeleteMessage = React.useCallback(
+    async (messageId: string) => {
+      if (!selectedProjectId) return;
+
+      // Optimistic local state update
+      setMessagesByProject((prev) => ({
+        ...prev,
+        [selectedProjectId]: (prev[selectedProjectId] || []).filter((m) => m.id !== messageId),
+      }));
+
+      try {
+        // 1. Attempt WebSocket delete
+        await socketClient.deleteMessage(messageId);
+        toast.success("Message deleted");
+      } catch {
+        // 2. Fallback to REST API if socket fails
+        try {
+          await api.delete(`/projects/${selectedProjectId}/messages/${messageId}`);
+          toast.success("Message deleted");
+        } catch (restErr: any) {
+          console.error("Failed to delete message via REST fallback:", restErr);
+          toast.error(restErr.message || "Failed to delete message");
+          // Re-fetch project messages to recover state
+          fetchProjectMessages(selectedProjectId);
+        }
+      }
+    },
+    [selectedProjectId, socketClient, fetchProjectMessages]
+  );
+
   // Handle toggling reaction
   const handleToggleReaction = (messageId: string, emoji: string) => {
     socketClient.sendReaction(messageId, emoji);
@@ -625,6 +706,40 @@ return sortProjectsByActivity(updated);
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to toggle pin status");
+    }
+  };
+
+  // Handle toggling pin status of a project
+  const handleTogglePinProject = async (projectId: string) => {
+    // 1. Optimistic UI update and re-sort
+    setProjects((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === projectId) {
+          return { ...p, isPinned: !p.isPinned };
+        }
+        return p;
+      });
+      return sortProjectsByActivity(updated);
+    });
+
+    try {
+      // 2. Call backend pin toggle endpoint
+      const res = await api.post<any>(`/projects/${projectId}/pin`);
+      const isPinned = res?.data?.isPinned ?? res?.isPinned;
+      toast.success(isPinned ? "Project pinned to top" : "Project unpinned");
+    } catch (err: any) {
+      // 3. Revert optimistic state on error
+      setProjects((prev) => {
+        const reverted = prev.map((p) => {
+          if (p.id === projectId) {
+            return { ...p, isPinned: !p.isPinned };
+          }
+          return p;
+        });
+        return sortProjectsByActivity(reverted);
+      });
+      console.error("Failed to toggle project pin status:", err);
+      toast.error(err?.message || "Failed to toggle pin status");
     }
   };
 
@@ -683,6 +798,7 @@ return sortProjectsByActivity(updated);
           projects={projects}
           selectedProjectId={selectedProjectId}
           onSelectProject={handleSelectProject}
+          onTogglePinProject={handleTogglePinProject}
           isCollapsed={isLeftSidebarCollapsed}
           onToggleCollapse={() => setIsLeftSidebarCollapsed((prev) => !prev)}
           onNewProject={onNewProject}
@@ -704,6 +820,7 @@ return sortProjectsByActivity(updated);
           projects={projects}
           selectedProjectId={selectedProjectId}
           onSelectProject={handleSelectProject}
+          onTogglePinProject={handleTogglePinProject}
           isCollapsed={false}
           onToggleCollapse={() => {}}
           onNewProject={onNewProject}
@@ -733,7 +850,9 @@ return sortProjectsByActivity(updated);
             onUpdateApproval={handleUpdateApproval}
             onToggleReaction={handleToggleReaction}
             onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
             onTogglePinMessage={handleTogglePinMessage}
+            onTogglePinProject={handleTogglePinProject}
             onMarkSeen={handleMarkMessagesSeen}
             onToggleRightSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
             isRightSidebarOpen={isRightSidebarOpen}
@@ -757,6 +876,7 @@ return sortProjectsByActivity(updated);
             project={selectedProject}
             messages={currentMessages}
             onUpdateApproval={handleUpdateApproval}
+            onTogglePin={handleTogglePinProject}
             onScrollToMessage={handleScrollToMessage}
             onClose={() => setIsRightSidebarOpen(false)}
           />
@@ -771,6 +891,7 @@ return sortProjectsByActivity(updated);
               project={selectedProject}
               messages={currentMessages}
               onUpdateApproval={handleUpdateApproval}
+              onTogglePin={handleTogglePinProject}
               onScrollToMessage={(msgId) => {
                 setMobileDrawerOpen(false);
                 handleScrollToMessage(msgId);

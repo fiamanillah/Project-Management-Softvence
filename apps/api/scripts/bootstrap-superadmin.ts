@@ -1,20 +1,17 @@
-import dotenv from "dotenv";
 import { createPrismaClient } from "@workspace/db";
+import { env } from "@workspace/env/api";
 import { hashPassword } from "../src/utils/crypto";
 import { PermissionRegistry } from "../src/core/permissions/PermissionRegistry";
 import { AuditLogService } from "../src/core/audit/audit.service";
 
-dotenv.config();
-
-const databaseUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/project_management";
 const prisma = createPrismaClient({
-  databaseUrl,
-  isProduction: false,
+  databaseUrl: env.DATABASE_URL,
+  isProduction: env.NODE_ENV === "production",
 });
 
 async function main() {
-  const email = process.env.ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
+  const email = env.ADMIN_EMAIL || env.DEFAULT_ADMIN_EMAIL;
+  const password = env.ADMIN_PASSWORD || env.DEFAULT_ADMIN_PASSWORD;
 
   if (!email || !password) {
     console.error("❌ Error: ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required.");

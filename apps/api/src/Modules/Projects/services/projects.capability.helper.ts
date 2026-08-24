@@ -264,6 +264,7 @@ export async function computeProjectCapabilities(
     canSalesDispatch,
     canRequestRevision: canLeadApprove || canSalesDispatch,
     canManageCollateral,
+    canPinProject: canEdit,
   };
 }
 
@@ -580,6 +581,7 @@ export async function sanitizeAndDecorateMessage(
     hasLeadReviewPerm,
     hasSalesDispatchPerm,
     canPin,
+    canDeleteChat,
     canDeleteGlobal,
     canEditGlobal,
     canSendClient,
@@ -587,17 +589,22 @@ export async function sanitizeAndDecorateMessage(
     can(actor, "project.approval.lead_review", resourceContext),
     can(actor, "project.approval.sales_dispatch", resourceContext),
     can(actor, "project.chat.pin", resourceContext),
+    can(actor, "project.chat.delete", resourceContext),
     can(actor, "project.delete", resourceContext),
     can(actor, "project.edit", resourceContext),
     can(actor, "project.chat.send_client", resourceContext),
   ]);
 
+  const canDeleteScoped = canDeleteChat || canDeleteGlobal || canEditGlobal;
+
   const createdAtTime = new Date(message.createdAt).getTime();
   const nowTime = Date.now();
   const elapsedMs = Math.max(0, nowTime - createdAtTime);
-  const internalEditWindowMs = 15 * 60 * 1000; // 15 minutes window
-  const isWithinEditWindow = elapsedMs <= internalEditWindowMs;
-  const editTimeRemainingSeconds = Math.max(0, Math.floor((internalEditWindowMs - elapsedMs) / 1000));
+  const internalActionWindowMs = 10 * 60 * 1000; // 10 minutes window (Rule BE-1)
+  const isWithinEditWindow = elapsedMs <= internalActionWindowMs;
+  const isWithinDeleteWindow = elapsedMs <= internalActionWindowMs;
+  const editTimeRemainingSeconds = Math.max(0, Math.floor((internalActionWindowMs - elapsedMs) / 1000));
+  const deleteTimeRemainingSeconds = Math.max(0, Math.floor((internalActionWindowMs - elapsedMs) / 1000));
 
   const isClientOutbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "OUTBOUND";
   const isClientInbound = message.purpose === "CLIENT_COMMUNICATION" && message.clientDirection === "INBOUND";
@@ -615,31 +622,33 @@ export async function sanitizeAndDecorateMessage(
       // In Review stage
       canLeadApprove = hasLeadReviewPerm || canEditGlobal;
       canRequestRevision = hasLeadReviewPerm || canEditGlobal;
-      canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
-      canDelete = isAuthor || canDeleteGlobal;
+      canEdit = (isAuthor && isWithinEditWindow) || hasLeadReviewPerm || canEditGlobal;
+      canDelete = (isAuthor && isWithinDeleteWindow) || canDeleteScoped;
     } else if (statusObj?.requiresSalesAction) {
       // Awaiting Dispatch stage
       canSalesDispatch = hasSalesDispatchPerm || canEditGlobal;
       canRequestRevision = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
       canEdit = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
-      canDelete = canDeleteGlobal;
+      canDelete = canDeleteScoped;
     } else if (statusObj?.isTerminal) {
       // Dispatched / Terminal stage
       canEdit = hasSalesDispatchPerm || hasLeadReviewPerm || canEditGlobal;
-      canDelete = canDeleteGlobal;
+      canDelete = canDeleteScoped;
     } else {
       // Revision Requested / other intermediate non-terminal states
-      canEdit = isAuthor || hasLeadReviewPerm || canEditGlobal;
-      canDelete = isAuthor || canDeleteGlobal;
+      canEdit = (isAuthor && isWithinEditWindow) || hasLeadReviewPerm || canEditGlobal;
+      canDelete = (isAuthor && isWithinDeleteWindow) || canDeleteScoped;
     }
   } else if (isClientInbound) {
     canEdit = (isAuthor && isWithinEditWindow) || canSendClient || canEditGlobal;
-    canDelete = isAuthor || canDeleteGlobal;
+    canDelete = (isAuthor && isWithinDeleteWindow) || canDeleteScoped;
   } else {
     // Internal Discussion
     canEdit = (isAuthor && isWithinEditWindow) || canEditGlobal;
-    canDelete = isAuthor || canDeleteGlobal;
+    canDelete = (isAuthor && isWithinDeleteWindow) || canDeleteScoped;
   }
+
+  const isPrivilegedEditor = Boolean(canEditGlobal || hasLeadReviewPerm || hasSalesDispatchPerm);
 
   const capabilities: ProjectMessageCapabilities = {
     canLeadApprove,
@@ -648,7 +657,8 @@ export async function sanitizeAndDecorateMessage(
     canPin,
     canDelete,
     canEdit,
-    editTimeRemainingSeconds: isAuthor && isWithinEditWindow ? editTimeRemainingSeconds : undefined,
+    editTimeRemainingSeconds: isAuthor && isWithinEditWindow && !isPrivilegedEditor ? editTimeRemainingSeconds : undefined,
+    deleteTimeRemainingSeconds: isAuthor && isWithinDeleteWindow && !canDeleteScoped ? deleteTimeRemainingSeconds : undefined,
   };
 
   // Format reactions with reactedByMe flag
@@ -674,91 +684,13 @@ export async function sanitizeAndDecorateMessage(
     userName: rd.user ? `${rd.user.firstName} ${rd.user.lastName}` : "User",
     userAvatar: rd.user?.avatarUrl || null,
     userDesignation: rd.user?.designation?.name || null,
-    seenAt: new Date(rd.seenAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    seenAt: new Date(rd.seenAt).toISOString(),
   }));
 
   // Format approval workflow with accurate dwell times and SLA status
-  let approval: any = null;
-  if (message.approvalWorkflow) {
-    const wf = message.approvalWorkflow;
-    const statusCode = wf.status?.code || "IN_REVIEW";
-    const isTerminalStatus = Boolean(wf.status?.isTerminal || statusCode === "DISPATCHED");
-
-    let stageStartedDate = new Date(wf.createdAt);
-    if (wf.status?.requiresSalesAction && wf.leadApprovedAt) {
-      stageStartedDate = new Date(wf.leadApprovedAt);
-    } else if (wf.rejectedAt) {
-      stageStartedDate = new Date(wf.rejectedAt);
-    } else if (isTerminalStatus && wf.salesDispatchedAt) {
-      stageStartedDate = new Date(wf.salesDispatchedAt);
-    }
-
-    const dwellMinutes =
-      isTerminalStatus
-        ? 0
-        : Math.max(0, Math.floor((nowTime - stageStartedDate.getTime()) / (1000 * 60)));
-
-    const slaTargetMinutes = wf.slaTargetMinutes || 30;
-    let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
-    if (!isTerminalStatus) {
-      if (dwellMinutes > slaTargetMinutes) {
-        computedSlaStatus = "BREACHED";
-      } else if (dwellMinutes > slaTargetMinutes * 0.75) {
-        computedSlaStatus = "AT_RISK";
-      }
-    }
-
-    const mappedAudits = (wf.auditTrail || []).map((aud: any) => ({
-      id: aud.id,
-      stageName: aud.stageName,
-      stageKey: aud.stageKey,
-      actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
-      actorAvatar: aud.actor?.avatarUrl || null,
-      actorRole: aud.actorRole || "Reviewer",
-      timestamp: new Date(aud.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      durationMinutes: aud.durationMinutes || null,
-      notes: aud.notes || null,
-    }));
-
-    // Ensure initial Draft Created event is always present at index 0 if not recorded
-    const hasDraftAudit = mappedAudits.some((a: any) => a.stageKey === "DRAFTED" || a.stageName === "Draft Created");
-    if (!hasDraftAudit) {
-      mappedAudits.unshift({
-        id: `draft-${wf.id}`,
-        stageName: "Draft Created",
-        stageKey: "DRAFTED",
-        actorName: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
-        actorAvatar: wf.requestedBy?.avatarUrl || null,
-        actorRole: "Author",
-        timestamp: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        durationMinutes: null,
-        notes: `Drafted client communication (${message.messageType?.code || wf.clientMessageType || "General"})`,
-      });
-    }
-
-    approval = {
-      id: wf.id,
-      status: statusCode,
-      clientMessageType: message.messageType?.code || wf.clientMessageType || "GENERAL_NOTICE",
-      requestedBy: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
-      requestedAt: new Date(wf.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      targetClient: wf.targetClientName,
-      currentStageDwellMinutes: dwellMinutes,
-      stageStartedAt: stageStartedDate.toISOString(),
-      slaTargetMinutes,
-      slaStatus: computedSlaStatus,
-      leadApprovedBy: wf.leadApprover ? `${wf.leadApprover.firstName} ${wf.leadApprover.lastName}` : null,
-      leadApprovedAt: wf.leadApprovedAt ? new Date(wf.leadApprovedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      salesDispatchedBy: wf.salesDispatcher ? `${wf.salesDispatcher.firstName} ${wf.salesDispatcher.lastName}` : null,
-      salesDispatchedAt: wf.salesDispatchedAt ? new Date(wf.salesDispatchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      dispatchPlatform: wf.dispatchPlatform || null,
-      dispatchReferenceId: wf.dispatchReferenceId || null,
-      rejectionReason: wf.rejectionReason || null,
-      rejectedBy: wf.rejector ? `${wf.rejector.firstName} ${wf.rejector.lastName}` : null,
-      rejectedAt: wf.rejectedAt ? new Date(wf.rejectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      auditTrail: mappedAudits,
-    };
-  }
+  const approval = message.approvalWorkflow
+    ? formatApprovalWorkflowItem(message.approvalWorkflow, message.messageType?.code, nowTime)
+    : null;
 
   // Format attachments
   const attachments = (message.attachments || []).map((att: any) => ({
@@ -800,7 +732,7 @@ export async function sanitizeAndDecorateMessage(
     editedAt: message.editedAt ? new Date(message.editedAt).toISOString() : null,
     editHistoryCount: Array.isArray(message.revisions) ? message.revisions.length : undefined,
     text: message.text,
-    timestamp: createdDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    timestamp: createdDate.toISOString(),
     dateGroup,
     purpose: message.purpose as any,
     clientDirection: message.clientDirection as any,
@@ -813,6 +745,7 @@ export async function sanitizeAndDecorateMessage(
           text: message.replyTo.text,
         }
       : null,
+    replyCount: message._count?.replies ?? (Array.isArray(message.replies) ? message.replies.length : 0),
     attachments: attachments.length > 0 ? attachments : undefined,
     reactions: reactions.length > 0 ? reactions : undefined,
     seenBy: seenBy.length > 0 ? seenBy : undefined,
@@ -820,5 +753,93 @@ export async function sanitizeAndDecorateMessage(
     metadata: message.metadata || null,
     isPinned: message.isPinned || false,
     _capabilities: capabilities,
+  };
+}
+
+/**
+ * Universal formatter for MessageApprovalWorkflow entities.
+ * Ensures consistent dwell time calculations, SLA statuses, and ISO timestamps across all services.
+ */
+export function formatApprovalWorkflowItem(
+  wf: any,
+  messageTypeCode?: string | null,
+  referenceTimeMs = Date.now(),
+): any {
+  if (!wf) return null;
+
+  const statusCode = wf.status?.code || (typeof wf.status === "string" ? wf.status : "IN_REVIEW");
+  const isTerminalStatus = Boolean(wf.status?.isTerminal);
+
+  let stageStartedDate = new Date(wf.createdAt);
+  if (wf.status?.requiresSalesAction && wf.leadApprovedAt) {
+    stageStartedDate = new Date(wf.leadApprovedAt);
+  } else if (wf.rejectedAt) {
+    stageStartedDate = new Date(wf.rejectedAt);
+  } else if (isTerminalStatus && wf.salesDispatchedAt) {
+    stageStartedDate = new Date(wf.salesDispatchedAt);
+  }
+
+  const dwellMinutes = isTerminalStatus
+    ? 0
+    : Math.max(0, Math.floor((referenceTimeMs - stageStartedDate.getTime()) / (1000 * 60)));
+
+  const slaTargetMinutes = wf.slaTargetMinutes || 30;
+  let computedSlaStatus: "ON_TRACK" | "AT_RISK" | "BREACHED" = "ON_TRACK";
+  if (!isTerminalStatus) {
+    if (dwellMinutes > slaTargetMinutes) {
+      computedSlaStatus = "BREACHED";
+    } else if (dwellMinutes > slaTargetMinutes * 0.75) {
+      computedSlaStatus = "AT_RISK";
+    }
+  }
+
+  const mappedAudits = (wf.auditTrail || []).map((aud: any) => ({
+    id: aud.id,
+    stageName: aud.stageName,
+    stageKey: aud.stageKey,
+    actorName: aud.actor ? `${aud.actor.firstName} ${aud.actor.lastName}` : "User",
+    actorAvatar: aud.actor?.avatarUrl || null,
+    actorRole: aud.actorRole || "Reviewer",
+    timestamp: new Date(aud.createdAt).toISOString(),
+    durationMinutes: aud.durationMinutes || null,
+    notes: aud.notes || null,
+  }));
+
+  const hasDraftAudit = mappedAudits.some((a: any) => a.stageKey === "DRAFTED" || a.stageName === "Draft Created");
+  if (!hasDraftAudit) {
+    mappedAudits.unshift({
+      id: `draft-${wf.id}`,
+      stageName: "Draft Created",
+      stageKey: "DRAFTED",
+      actorName: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
+      actorAvatar: wf.requestedBy?.avatarUrl || null,
+      actorRole: "Author",
+      timestamp: new Date(wf.createdAt).toISOString(),
+      durationMinutes: null,
+      notes: `Drafted client communication (${messageTypeCode || wf.clientMessageType || "General"})`,
+    });
+  }
+
+  return {
+    id: wf.id,
+    status: statusCode,
+    clientMessageType: messageTypeCode || wf.clientMessageType || "GENERAL_NOTICE",
+    requestedBy: wf.requestedBy ? `${wf.requestedBy.firstName} ${wf.requestedBy.lastName}` : "Author",
+    requestedAt: new Date(wf.createdAt).toISOString(),
+    targetClient: wf.targetClientName,
+    currentStageDwellMinutes: dwellMinutes,
+    stageStartedAt: stageStartedDate.toISOString(),
+    slaTargetMinutes,
+    slaStatus: computedSlaStatus,
+    leadApprovedBy: wf.leadApprover ? `${wf.leadApprover.firstName} ${wf.leadApprover.lastName}` : null,
+    leadApprovedAt: wf.leadApprovedAt ? new Date(wf.leadApprovedAt).toISOString() : null,
+    salesDispatchedBy: wf.salesDispatcher ? `${wf.salesDispatcher.firstName} ${wf.salesDispatcher.lastName}` : null,
+    salesDispatchedAt: wf.salesDispatchedAt ? new Date(wf.salesDispatchedAt).toISOString() : null,
+    dispatchPlatform: wf.dispatchPlatform || null,
+    dispatchReferenceId: wf.dispatchReferenceId || null,
+    rejectionReason: wf.rejectionReason || null,
+    rejectedBy: wf.rejector ? `${wf.rejector.firstName} ${wf.rejector.lastName}` : null,
+    rejectedAt: wf.rejectedAt ? new Date(wf.rejectedAt).toISOString() : null,
+    auditTrail: mappedAudits,
   };
 }

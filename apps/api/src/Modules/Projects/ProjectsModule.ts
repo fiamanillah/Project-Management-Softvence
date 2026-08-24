@@ -32,6 +32,8 @@ import {
   createProjectMilestoneSchema,
   updateProjectMilestoneSchema,
   createProjectLinkSchema,
+  searchProjectMessagesSchema,
+  exportProjectMessagesSchema,
 } from "./ProjectDTO";
 import { findProjectByIdOrCode } from "./services/projects.capability.helper";
 
@@ -62,6 +64,7 @@ export class ProjectsModule extends BaseModule {
           name: "In Review",
           requiresLeadAction: true,
           requiresSalesAction: false,
+          requiresAuthorRevision: false,
           requiresAutoApproveCheck: false,
           isTerminal: false,
           sortOrder: 1,
@@ -72,6 +75,7 @@ export class ProjectsModule extends BaseModule {
           name: "Awaiting Dispatch",
           requiresLeadAction: false,
           requiresSalesAction: true,
+          requiresAuthorRevision: false,
           requiresAutoApproveCheck: false,
           isTerminal: false,
           sortOrder: 2,
@@ -82,6 +86,7 @@ export class ProjectsModule extends BaseModule {
           name: "Dispatched",
           requiresLeadAction: false,
           requiresSalesAction: false,
+          requiresAuthorRevision: false,
           requiresAutoApproveCheck: false,
           isTerminal: true,
           sortOrder: 3,
@@ -92,6 +97,7 @@ export class ProjectsModule extends BaseModule {
           name: "Revision Requested",
           requiresLeadAction: false,
           requiresSalesAction: false,
+          requiresAuthorRevision: true,
           requiresAutoApproveCheck: false,
           isTerminal: false,
           sortOrder: 4,
@@ -111,6 +117,7 @@ export class ProjectsModule extends BaseModule {
             name: "In Review",
             requiresLeadAction: true,
             requiresSalesAction: false,
+            requiresAuthorRevision: false,
             requiresAutoApproveCheck: false,
             isTerminal: false,
             sortOrder: 1,
@@ -127,6 +134,7 @@ export class ProjectsModule extends BaseModule {
             name: st.name,
             requiresLeadAction: st.requiresLeadAction,
             requiresSalesAction: st.requiresSalesAction,
+            requiresAuthorRevision: st.requiresAuthorRevision,
             requiresAutoApproveCheck: st.requiresAutoApproveCheck,
             isTerminal: st.isTerminal,
             sortOrder: st.sortOrder,
@@ -138,6 +146,7 @@ export class ProjectsModule extends BaseModule {
             name: st.name,
             requiresLeadAction: st.requiresLeadAction,
             requiresSalesAction: st.requiresSalesAction,
+            requiresAuthorRevision: st.requiresAuthorRevision,
             requiresAutoApproveCheck: st.requiresAutoApproveCheck,
             isTerminal: st.isTerminal,
             sortOrder: st.sortOrder,
@@ -310,6 +319,48 @@ export class ProjectsModule extends BaseModule {
       controller.editMessage.bind(controller),
     );
 
+    this.router.delete(
+      "/:id/messages/:messageId",
+      requirePermission("project.view", loadProjectResource),
+      controller.deleteMessage.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/messages/pinned",
+      requirePermission("project.view", loadProjectResource),
+      controller.getPinnedMessages.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/messages/search",
+      requirePermission("project.view", loadProjectResource),
+      controller.searchMessages.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/messages/export",
+      requirePermission("project.view", loadProjectResource),
+      controller.exportMessages.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/messages/:messageId/thread",
+      requirePermission("project.view", loadProjectResource),
+      controller.getMessageThread.bind(controller),
+    );
+
+    this.router.delete(
+      "/:id/messages/:messageId/attachments/:attachmentId",
+      requirePermission("project.view", loadProjectResource),
+      controller.deleteAttachment.bind(controller),
+    );
+
+    this.router.get(
+      "/:id/messages/unread-count",
+      requirePermission("project.view", loadProjectResource),
+      controller.getUnreadCount.bind(controller),
+    );
+
     this.router.get(
       "/:id/messages/:messageId/revisions",
       requirePermission("project.view", loadProjectResource),
@@ -361,8 +412,14 @@ export class ProjectsModule extends BaseModule {
     this.router.post(
       "/:id/messages/:messageId/approval/reject",
       validateRequest({ body: requestRevisionSchema }),
-      requirePermission("project.view", loadProjectResource),
+      requirePermission("project.approval.lead_review", loadProjectResource),
       controller.requestRevision.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/approval/check-sla",
+      requirePermission("project.view", loadProjectResource),
+      controller.checkAndEscalateSLA.bind(controller),
     );
 
     // --- Milestones & Collateral ---
@@ -424,6 +481,12 @@ export class ProjectsModule extends BaseModule {
       validateRequest({ body: updateProjectSchema }),
       requirePermission("project.edit", loadProjectResource),
       controller.updateProject.bind(controller),
+    );
+
+    this.router.post(
+      "/:id/pin",
+      requirePermission("project.edit", loadProjectResource),
+      controller.togglePinProject.bind(controller),
     );
 
     this.router.delete(

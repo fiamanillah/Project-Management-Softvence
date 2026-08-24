@@ -1,8 +1,5 @@
-import dotenv from "dotenv";
 import { prisma } from "../src/lib/prisma";
 import { PermissionRegistry } from "../src/core/permissions/PermissionRegistry";
-
-dotenv.config();
 
 async function main() {
   console.log("⚡ Starting permission registry sync CLI...");

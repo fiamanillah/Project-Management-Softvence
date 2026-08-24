@@ -740,6 +740,42 @@ describe("Projects Module & Sensitive Field Permissions", () => {
     expect(resubmitted.text).toBe("Updated draft message with clear scope wording");
     expect(resubmitted.approval?.status).toBe("PENDING_SALES");
   });
+
+  it("should toggle project pin status successfully", async () => {
+    const pinTestProject = await projectsService.createProject(
+      {
+        projectName: "Pin Toggle Test Project",
+        orderId: `ORD-PIN-${Date.now()}`,
+        clientId: sampleClientId,
+        profileId: sampleProfileId,
+        serviceLineId: sampleServiceLineId,
+        statusId: sampleStatusId,
+      },
+      superAdminUser,
+    );
+
+    // Initial state: not pinned
+    expect(pinTestProject.isPinned).toBe(false);
+    expect(pinTestProject._capabilities?.canPinProject).toBe(true);
+
+    // Toggle pin -> true
+    const pinResult1 = await projectsService.togglePinProject(pinTestProject.id, superAdminUser);
+    expect(pinResult1.success).toBe(true);
+    expect(pinResult1.isPinned).toBe(true);
+
+    // Toggle pin -> false
+    const pinResult2 = await projectsService.togglePinProject(pinTestProject.id, superAdminUser);
+    expect(pinResult2.success).toBe(true);
+    expect(pinResult2.isPinned).toBe(false);
+
+    // Update with isPinned: true in UpdateProjectDTO
+    const updated = await projectsService.updateProject(
+      pinTestProject.id,
+      { isPinned: true },
+      superAdminUser,
+    );
+    expect(updated.isPinned).toBe(true);
+  });
 });
 
 
