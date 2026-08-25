@@ -13,6 +13,14 @@ import {
   Award,
   ListTodo,
   Radio,
+  Bug,
+  Kanban,
+  Layers,
+  Zap,
+  Archive,
+  Clock,
+  Workflow,
+  LifeBuoy,
   type LucideIcon,
 } from "lucide-react";
 
@@ -92,13 +100,13 @@ export const data = {
       label: "Projects & Workspace",
       items: [
         {
-          title: "Projects",
+          title: "Projects Hub",
           url: "/dashboard/projects",
           icon: FolderKanban,
           permission: "project.view",
         },
         {
-          title: "Manage Projects",
+          title: "Manage Workspace",
           url: "/dashboard/manage-projects",
           icon: MessagesSquare,
           permission: "project.view",
@@ -109,12 +117,23 @@ export const data = {
           icon: Radio,
           permission: "station.view",
         },
+      ],
+    },
+    {
+      label: "Agile & Delivery",
+      items: [
         {
-          title: "Agile Tasks & Boards",
+          title: "Task Management",
           url: "/dashboard/tasks",
           icon: ListTodo,
           permission: "project.view",
-          badge: "Agile",
+        },
+        {
+          title: "Issue Tracker & QA",
+          url: "/dashboard/issues",
+          icon: Bug,
+          permission: "project.view",
+          badge: "3",
         },
       ],
     },
@@ -159,89 +178,6 @@ export const data = {
       ],
     },
   ] as NavGroupConfig[],
-  navMain: [
-    {
-      title: "Overview",
-      url: "/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      title: "Organization Structure",
-      url: "/dashboard/organization",
-      icon: Network,
-      permission: "auth.user.view",
-    },
-    {
-      title: "Branches",
-      url: "/dashboard/branches",
-      icon: GitBranch,
-      permission: "auth.user.view",
-    },
-    {
-      title: "Departments",
-      url: "/dashboard/departments",
-      icon: Building2,
-      permission: "organization.department.view",
-    },
-    {
-      title: "Teams",
-      url: "/dashboard/teams",
-      icon: UsersRound,
-      permission: "organization.team.view",
-    },
-    {
-      title: "Projects",
-      url: "/dashboard/projects",
-      icon: FolderKanban,
-      permission: "project.view",
-    },
-    {
-      title: "Manage Projects",
-      url: "/dashboard/manage-projects",
-      icon: MessagesSquare,
-      permission: "project.view",
-    },
-    {
-      title: "Workstations & Profiles",
-      url: "/dashboard/stations",
-      icon: Radio,
-      permission: "station.view",
-    },
-    {
-      title: "Agile Tasks & Boards",
-      url: "/dashboard/tasks",
-      icon: ListTodo,
-      permission: "project.view",
-    },
-    {
-      title: "Users Management",
-      url: "/dashboard/users",
-      icon: Users,
-      permission: "auth.user.view",
-    },
-    {
-      title: "Designations",
-      url: "/dashboard/designations",
-      icon: Award,
-      permission: "auth.user.view",
-    },
-    {
-      title: "Roles & Permissions",
-      url: "/dashboard/roles",
-      icon: ShieldCheck,
-      permission: "auth.user.view",
-    },
-    {
-      title: "Overrides & Delegations",
-      url: "/dashboard/overrides",
-      icon: KeyRound,
-      permission: "auth.user.manage",
-    },
-    {
-      title: "Security Audit Logs",
-      url: "/dashboard/audit-logs",
-      icon: FileSpreadsheet,
-      permission: "auth.user.manage",
-    },
-  ] as NavItemConfig[],
+  navMain: [] as NavItemConfig[],
 };
+

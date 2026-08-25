@@ -27,9 +27,10 @@ import { useTaskStore } from "../../data/task-store";
 interface KanbanCardProps {
   task: AgileTask;
   isDragging?: boolean;
+  compact?: boolean;
 }
 
-export function KanbanCard({ task }: KanbanCardProps) {
+export function KanbanCard({ task, compact = false }: KanbanCardProps) {
   const { setSelectedTaskId } = useTaskStore();
   const [isDragged, setIsDragged] = React.useState(false);
 
@@ -94,6 +95,47 @@ export function KanbanCard({ task }: KanbanCardProps) {
   const handleDragEnd = () => {
     setIsDragged(false);
   };
+
+  // Render High-Density Executive Compact View
+  if (compact) {
+    return (
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onClick={() => setSelectedTaskId(task.id)}
+        className={`group relative flex items-center justify-between gap-2 rounded-lg border border-border/80 bg-card px-2.5 py-2 shadow-2xs transition-all duration-150 hover:border-primary/50 hover:shadow-xs cursor-grab active:cursor-grabbing ${
+          isDragged ? "opacity-40 scale-[0.98] border-dashed border-primary" : "opacity-100"
+        }`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span title={typeConfig.label} className="shrink-0">
+            {renderTypeIcon(task.taskType)}
+          </span>
+          <span className="font-mono text-[10px] font-semibold text-muted-foreground shrink-0">
+            {task.key}
+          </span>
+          <span className="truncate text-xs font-medium text-foreground group-hover:text-primary transition-colors">
+            {task.title}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span title={`Priority: ${priorityConfig.label}`}>
+            {renderPriorityIcon(task.priority)}
+          </span>
+          {task.assignee && (
+            <Avatar className="h-4.5 w-4.5 border border-border">
+              <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
+              <AvatarFallback className="text-[8px]">
+                {task.assignee.name.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

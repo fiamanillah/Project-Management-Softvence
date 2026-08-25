@@ -227,7 +227,7 @@ export interface AgileTask {
 }
 
 export type SwimlaneMode = "NONE" | "ASSIGNEE" | "DEPARTMENT" | "PROJECT" | "EPIC" | "PRIORITY";
-export type AgileViewMode = "BOARD" | "BACKLOG" | "TABLE" | "TIMELINE" | "MY_TASKS";
+export type AgileViewMode = "BOARD" | "BACKLOG" | "TABLE" | "TIMELINE" | "MY_TASKS" | "WORKFLOWS";
 
 export interface TaskFilterState {
   search: string;
@@ -244,4 +244,7 @@ export interface TaskFilterState {
   status: string; // 'ALL' or specific
   tag: string; // 'ALL' or specific
   swimlane: SwimlaneMode;
+  cardDensity: "STANDARD" | "COMPACT";
+  hideEmptyGroups?: boolean;
 }
+

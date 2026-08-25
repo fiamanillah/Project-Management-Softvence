@@ -61,7 +61,7 @@ export function CompleteSprintModal() {
 
   return (
     <Dialog open={completeSprintModalOpen} onOpenChange={setCompleteSprintModalOpen}>
-      <DialogContent className="sm:max-w-none min-w-[min(92vw,560px)] bg-background border border-border/80 rounded-2xl shadow-xl p-6">
+      <DialogContent className="w-full max-w-[calc(100%-2rem)] sm:max-w-[500px] bg-background border border-border/80 rounded-2xl shadow-xl p-6">
         <DialogHeader>
           <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />

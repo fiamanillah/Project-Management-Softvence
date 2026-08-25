@@ -118,7 +118,7 @@ export function CreateTaskModal() {
 
   return (
     <Dialog open={createTaskModalOpen} onOpenChange={setCreateTaskModalOpen}>
-      <DialogContent className="w-[90vw] sm:max-w-2xl bg-background border border-border/80 rounded-2xl shadow-xl p-6">
+      <DialogContent className="w-full max-w-[calc(100%-2rem)] sm:max-w-2xl bg-background border border-border/80 rounded-2xl shadow-xl p-6">
         <DialogHeader>
           <DialogTitle className="text-base font-bold text-foreground">
             Create Work Item / Agile Task

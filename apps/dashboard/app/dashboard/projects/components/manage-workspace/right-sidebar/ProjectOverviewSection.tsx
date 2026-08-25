@@ -207,6 +207,51 @@ export function ProjectOverviewSection({ project }: ProjectOverviewSectionProps)
           })}
         </div>
       </div>
+
+      {/* 5. Agile Delivery & Defect Center Quick Actions */}
+      <div className="rounded-xl border border-border/60 bg-card/70 p-3 space-y-2.5">
+        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
+          Agile Workspace & Defect Center
+        </span>
+        <div className="grid grid-cols-1 gap-1.5">
+          <a
+            href={`/dashboard/tasks/sprint?projectId=${project.id}`}
+            className="flex items-center justify-between p-2 rounded-lg bg-muted/40 hover:bg-muted border border-border/50 transition-colors text-xs text-foreground font-medium group"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles className="size-3.5 text-primary" /> Active Sprint Board
+            </span>
+            <span className="text-[10px] text-muted-foreground group-hover:text-foreground">
+              Open Board →
+            </span>
+          </a>
+
+          <a
+            href={`/dashboard/tasks/backlog?projectId=${project.id}`}
+            className="flex items-center justify-between p-2 rounded-lg bg-muted/40 hover:bg-muted border border-border/50 transition-colors text-xs text-foreground font-medium group"
+          >
+            <span className="flex items-center gap-2">
+              <Calendar className="size-3.5 text-amber-500" /> Backlog & Planning
+            </span>
+            <span className="text-[10px] text-muted-foreground group-hover:text-foreground">
+              Prioritize →
+            </span>
+          </a>
+
+          <a
+            href={`/dashboard/issues?projectId=${project.id}`}
+            className="flex items-center justify-between p-2 rounded-lg bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 transition-colors text-xs text-rose-700 dark:text-rose-300 font-medium group"
+          >
+            <span className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-rose-500" /> Project Issues & Defects
+            </span>
+            <span className="text-[10px] text-rose-600 dark:text-rose-400">
+              View Issues →
+            </span>
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
+

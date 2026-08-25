@@ -117,6 +117,8 @@ const defaultFilters: TaskFilterState = {
   status: "ALL",
   tag: "ALL",
   swimlane: "NONE",
+  cardDensity: "STANDARD",
+  hideEmptyGroups: false,
 };
 
 const TaskContext = React.createContext<TaskContextType | undefined>(undefined);

@@ -34,6 +34,7 @@ import {
   Clock,
   Trash2,
 } from "lucide-react";
+import { TaskPagination } from "../TaskPagination";
 import { useTaskStore } from "../../data/task-store";
 import { TASK_TYPES, TASK_PRIORITIES } from "../../data/mock-tasks";
 import type { AgileTask, TaskPriorityKey, TaskTypeKey } from "../../types";
@@ -50,6 +51,8 @@ export function TaskTableView() {
 
   const [sortField, setSortField] = React.useState<keyof AgileTask>("key");
   const [sortAsc, setSortAsc] = React.useState(true);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
 
   const sortedTasks = React.useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
@@ -67,6 +70,19 @@ export function TaskTableView() {
       return 0;
     });
   }, [filteredTasks, sortField, sortAsc]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedTasks.length / pageSize));
+
+  React.useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  const paginatedTasks = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedTasks.slice(start, start + pageSize);
+  }, [sortedTasks, currentPage, pageSize]);
 
   const handleSort = (field: keyof AgileTask) => {
     if (sortField === field) {
@@ -141,7 +157,7 @@ export function TaskTableView() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedTasks.map((task) => {
+            {paginatedTasks.map((task) => {
               return (
                 <TableRow
                   key={task.id}
@@ -185,17 +201,20 @@ export function TaskTableView() {
                     <Select
                       value={task.status}
                       onValueChange={(val) => {
-                        if (val !== null) moveTaskStatus(task.id, val);
+                        if (val) moveTaskStatus(task.id, val);
                       }}
                     >
-                      <SelectTrigger className="h-7 text-[11px] font-medium border-border/60">
+                      <SelectTrigger className="h-7 text-xs bg-background/80 border-border/70">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {activeStatuses.map((s) => (
                           <SelectItem key={s.key} value={s.key} className="text-xs">
                             <span className="flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: s.color }}
+                              />
                               {s.label}
                             </span>
                           </SelectItem>
@@ -209,19 +228,16 @@ export function TaskTableView() {
                     <Select
                       value={task.priority}
                       onValueChange={(val) => {
-                        if (val !== null) updateTask(task.id, { priority: val as TaskPriorityKey });
+                        if (val) updateTask(task.id, { priority: val as TaskPriorityKey });
                       }}
                     >
-                      <SelectTrigger className="h-7 text-[11px] font-medium border-border/60">
-                        <div className="flex items-center gap-1.5">
-                          {renderPriorityIcon(task.priority)}
-                          <SelectValue />
-                        </div>
+                      <SelectTrigger className="h-7 text-xs bg-background/80 border-border/70">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {Object.entries(TASK_PRIORITIES).map(([k, v]) => (
                           <SelectItem key={k} value={k} className="text-xs">
-                            <span className="flex items-center gap-1.5">
+                            <span className="flex items-center gap-2">
                               {renderPriorityIcon(k as TaskPriorityKey)}
                               {v.label}
                             </span>
@@ -232,41 +248,40 @@ export function TaskTableView() {
                   </TableCell>
 
                   {/* Story Points */}
-                  <TableCell className="text-center">
-                    <span className="inline-flex h-5 items-center justify-center rounded-full bg-muted px-2 text-[10px] font-bold text-muted-foreground">
-                      {task.storyPoints || "-"}
-                    </span>
+                  <TableCell className="text-center font-mono text-xs font-semibold text-foreground">
+                    {task.storyPoints ?? "-"}
                   </TableCell>
 
                   {/* Assignee */}
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      {task.assignee ? (
-                        <>
-                          <Avatar className="h-5 w-5 border border-border">
-                            <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
-                            <AvatarFallback className="text-[9px]">
-                              {task.assignee.name.slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs truncate max-w-[100px] text-foreground">
-                            {task.assignee.name}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground/60 italic">
-                          Unassigned
+                    {task.assignee ? (
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-5 w-5 border border-border">
+                          <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
+                          <AvatarFallback className="text-[9px]">
+                            {task.assignee.name.slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs text-foreground truncate max-w-[100px]">
+                          {task.assignee.name}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                    )}
+                  </TableCell>
+
+                  {/* Logged Work */}
+                  <TableCell>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span>{task.loggedHours || 0}h</span>
+                      {task.estimatedHours && (
+                        <span className="text-[10px] text-muted-foreground/70">
+                          / {task.estimatedHours}h
                         </span>
                       )}
                     </div>
-                  </TableCell>
-
-                  {/* Logged Hours */}
-                  <TableCell>
-                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {task.loggedHours || 0}h / {task.estimatedHours || 0}h
-                    </span>
                   </TableCell>
 
                   {/* Due Date */}
@@ -303,6 +318,19 @@ export function TaskTableView() {
             No matching tasks found. Adjust your search or filter settings.
           </div>
         )}
+
+        {/* Bottom Pagination */}
+        <TaskPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={sortedTasks.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
+          }}
+        />
       </div>
     </div>
   );

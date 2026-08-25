@@ -1,70 +1,75 @@
 "use client";
 
 import * as React from "react";
-import { RouteGuard } from "@/components/permission-gate/RouteGuard";
-import { TaskProvider, useTaskStore } from "./data/task-store";
-import { TaskHeader } from "./components/TaskHeader";
+import { useTaskStore } from "./data/task-store";
+import { ActiveSprintBanner } from "./components/ActiveSprintBanner";
 import { TaskFilters } from "./components/TaskFilters";
 import { KanbanBoardView } from "./components/views/KanbanBoardView";
 import { BacklogView } from "./components/views/BacklogView";
 import { TaskTableView } from "./components/views/TaskTableView";
 import { RoadmapTimelineView } from "./components/views/RoadmapTimelineView";
 import { MyTasksView } from "./components/views/MyTasksView";
-import { TaskDetailModal } from "./components/detail/TaskDetailModal";
-import { CreateTaskModal } from "./components/modals/CreateTaskModal";
-import { CreateSprintModal } from "./components/modals/CreateSprintModal";
-import { CompleteSprintModal } from "./components/modals/CompleteSprintModal";
-import { WorkflowManagerModal } from "./components/modals/WorkflowManagerModal";
+import { WorkflowSchemesView } from "./components/views/WorkflowSchemesView";
 
 export default function TasksPage() {
-  return (
-    <RouteGuard code="project.view">
-      <TaskProvider>
-        <TasksContent />
-      </TaskProvider>
-    </RouteGuard>
-  );
-}
-
-function TasksContent() {
   const { viewMode } = useTaskStore();
 
   const renderView = () => {
     switch (viewMode) {
       case "BOARD":
-        return <KanbanBoardView />;
+        return (
+          <div className="flex flex-col h-full">
+            <ActiveSprintBanner />
+            <TaskFilters />
+            <div className="flex-1 overflow-auto">
+              <KanbanBoardView />
+            </div>
+          </div>
+        );
       case "BACKLOG":
-        return <BacklogView />;
+        return (
+          <div className="flex flex-col h-full overflow-y-auto">
+            <BacklogView />
+          </div>
+        );
       case "TABLE":
-        return <TaskTableView />;
+        return (
+          <div className="flex flex-col h-full">
+            <TaskFilters />
+            <div className="flex-1 overflow-auto">
+              <TaskTableView />
+            </div>
+          </div>
+        );
       case "TIMELINE":
-        return <RoadmapTimelineView />;
+        return (
+          <div className="flex flex-col h-full overflow-y-auto">
+            <RoadmapTimelineView />
+          </div>
+        );
       case "MY_TASKS":
-        return <MyTasksView />;
+        return (
+          <div className="flex flex-col h-full overflow-y-auto">
+            <MyTasksView />
+          </div>
+        );
+      case "WORKFLOWS":
+        return (
+          <div className="flex flex-col h-full overflow-y-auto">
+            <WorkflowSchemesView />
+          </div>
+        );
       default:
-        return <KanbanBoardView />;
+        return (
+          <div className="flex flex-col h-full">
+            <TaskFilters />
+            <div className="flex-1 overflow-auto">
+              <TaskTableView />
+            </div>
+          </div>
+        );
     }
   };
 
-  return (
-    <div className="-m-4 sm:-m-6 flex flex-col min-h-[calc(100vh-3.5rem)] bg-background">
-      {/* Top Header */}
-      <TaskHeader />
-
-      {/* Filter Toolbar (shown on Board, Table, and Backlog) */}
-      <TaskFilters />
-
-      {/* Active Agile View */}
-      <div className="flex-1 overflow-auto bg-muted/10">
-        {renderView()}
-      </div>
-
-      {/* Centered Task Detail Modal & Creation Dialogs */}
-      <TaskDetailModal />
-      <CreateTaskModal />
-      <CreateSprintModal />
-      <CompleteSprintModal />
-      <WorkflowManagerModal />
-    </div>
-  );
+  return <div className="h-full">{renderView()}</div>;
 }

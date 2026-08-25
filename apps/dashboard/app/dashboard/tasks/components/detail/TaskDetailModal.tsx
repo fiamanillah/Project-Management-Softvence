@@ -95,7 +95,7 @@ export function TaskDetailModal() {
     >
       <DialogContent
         showCloseButton={true}
-        className="w-[92vw] sm:max-w-4xl lg:max-w-5xl max-h-[88vh] p-0 flex flex-col overflow-hidden bg-background border border-border/80 shadow-2xl rounded-2xl"
+        className="w-full max-w-[calc(100%-2rem)] sm:max-w-4xl lg:max-w-5xl max-h-[88vh] p-0 flex flex-col overflow-hidden bg-background border border-border/80 shadow-2xl rounded-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-border/60 bg-muted/20 pr-12">

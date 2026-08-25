@@ -131,7 +131,7 @@ export function WorkflowManagerModal() {
 
   return (
     <Dialog open={workflowManagerModalOpen} onOpenChange={setWorkflowManagerModalOpen}>
-      <DialogContent className="w-[92vw] sm:max-w-2xl bg-background border border-border/80 rounded-2xl shadow-xl p-6">
+      <DialogContent className="w-full max-w-[calc(100%-2rem)] sm:max-w-2xl bg-background border border-border/80 rounded-2xl shadow-xl p-6">
         <DialogHeader>
           <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
             <GitFork className="h-5 w-5 text-primary" />
