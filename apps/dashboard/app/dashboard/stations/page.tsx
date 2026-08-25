@@ -43,19 +43,22 @@ import type {
   BranchItem,
   DepartmentItem,
   StationProfileAssignmentItem,
+  PlatformItem,
 } from "@workspace/shared";
 import { useStationSession } from "@/lib/station/StationContext";
+import { useSocket } from "@/lib/socket/SocketProvider";
 import { StationStatsCards } from "./components/StationStatsCards";
 import { StationTable } from "./components/StationTable";
 import { StationCardGrid } from "./components/StationCardGrid";
 import { CreateStationModal } from "./components/CreateStationModal";
 import { EditStationModal } from "./components/EditStationModal";
-import { StationDetailSheet } from "./components/StationDetailSheet";
+import { StationDetailModal } from "./components/StationDetailModal";
 import { ManageStationOperatorsModal } from "./components/ManageStationOperatorsModal";
 import { ManageStationProfilesModal } from "./components/ManageStationProfilesModal";
 import { ReassignProfileModal } from "./components/ReassignProfileModal";
 import { DeleteStationDialog } from "./components/DeleteStationDialog";
 import { StationLookupsManager } from "./components/StationLookupsManager";
+import { PlatformProfilesTab } from "./components/profiles/PlatformProfilesTab";
 import { DataTablePagination } from "@/components/data-table";
 import Link from "next/link";
 
@@ -68,9 +71,14 @@ export default function StationsPage() {
 }
 
 function StationsContent() {
+  const { socket, isConnected } = useSocket();
   const {
+    activeSessions,
+    currentStationId,
     activeContext,
+    switchStation,
     leaveStation,
+    leaveAllStations,
     setSelectModalOpen,
     refreshSession,
   } = useStationSession();
@@ -90,6 +98,7 @@ function StationsContent() {
   const [stationRoles, setStationRoles] = React.useState<StationRoleItem[]>([]);
   const [branches, setBranches] = React.useState<BranchItem[]>([]);
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([]);
+  const [platforms, setPlatforms] = React.useState<PlatformItem[]>([]);
 
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -124,13 +133,14 @@ function StationsContent() {
   // Fetch Lookups
   const fetchLookups = React.useCallback(async () => {
     try {
-      const [typesRes, statusesRes, rolesRes, branchesRes, deptsRes] =
+      const [typesRes, statusesRes, rolesRes, branchesRes, deptsRes, projectLookupsRes] =
         await Promise.all([
           api.get("/stations/lookups/types"),
           api.get("/stations/lookups/statuses"),
           api.get("/stations/lookups/roles"),
           api.get("/organization/branches"),
           api.get("/organization/departments"),
+          api.get("/projects/lookups"),
         ]);
 
       setStationTypes(typesRes?.data || typesRes || []);
@@ -138,6 +148,7 @@ function StationsContent() {
       setStationRoles(rolesRes?.data || rolesRes || []);
       setBranches(branchesRes?.data || branchesRes || []);
       setDepartments(deptsRes?.data || deptsRes || []);
+      setPlatforms(projectLookupsRes?.platforms || projectLookupsRes?.data?.platforms || []);
     } catch (err) {
       console.warn("Failed to fetch lookups:", err);
     }
@@ -206,6 +217,35 @@ function StationsContent() {
     fetchStations();
   }, [fetchStations]);
 
+  // Real-time synchronization for stations overview and live occupancy updates
+  React.useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    socket.emit("room:join", { room: "stations:overview" });
+
+    const handleStationUpdated = (data: { stationId: string; station: StationItem }) => {
+      if (!data?.station) return;
+      setStations((prev) =>
+        prev.map((s) => (s.id === data.stationId ? { ...s, ...data.station } : s))
+      );
+      fetchStations();
+    };
+
+    const handleOccupancyUpdated = () => {
+      fetchStations();
+    };
+
+    socket.on("station:updated", handleStationUpdated as any);
+    socket.on("station:occupancy_updated", handleOccupancyUpdated as any);
+    socket.on("station:profiles_updated", fetchStations as any);
+
+    return () => {
+      socket.off("station:updated", handleStationUpdated as any);
+      socket.off("station:occupancy_updated", handleOccupancyUpdated as any);
+      socket.off("station:profiles_updated", fetchStations as any);
+    };
+  }, [socket, isConnected, fetchStations]);
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header Section */}
@@ -272,10 +312,14 @@ function StationsContent() {
 
       {/* Main Tabs */}
       <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-3 w-full sm:w-[480px]">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full sm:w-[620px]">
           <TabsTrigger value="all" className="text-xs gap-1.5">
             <Monitor className="size-3.5" />
             All Stations ({totalCount})
+          </TabsTrigger>
+          <TabsTrigger value="profiles" className="text-xs gap-1.5">
+            <Briefcase className="size-3.5 text-blue-500" />
+            Platform Profiles
           </TabsTrigger>
           <TabsTrigger value="my-shift" className="text-xs gap-1.5">
             <Radio className="size-3.5 text-emerald-500" />
@@ -317,7 +361,11 @@ function StationsContent() {
                 }}
               >
                 <SelectTrigger className="w-[140px] h-9 text-xs">
-                  <SelectValue placeholder="All Statuses" />
+                  <SelectValue placeholder="All Statuses">
+                    {selectedStatusId === "all"
+                      ? "All Statuses"
+                      : stationStatuses.find((s) => s.id === selectedStatusId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
@@ -338,7 +386,11 @@ function StationsContent() {
                 }}
               >
                 <SelectTrigger className="w-[140px] h-9 text-xs">
-                  <SelectValue placeholder="All Types" />
+                  <SelectValue placeholder="All Types">
+                    {selectedTypeId === "all"
+                      ? "All Types"
+                      : stationTypes.find((t) => t.id === selectedTypeId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
@@ -359,7 +411,11 @@ function StationsContent() {
                 }}
               >
                 <SelectTrigger className="w-[150px] h-9 text-xs">
-                  <SelectValue placeholder="All Departments" />
+                  <SelectValue placeholder="All Departments">
+                    {selectedDeptId === "all"
+                      ? "All Departments"
+                      : departments.find((d) => d.id === selectedDeptId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
@@ -380,7 +436,13 @@ function StationsContent() {
                 }}
               >
                 <SelectTrigger className="w-[130px] h-9 text-xs">
-                  <SelectValue placeholder="Desk Mode" />
+                  <SelectValue placeholder="Desk Mode">
+                    {salesFilter === "all"
+                      ? "All Desks"
+                      : salesFilter === "sales"
+                      ? "Sales Desks Only"
+                      : "Non-Sales"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Desks</SelectItem>
@@ -486,8 +548,55 @@ function StationsContent() {
           />
         </TabsContent>
 
+        {/* TAB: PLATFORM PROFILES */}
+        <TabsContent value="profiles" className="pt-4">
+          <PlatformProfilesTab
+            stations={stations}
+            platforms={platforms}
+            onRefreshStations={() => {
+              fetchStations();
+              refreshSession();
+            }}
+          />
+        </TabsContent>
+
         {/* TAB 2: MY ACTIVE SHIFT CONSOLE */}
         <TabsContent value="my-shift" className="pt-4 space-y-4">
+          {activeSessions.length > 1 && (
+            <div className="p-3 rounded-xl border bg-muted/20 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-foreground">
+                  Joined Workstations ({activeSessions.length}):
+                </span>
+                {activeSessions.map((s) => {
+                  const isFocused = s.station.id === currentStationId;
+                  return (
+                    <Badge
+                      key={s.station.id}
+                      variant={isFocused ? "default" : "outline"}
+                      className={`text-xs cursor-pointer py-1 px-2.5 transition-all ${
+                        isFocused
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "hover:bg-muted/60"
+                      }`}
+                      onClick={() => switchStation(s.station.id)}
+                    >
+                      {s.station.name} ({s.station.code})
+                    </Badge>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => leaveAllStations()}
+              >
+                Disconnect All ({activeSessions.length})
+              </Button>
+            </div>
+          )}
+
           {activeContext?.station ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Station Hero Card */}
@@ -517,7 +626,7 @@ function StationsContent() {
                       variant="outline"
                       size="sm"
                       className="text-destructive border-destructive/30 hover:bg-destructive/10 text-xs gap-1.5"
-                      onClick={() => leaveStation()}
+                      onClick={() => leaveStation(activeContext.station.id)}
                     >
                       <LogOut className="size-3.5" />
                       End Shift
@@ -686,7 +795,7 @@ function StationsContent() {
         }}
       />
 
-      <StationDetailSheet
+      <StationDetailModal
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         station={selectedStation}

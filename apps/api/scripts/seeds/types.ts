@@ -38,6 +38,7 @@ export interface SeedContext {
   serviceLines: Map<string, string>;
   priorities: Map<string, string>;
   issueTypes: Map<string, string>;
+  issueStatuses: Map<string, string>;
   ticketStatuses: Map<string, string>;
   messageTypes: Map<string, string>;
   notificationTypes: Map<string, string>;
@@ -77,6 +78,7 @@ export function createSeedContext(prisma: PrismaClient, clean = false): SeedCont
     serviceLines: new Map(),
     priorities: new Map(),
     issueTypes: new Map(),
+    issueStatuses: new Map(),
     ticketStatuses: new Map(),
     messageTypes: new Map(),
     notificationTypes: new Map(),

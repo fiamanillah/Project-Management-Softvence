@@ -6,6 +6,8 @@ import {
   ConflictError,
   NotFoundError,
 } from "@/core/errors/AppError";
+import { can } from "@/core/authorization/AuthorizationEngine";
+import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import type {
   CreateStationTypeDTO,
   UpdateStationTypeDTO,
@@ -13,6 +15,7 @@ import type {
   UpdateStationStatusDTO,
   CreateStationRoleDTO,
   UpdateStationRoleDTO,
+  StationScopeContext,
 } from "../StationDTO";
 
 export class StationsLookupService {
@@ -169,5 +172,97 @@ export class StationsLookupService {
         isActive: dto.isActive !== undefined ? dto.isActive : undefined,
       },
     });
+  }
+
+  // ==========================================
+  // STATION SCOPE CONTEXT FOR BRANCH / DEPARTMENT
+  // ==========================================
+
+  public async getStationScopeContext(actor: AuthenticatedUser): Promise<StationScopeContext> {
+    const [allBranches, allDepartments] = await Promise.all([
+      this.prisma.branch.findMany({
+        where: { deletedAt: null, isActive: true },
+        select: { id: true, code: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.department.findMany({
+        where: { deletedAt: null, isActive: true },
+        select: { id: true, code: true, name: true, branchId: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+
+    if (actor.systemRole === "SuperAdmin") {
+      return {
+        canSelectBranch: true,
+        canSelectDepartment: true,
+        isBranchRestricted: false,
+        isDepartmentRestricted: false,
+        defaultBranchId: null,
+        defaultDepartmentId: null,
+        authorizedBranches: allBranches,
+        authorizedDepartments: allDepartments,
+      };
+    }
+
+    const [branchAuths, deptAuths] = await Promise.all([
+      Promise.all(
+        allBranches.map(async (b) => ({
+          branch: b,
+          allowed: await can(actor, "station.manage", { branchId: b.id }),
+        })),
+      ),
+      Promise.all(
+        allDepartments.map(async (d) => ({
+          dept: d,
+          allowed: await can(actor, "station.manage", {
+            branchId: d.branchId || undefined,
+            departmentId: d.id,
+          }),
+        })),
+      ),
+    ]);
+
+    const authorizedBranches = branchAuths.filter((b) => b.allowed).map((b) => b.branch);
+    const authorizedDepartments = deptAuths.filter((d) => d.allowed).map((d) => d.dept);
+
+    // If user has department scope but no direct branch scope, include the branches of authorized departments
+    const derivedBranchMap = new Map<string, { id: string; code: string; name: string }>();
+    for (const b of authorizedBranches) {
+      derivedBranchMap.set(b.id, b);
+    }
+    for (const d of authorizedDepartments) {
+      if (d.branchId && !derivedBranchMap.has(d.branchId)) {
+        const found = allBranches.find((b) => b.id === d.branchId);
+        if (found) derivedBranchMap.set(found.id, found);
+      }
+    }
+    const finalBranches = Array.from(derivedBranchMap.values());
+
+    const canSelectBranch = authorizedBranches.length > 1;
+    const isBranchRestricted = authorizedBranches.length < allBranches.length;
+    const isDepartmentRestricted = authorizedDepartments.length < allDepartments.length;
+    const canSelectDepartment = authorizedDepartments.length > 1;
+
+    const defaultBranchId =
+      authorizedBranches.length === 1
+        ? authorizedBranches[0]?.id
+        : authorizedDepartments.length === 1 && authorizedDepartments[0]?.branchId
+        ? authorizedDepartments[0].branchId
+        : null;
+
+    const defaultDepartmentId =
+      authorizedDepartments.length === 1 ? authorizedDepartments[0]?.id : null;
+
+    return {
+      canSelectBranch,
+      canSelectDepartment,
+      isBranchRestricted,
+      isDepartmentRestricted,
+      defaultBranchId: defaultBranchId || null,
+      defaultDepartmentId: defaultDepartmentId || null,
+      authorizedBranches: finalBranches,
+      authorizedDepartments,
+    };
   }
 }

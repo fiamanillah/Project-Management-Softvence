@@ -79,7 +79,7 @@ model User {
   unassignedStationProfiles   StationProfileAssignment[]       @relation("StationProfileUnassigner")
   stationSessions             StationSession[]                 @relation("UserStationSessions")
 
-  @@index([email])
+  @@index([branchId])
   @@index([roleId])
   @@index([designationId])
   @@index([isActive, deletedAt])
@@ -101,6 +101,7 @@ model RefreshToken {
   stationSessions StationSession[]
 
   @@index([userId])
+  @@index([userId, expiresAt, revokedAt])
   @@map("refresh_tokens")
 }
 
@@ -198,6 +199,7 @@ model RolePermission {
 
   @@unique([roleId, permissionId])
   @@index([scopeTypeId])
+  @@index([grantedBy])
   @@map("role_permissions")
 }
 
@@ -253,7 +255,11 @@ model UserPermissionOverride {
   @@unique([userId, permissionId, branchId, departmentId, teamId, projectId, stationId])
   @@index([userId, expiresAt])
   @@index([branchId])
+  @@index([departmentId])
+  @@index([teamId])
+  @@index([projectId])
   @@index([stationId])
+  @@index([grantedBy])
   @@map("user_permission_overrides")
 }
 
@@ -273,5 +279,7 @@ model UserAbsence {
 
   @@index([userId, startAt, endAt])
   @@index([coveredBy])
+  @@index([createdBy])
   @@map("user_absences")
 }
+

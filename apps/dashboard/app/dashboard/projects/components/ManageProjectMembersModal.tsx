@@ -232,7 +232,7 @@ export function ManageProjectMembersModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[94vw] sm:max-w-2xl md:min-w-[700px] max-h-[92vh] p-0 gap-0 border shadow-2xl rounded-2xl overflow-hidden bg-background flex flex-col">
+      <DialogContent className="w-full min-w-[min(100vw-2rem,46rem)] sm:min-w-[620px] md:min-w-[740px] max-h-[92vh] p-0 gap-0 border shadow-2xl rounded-2xl overflow-hidden bg-background flex flex-col">
         {/* MODAL HEADER */}
         <DialogHeader className="p-5 pb-4 border-b bg-muted/20 shrink-0">
           <div className="flex items-center justify-between">

@@ -50,12 +50,6 @@ enum MessageStatus {
   Delivered
 }
 
-enum IssueStatus {
-  NRI
-  WIP
-  Solve
-  Wrong
-}
 
 enum GroupMemberSource {
   AutoManagement

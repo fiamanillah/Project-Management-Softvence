@@ -370,6 +370,20 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
       });
       sampleClientId = client.id;
 
+      // Assign Profile 2 to Station 1
+      await stationsService.assignment.assignProfile(
+        createdStation1Id,
+        { profileId: testProfile2Id, isPrimary: true },
+        superAdminUser,
+      );
+
+      // Assign Profile 1 to Station 2
+      await stationsService.assignment.assignProfile(
+        createdStation2Id,
+        { profileId: testProfile1Id, isPrimary: true },
+        superAdminUser,
+      );
+
       // Project 1 under Profile 2 (Station 1)
       projectUnderStation1 = await prisma.project.create({
         data: {
@@ -394,6 +408,8 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         },
       });
     });
+
+
 
     afterAll(async () => {
       if (projectUnderStation1) {
@@ -430,6 +446,471 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
       const projectIds = station2Projects.items.map((p) => p.id);
       expect(projectIds).toContain(projectUnderStation2.id);
       expect(projectIds).not.toContain(projectUnderStation1.id);
+    });
+  });
+
+
+
+  describe("Multi-Workstation Profile Assignment & IP Validation", () => {
+    it("should allow a single profile to be assigned to multiple workstations simultaneously", async () => {
+      // Assign Profile 2 to Station 1
+      await stationsService.assignment.assignProfile(
+        createdStation1Id,
+        { profileId: testProfile2Id, isPrimary: true },
+        superAdminUser,
+      );
+
+      // Assign Profile 2 to Station 2 as well
+      await stationsService.assignment.assignProfile(
+        createdStation2Id,
+        { profileId: testProfile2Id, isPrimary: false },
+        superAdminUser,
+      );
+
+      // Both stations should report Profile 2 as active
+      const station1 = await stationsService.query.getStationById(createdStation1Id, superAdminUser);
+      const station2 = await stationsService.query.getStationById(createdStation2Id, superAdminUser);
+
+      expect(station1.activeProfiles?.some((p) => p.profileId === testProfile2Id)).toBe(true);
+      expect(station2.activeProfiles?.some((p) => p.profileId === testProfile2Id)).toBe(true);
+    });
+
+    it("should bypass IP validation when isIpRestricted is false", async () => {
+      // Create station with isIpRestricted = false
+      const openStation = await stationsService.mutation.createStation(
+        {
+          code: `OPEN_STN_${Date.now()}`,
+          name: "Open Access Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+          isIpRestricted: false,
+          ipWhitelist: ["192.168.1.100"],
+        },
+        superAdminUser,
+      );
+
+      // Assign Staff A to openStation
+      await stationsService.assignment.assignUser(
+        openStation.id,
+        { userId: staffUserA.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // Staff joins from an arbitrary IP (e.g. 10.50.1.25)
+      const mockReq = {
+        headers: { "x-forwarded-for": "10.50.1.25" },
+        socket: { remoteAddress: "10.50.1.25" },
+      } as any;
+
+      const session = await stationsService.session.selectStation(
+        { stationId: openStation.id },
+        staffUserA,
+        mockReq,
+      );
+
+      expect(session.session.stationId).toBe(openStation.id);
+
+      // Cleanup
+      await stationsService.session.leaveStation(staffUserA);
+      await prisma.station.delete({ where: { id: openStation.id } });
+    });
+
+    it("should enforce IP validation and reject non-whitelisted IPs when isIpRestricted is true", async () => {
+      const restrictedStation = await stationsService.mutation.createStation(
+        {
+          code: `RESTRICT_STN_${Date.now()}`,
+          name: "Restricted IP Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+          isIpRestricted: true,
+          ipWhitelist: ["192.168.1.50", "10.0.0.*"],
+        },
+        superAdminUser,
+      );
+
+      await stationsService.assignment.assignUser(
+        restrictedStation.id,
+        { userId: staffUserB.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // Unauthorized IP attempt
+      const unauthorizedReq = {
+        headers: { "x-forwarded-for": "203.0.113.195" },
+        socket: { remoteAddress: "203.0.113.195" },
+      } as any;
+
+      expect(
+        stationsService.session.selectStation(
+          { stationId: restrictedStation.id },
+          staffUserB,
+          unauthorizedReq,
+        ),
+      ).rejects.toThrow("Access denied: Your IP address is not authorized for this workstation.");
+
+      // Authorized IP attempt (exact match)
+      const authorizedReq = {
+        headers: { "x-forwarded-for": "192.168.1.50" },
+        socket: { remoteAddress: "192.168.1.50" },
+      } as any;
+
+      const session = await stationsService.session.selectStation(
+        { stationId: restrictedStation.id },
+        staffUserB,
+        authorizedReq,
+      );
+
+      expect(session.session.stationId).toBe(restrictedStation.id);
+
+      // Cleanup
+      await stationsService.session.leaveStation(staffUserB);
+      await prisma.station.delete({ where: { id: restrictedStation.id } });
+    });
+
+    it("should bypass MAC validation when isMacRestricted is false", async () => {
+      const openMacStation = await stationsService.mutation.createStation(
+        {
+          code: `OPEN_MAC_${Date.now()}`,
+          name: "Open MAC Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+          isMacRestricted: false,
+          macWhitelist: ["00:1A:2B:3C:4D:5E"],
+        },
+        superAdminUser,
+      );
+
+      await stationsService.assignment.assignUser(
+        openMacStation.id,
+        { userId: staffUserA.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // Join with arbitrary MAC address
+      const session = await stationsService.session.selectStation(
+        { stationId: openMacStation.id, macAddress: "FF:FF:FF:FF:FF:FF" },
+        staffUserA,
+      );
+
+      expect(session.session.stationId).toBe(openMacStation.id);
+
+      // Cleanup
+      await stationsService.session.leaveStation(staffUserA);
+      await prisma.station.delete({ where: { id: openMacStation.id } });
+    });
+
+    it("should enforce MAC validation and accept normalized MAC entries when isMacRestricted is true", async () => {
+      const restrictedMacStation = await stationsService.mutation.createStation(
+        {
+          code: `RESTR_MAC_${Date.now()}`,
+          name: "Restricted MAC Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+          isMacRestricted: true,
+          macWhitelist: ["00:1A:2B:3C:4D:5E", "A1-B2-C3-D4-E5-F6"],
+        },
+        superAdminUser,
+      );
+
+      await stationsService.assignment.assignUser(
+        restrictedMacStation.id,
+        { userId: staffUserB.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // 1. Missing MAC / unauthorized MAC
+      expect(
+        stationsService.session.selectStation(
+          { stationId: restrictedMacStation.id, macAddress: "00:00:00:00:00:00" },
+          staffUserB,
+        ),
+      ).rejects.toThrow("Access denied: Your MAC address is not authorized for this workstation.");
+
+      // 2. Authorized MAC via header or DTO with different casing/delimiters
+      // '00-1a-2b-3c-4d-5e' should normalize and match '00:1A:2B:3C:4D:5E'
+      const session = await stationsService.session.selectStation(
+        { stationId: restrictedMacStation.id, macAddress: "00-1a-2b-3c-4d-5e" },
+        staffUserB,
+      );
+
+      expect(session.session.stationId).toBe(restrictedMacStation.id);
+
+      // Cleanup
+      await stationsService.session.leaveStation(staffUserB);
+      await prisma.station.delete({ where: { id: restrictedMacStation.id } });
+    });
+
+    it("should accurately validate IP addresses against RFC-compliant CIDR subnet masks", async () => {
+      const cidrStation = await stationsService.mutation.createStation(
+        {
+          code: `CIDR_STN_${Date.now()}`,
+          name: "CIDR Whitelist Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+          isIpRestricted: true,
+          ipWhitelist: ["192.168.1.0/24", "10.0.0.0/8"],
+        },
+        superAdminUser,
+      );
+
+      await stationsService.assignment.assignUser(
+        cidrStation.id,
+        { userId: staffUserA.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // 1. Within 192.168.1.0/24
+      const session1 = await stationsService.session.selectStation(
+        { stationId: cidrStation.id },
+        staffUserA,
+        { headers: { "x-forwarded-for": "192.168.1.75" } } as any,
+      );
+      expect(session1.session.stationId).toBe(cidrStation.id);
+      await stationsService.session.leaveStation(staffUserA);
+
+      // 2. Within 10.0.0.0/8
+      const session2 = await stationsService.session.selectStation(
+        { stationId: cidrStation.id },
+        staffUserA,
+        { headers: { "x-forwarded-for": "10.250.33.19" } } as any,
+      );
+      expect(session2.session.stationId).toBe(cidrStation.id);
+      await stationsService.session.leaveStation(staffUserA);
+
+      // 3. Outside both CIDRs (192.168.2.1) -> should reject
+      expect(
+        stationsService.session.selectStation(
+          { stationId: cidrStation.id },
+          staffUserA,
+          { headers: { "x-forwarded-for": "192.168.2.1" } } as any,
+        ),
+      ).rejects.toThrow("Access denied: Your IP address is not authorized for this workstation.");
+
+      // Cleanup
+      await prisma.station.delete({ where: { id: cidrStation.id } });
+    });
+
+    it("should terminate active operator sessions and invalidate cache when station is deactivated", async () => {
+      const activeStation = await stationsService.mutation.createStation(
+        {
+          code: `DEACT_STN_${Date.now()}`,
+          name: "Active Test Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+          isActive: true,
+        },
+        superAdminUser,
+      );
+
+      await stationsService.assignment.assignUser(
+        activeStation.id,
+        { userId: staffUserA.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // User joins station
+      await stationsService.session.selectStation(
+        { stationId: activeStation.id },
+        staffUserA,
+      );
+
+      const activeContextBefore = await stationsService.session.getActiveSession(staffUserA);
+      expect(activeContextBefore).not.toBeNull();
+      expect(activeContextBefore?.station.id).toBe(activeStation.id);
+
+      // Admin deactivates station
+      await stationsService.mutation.updateStation(
+        activeStation.id,
+        { isActive: false },
+        superAdminUser,
+      );
+
+      // Active session in DB must be terminated
+      const sessionsInDb = await prisma.stationSession.findMany({
+        where: { stationId: activeStation.id, userId: staffUserA.id, isCurrent: true },
+      });
+      expect(sessionsInDb.length).toBe(0);
+
+      // Session context should now be null
+      const activeContextAfter = await stationsService.session.getActiveSession(staffUserA);
+      expect(activeContextAfter).toBeNull();
+
+      // Cleanup
+      await prisma.station.delete({ where: { id: activeStation.id } });
+    });
+
+    it("should allow a single operator to join multiple stations simultaneously and switch between them", async () => {
+      // 1. Assign staffUserA to both createdStation1Id and createdStation2Id
+      await stationsService.assignment.assignUser(
+        createdStation1Id,
+        { userId: staffUserA.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+      await stationsService.assignment.assignUser(
+        createdStation2Id,
+        { userId: staffUserA.id, roleId: testStationRoleId },
+        superAdminUser,
+      );
+
+      // 2. Join Station 1
+      const context1 = await stationsService.session.selectStation(
+        { stationId: createdStation1Id },
+        staffUserA,
+      );
+      expect(context1.station.id).toBe(createdStation1Id);
+
+      // 3. Join Station 2 (Station 1 should NOT be disconnected)
+      const context2 = await stationsService.session.selectStation(
+        { stationId: createdStation2Id },
+        staffUserA,
+      );
+      expect(context2.station.id).toBe(createdStation2Id);
+
+      // 4. Check getActiveSessions: both should be active
+      const multiState = await stationsService.session.getActiveSessions(staffUserA);
+      expect(multiState.activeSessions.length).toBe(2);
+      expect(multiState.activeStationIds).toContain(createdStation1Id);
+      expect(multiState.activeStationIds).toContain(createdStation2Id);
+
+      // 5. Joining Station 1 again should not create duplicate sessions
+      await stationsService.session.selectStation(
+        { stationId: createdStation1Id },
+        staffUserA,
+      );
+      const multiStateAfterRejoin = await stationsService.session.getActiveSessions(staffUserA);
+      expect(multiStateAfterRejoin.activeSessions.length).toBe(2);
+
+      // 6. Leave only Station 1
+      const leaveRes1 = await stationsService.session.leaveStation(staffUserA, createdStation1Id);
+      expect(leaveRes1.remainingActiveStationIds).toContain(createdStation2Id);
+      expect(leaveRes1.remainingActiveStationIds).not.toContain(createdStation1Id);
+
+      // Verify Station 2 is still active
+      const multiStateAfterLeave1 = await stationsService.session.getActiveSessions(staffUserA);
+      expect(multiStateAfterLeave1.activeSessions.length).toBe(1);
+      expect(multiStateAfterLeave1.activeStationIds).toEqual([createdStation2Id]);
+
+      // 7. Leave all remaining stations
+      await stationsService.session.leaveStation(staffUserA);
+      const multiStateFinal = await stationsService.session.getActiveSessions(staffUserA);
+      expect(multiStateFinal.activeSessions.length).toBe(0);
+    });
+  });
+
+  describe("Platform Profiles Management Service", () => {
+    let createdProfileId: string;
+
+    it("should create a new platform profile linked to multiple stations", async () => {
+      const newProfile = await stationsService.profile.createProfile(
+        {
+          username: `multi_stn_profile_${Date.now()}`,
+          platformId: testPlatformId,
+          isActive: true,
+          stationIds: [createdStation1Id, createdStation2Id],
+        },
+        superAdminUser,
+      );
+
+      createdProfileId = newProfile.id;
+      expect(newProfile.id).toBeDefined();
+      expect(newProfile.stationIds.length).toBe(2);
+      expect(newProfile.assignedStations.map((s) => s.stationId)).toContain(createdStation1Id);
+      expect(newProfile.assignedStations.map((s) => s.stationId)).toContain(createdStation2Id);
+    });
+
+    it("should list platform profiles with assigned workstations", async () => {
+      const result = await stationsService.profile.getProfiles({
+        platformId: testPlatformId,
+      });
+
+      expect(result.items.length).toBeGreaterThan(0);
+      const found = result.items.find((p) => p.id === createdProfileId);
+      expect(found).toBeDefined();
+      expect(found?.assignedStations.length).toBe(2);
+    });
+
+    it("should update profile and sync station memberships", async () => {
+      // Remove from Station 1, keep Station 2
+      const updated = await stationsService.profile.updateProfile(
+        createdProfileId,
+        {
+          stationIds: [createdStation2Id],
+        },
+        superAdminUser,
+      );
+
+      expect(updated.stationIds).toEqual([createdStation2Id]);
+      expect(updated.assignedStations.length).toBe(1);
+      expect(updated.assignedStations[0]?.stationId).toBe(createdStation2Id);
+    });
+
+    it("should deactivate profile and clean up active station assignments", async () => {
+      const deleteResult = await stationsService.profile.deleteProfile(
+        createdProfileId,
+        superAdminUser,
+      );
+
+      expect(deleteResult.message).toContain("deactivated");
+
+      const profile = await stationsService.profile.getProfileById(createdProfileId);
+      expect(profile.isActive).toBe(false);
+      expect(profile.assignedStations.length).toBe(0);
+    });
+  });
+
+  describe("Permission-Aware Branch & Department Scope Context", () => {
+    it("should return full branch & department access for SuperAdmin", async () => {
+      const context = await stationsService.lookup.getStationScopeContext(superAdminUser);
+
+      expect(context.canSelectBranch).toBe(true);
+      expect(context.canSelectDepartment).toBe(true);
+      expect(context.isBranchRestricted).toBe(false);
+      expect(context.isDepartmentRestricted).toBe(false);
+      expect(Array.isArray(context.authorizedBranches)).toBe(true);
+      expect(Array.isArray(context.authorizedDepartments)).toBe(true);
+    });
+
+    it("should reject station creation if selected department does not belong to the selected branch", async () => {
+      // Create a test branch and an unrelated department
+      const branchA = await prisma.branch.create({
+        data: {
+          code: `BR_A_${Date.now()}`,
+          name: "Branch A",
+        },
+      });
+      const branchB = await prisma.branch.create({
+        data: {
+          code: `BR_B_${Date.now()}`,
+          name: "Branch B",
+        },
+      });
+      const deptB = await prisma.department.create({
+        data: {
+          code: `DEP_B_${Date.now()}`,
+          name: "Department in Branch B",
+          branchId: branchB.id,
+        },
+      });
+
+      // Try creating station with Branch A but Department in Branch B -> should throw BadRequestError
+      await expect(
+        stationsService.mutation.createStation(
+          {
+            code: `MISMATCH_STN_${Date.now()}`,
+            name: "Mismatched Station",
+            stationTypeId: testStationTypeId,
+            statusId: testStationStatusId,
+            branchId: branchA.id,
+            departmentId: deptB.id,
+          },
+          superAdminUser,
+        ),
+      ).rejects.toThrow("Selected department does not belong to the specified branch");
+
+      // Cleanup
+      await prisma.department.delete({ where: { id: deptB.id } });
+      await prisma.branch.delete({ where: { id: branchA.id } });
+      await prisma.branch.delete({ where: { id: branchB.id } });
     });
   });
 });

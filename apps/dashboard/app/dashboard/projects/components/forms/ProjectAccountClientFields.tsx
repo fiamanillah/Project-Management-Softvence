@@ -110,7 +110,15 @@ export function ProjectAccountClientFields({
           <Select value={profileId} onValueChange={onProfileChange}>
             <SelectTrigger className="w-full h-9 text-xs overflow-hidden">
               <SelectValue placeholder="Select Profile">
-                {lookups?.profiles.find((p) => p.id === profileId)?.username}
+                {(() => {
+                  const prof =
+                    profilesToRender.find((p) => p.id === profileId) ||
+                    lookups?.profiles.find((p) => p.id === profileId);
+                  if (!prof) return undefined;
+                  return prof.platform?.name
+                    ? `${prof.username} (${prof.platform.name})`
+                    : prof.username;
+                })()}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>

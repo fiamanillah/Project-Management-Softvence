@@ -173,8 +173,8 @@ export class ProjectsMutationService {
 
     // 8. Write Audit Log
     AuditLogService.log({
-      module: "Projects",
-      action: "CREATE",
+      module: "PROJECTS",
+      action: "PROJECT_CREATE",
       entityTable: "projects",
       entityId: newProject.id,
       actor: {
@@ -184,6 +184,7 @@ export class ProjectsMutationService {
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
       },
+      newPayload: newProject,
       metadata: {
         projectName: generatedProjectName,
         orderId: dto.orderId,
@@ -341,8 +342,8 @@ export class ProjectsMutationService {
     });
 
     AuditLogService.log({
-      module: "Projects",
-      action: "UPDATE",
+      module: "PROJECTS",
+      action: "PROJECT_UPDATE",
       entityTable: "projects",
       entityId: id,
       actor: {
@@ -352,6 +353,8 @@ export class ProjectsMutationService {
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
       },
+      oldPayload: existing,
+      newPayload: updated,
       metadata: {
         updatedFields: Object.keys(dto),
       },
@@ -392,7 +395,7 @@ export class ProjectsMutationService {
     });
 
     AuditLogService.log({
-      module: "Projects",
+      module: "PROJECTS",
       action: "PROJECT_PIN_TOGGLE",
       entityTable: "projects",
       entityId: updated.id,
@@ -403,6 +406,8 @@ export class ProjectsMutationService {
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
       },
+      oldPayload: { isPinned: existing.isPinned },
+      newPayload: { isPinned: updated.isPinned },
       metadata: {
         isPinned: updated.isPinned,
         orderId: existing.orderId,
@@ -445,8 +450,8 @@ export class ProjectsMutationService {
     });
 
     AuditLogService.log({
-      module: "Projects",
-      action: "DELETE",
+      module: "PROJECTS",
+      action: "PROJECT_DELETE",
       entityTable: "projects",
       entityId: id,
       actor: {
@@ -456,6 +461,8 @@ export class ProjectsMutationService {
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
       },
+      oldPayload: existing,
+      newPayload: undefined,
       metadata: {
         projectName: existing.projectName,
         orderId: existing.orderId,

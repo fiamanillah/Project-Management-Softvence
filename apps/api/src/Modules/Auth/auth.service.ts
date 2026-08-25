@@ -329,16 +329,6 @@ export class AuthServices {
       await this.cache.del(`auth:sessions:${user.id}`);
     }
 
-    await AuditLogService.log({
-      module: "AUTH",
-      action: "TOKEN_REFRESH",
-      entityTable: "refresh_tokens",
-      entityId: user.id,
-      actor: { id: user.id, email: user.email, role: user.systemRole },
-      metadata: { deviceInfo },
-      req,
-    });
-
     return {
       accessToken: newAccessToken,
       rawRefreshToken: newRawRefreshToken,

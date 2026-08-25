@@ -210,7 +210,26 @@ export async function seedLookups(ctx: SeedContext): Promise<void> {
     ctx.issueTypes.set(it.code, record.id);
   }
 
-  // 9. Support Ticket Statuses
+  // 9. Issue Statuses
+  const ISSUE_STATUSES = [
+    { code: "NRI", name: "Needs Investigation", requiresAction: true, isTerminal: false, sortOrder: 1, color: "#64748b" },
+    { code: "WIP", name: "In Progress", requiresAction: true, isTerminal: false, sortOrder: 2, color: "#3b82f6" },
+    { code: "SOLVE", name: "Solved", requiresAction: false, isTerminal: true, sortOrder: 3, color: "#10b981" },
+    { code: "RESOLVED", name: "Resolved", requiresAction: false, isTerminal: true, sortOrder: 4, color: "#10b981" },
+    { code: "WRONG", name: "Invalid / Not a Bug", requiresAction: false, isTerminal: true, sortOrder: 5, color: "#ef4444" },
+    { code: "CLOSED", name: "Closed", requiresAction: false, isTerminal: true, sortOrder: 6, color: "#94a3b8" },
+  ];
+
+  for (const is of ISSUE_STATUSES) {
+    const record = await prisma.issueStatusLookup.upsert({
+      where: { code: is.code },
+      update: { name: is.name, requiresAction: is.requiresAction, isTerminal: is.isTerminal, sortOrder: is.sortOrder, color: is.color, isActive: true },
+      create: { code: is.code, name: is.name, requiresAction: is.requiresAction, isTerminal: is.isTerminal, sortOrder: is.sortOrder, color: is.color, isActive: true },
+    });
+    ctx.issueStatuses.set(is.code, record.id);
+  }
+
+  // 10. Support Ticket Statuses
   const TICKET_STATUSES = [
     { code: "OPEN", name: "Open", isTerminal: false, sortOrder: 1 },
     { code: "IN_PROGRESS", name: "In Progress", isTerminal: false, sortOrder: 2 },

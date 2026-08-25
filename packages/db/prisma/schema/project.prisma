@@ -18,14 +18,14 @@ model Project {
   email         String?
   orderLink     String?   @map("order_link")
   orderSheetUrl String?   @map("order_sheet_url")
-  value         Decimal   @db.Decimal
-  amount        Decimal?  @db.Decimal
-  percentage    Decimal?  @db.Decimal
+  value         Decimal   @db.Decimal(15, 2)
+  amount        Decimal?  @db.Decimal(15, 2)
+  percentage    Decimal?  @db.Decimal(5, 2)
   remarks       String?   @db.Text
   startDate     DateTime? @map("start_date")
   deliveryDate  DateTime? @map("delivery_date")
   progress      Int       @default(0)
-  budget        Decimal   @default(0) @db.Decimal
+  budget        Decimal   @default(0) @db.Decimal(15, 2)
   deadline      DateTime? @map("deadline")
   isPinned      Boolean   @default(false) @map("is_pinned")
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -59,12 +59,15 @@ model Project {
   @@index([parentId])
   @@index([parentOrderId])
   @@index([branchId])
+  @@index([branchId, deletedAt])
   @@index([profileId])
+  @@index([profileId, deletedAt])
   @@index([clientId])
+  @@index([clientId, deletedAt])
   @@index([serviceLineId])
   @@index([orderSourceId])
-  @@index([statusId])
   @@index([statusId, deletedAt])
+  @@index([deletedAt, createdAt])
   @@map("projects")
 }
 
@@ -101,6 +104,7 @@ model ProjectTeamAssignment {
 
   @@index([projectId, unassignedAt])
   @@index([teamId])
+  @@index([teamId, unassignedAt])
   @@map("project_team_assignments")
 }
 
@@ -117,6 +121,7 @@ model ComponentTeamAssignment {
 
   @@index([componentId, unassignedAt])
   @@index([teamId])
+  @@index([teamId, unassignedAt])
   @@map("component_team_assignments")
 }
 
@@ -134,6 +139,7 @@ model ProjectAssignment {
   role    AssignmentRole @relation(fields: [roleId], references: [id])
 
   @@index([projectId, userId])
+  @@index([projectId, unassignedAt])
   @@index([userId, unassignedAt])
   @@index([roleId])
   @@map("project_assignments")
@@ -153,6 +159,8 @@ model ComponentAssignment {
   role      AssignmentRole   @relation(fields: [roleId], references: [id])
 
   @@index([componentId, userId])
+  @@index([componentId, unassignedAt])
+  @@index([userId, unassignedAt])
   @@index([roleId])
   @@map("component_assignments")
 }
@@ -173,6 +181,7 @@ model ProjectMilestone {
   assignedTo       User?     @relation("ProjectMilestoneAssignee", fields: [assignedToUserId], references: [id])
 
   @@index([projectId, isCompleted])
+  @@index([assignedToUserId])
   @@map("project_milestones")
 }
 
@@ -190,6 +199,8 @@ model ProjectLink {
   addedBy     User     @relation("ProjectLinkAdder", fields: [addedById], references: [id])
 
   @@index([projectId])
+  @@index([addedById])
   @@map("project_links")
 }
+
 

@@ -27,9 +27,14 @@ import {
   Building2,
   LogOut,
   FolderKanban,
+  Check,
 } from "lucide-react";
 import type { StationItem } from "@workspace/shared";
-import { useStationSession } from "@/lib/station/StationContext";
+import {
+  useStationSession,
+  formatSessionDuration,
+  formatSessionStartTime,
+} from "@/lib/station/StationContext";
 import { useRouter } from "next/navigation";
 
 interface StationCardGridProps {
@@ -52,8 +57,15 @@ export function StationCardGrid({
   onReassignProfile,
 }: StationCardGridProps) {
   const router = useRouter();
-  const { activeContext, selectStation, leaveStation, isSelecting } =
-    useStationSession();
+  const {
+    isJoined,
+    currentStationId,
+    activeSessions,
+    switchStation,
+    selectStation,
+    leaveStation,
+    isSelecting,
+  } = useStationSession();
 
   if (stations.length === 0) {
     return (
@@ -72,7 +84,8 @@ export function StationCardGrid({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {stations.map((stn) => {
-        const isCurrentSession = activeContext?.station?.id === stn.id;
+        const joined = isJoined(stn.id);
+        const isFocused = currentStationId === stn.id;
         const caps = stn._capabilities || {};
         const activeProfiles = stn.activeProfiles || [];
         const assignedUsers = stn.assignedUsers || [];
@@ -89,8 +102,10 @@ export function StationCardGrid({
           <Card
             key={stn.id}
             className={`group relative overflow-hidden transition-all border hover:shadow-md cursor-pointer ${
-              isCurrentSession
-                ? "border-primary/50 bg-primary/[0.02]"
+              isFocused
+                ? "border-primary/60 bg-primary/[0.03]"
+                : joined
+                ? "border-emerald-500/40 bg-emerald-500/[0.02]"
                 : "hover:border-border/80"
             }`}
             onClick={() => onSelectDetail(stn)}
@@ -101,24 +116,31 @@ export function StationCardGrid({
                 <div className="flex items-center gap-3">
                   <div
                     className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      isCurrentSession
+                      isFocused
                         ? "bg-primary text-primary-foreground font-bold"
+                        : joined
+                        ? "bg-emerald-500 text-white font-bold"
                         : "bg-muted text-muted-foreground group-hover:text-foreground"
                     }`}
                   >
                     <Monitor className="size-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <h4 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
                         {stn.name}
                       </h4>
-                      {isCurrentSession && (
-                        <Badge className="bg-emerald-500 hover:bg-emerald-600 text-[10px] py-0 px-1 gap-0.5">
+                      {isFocused ? (
+                        <Badge className="bg-primary hover:bg-primary text-[10px] py-0 px-1.5 gap-1 font-medium">
                           <CheckCircle2 className="size-2.5" />
-                          Active
+                          Focused ({formatSessionDuration(activeSessions.find((s) => s.station.id === stn.id)?.session?.joinedAt)})
                         </Badge>
-                      )}
+                      ) : joined ? (
+                        <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] py-0 px-1.5 gap-1 font-medium">
+                          <CheckCircle2 className="size-2.5" />
+                          Active ({formatSessionDuration(activeSessions.find((s) => s.station.id === stn.id)?.session?.joinedAt)})
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <Badge variant="outline" className="font-mono text-[10px] py-0">
@@ -130,6 +152,22 @@ export function StationCardGrid({
                           className="text-[10px] text-amber-600 border-amber-500/30 bg-amber-500/5 py-0"
                         >
                           Sales
+                        </Badge>
+                      )}
+                      {stn.isIpRestricted && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-amber-600 border-amber-500/30 bg-amber-500/5 py-0 font-mono"
+                        >
+                          IP
+                        </Badge>
+                      )}
+                      {stn.isMacRestricted && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-purple-600 border-purple-500/30 bg-purple-500/5 py-0 font-mono"
+                        >
+                          MAC
                         </Badge>
                       )}
                     </div>
@@ -190,6 +228,16 @@ export function StationCardGrid({
                         <span>View Projects</span>
                       </DropdownMenuItem>
 
+                      {joined && !isFocused && (
+                        <DropdownMenuItem
+                          onClick={() => switchStation(stn.id)}
+                          className="text-xs gap-2 cursor-pointer font-medium"
+                        >
+                          <Check className="size-3.5 text-primary" />
+                          <span>Switch Focus to Station</span>
+                        </DropdownMenuItem>
+                      )}
+
                       {caps.canAssignProfile && (
                         <DropdownMenuItem
                           onClick={() => onManageProfiles(stn)}
@@ -229,6 +277,19 @@ export function StationCardGrid({
                           >
                             <Edit2 className="size-3.5 text-blue-500" />
                             <span>Edit Station</span>
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
+                      {joined && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => leaveStation(stn.id)}
+                            className="text-xs gap-2 text-destructive focus:text-destructive cursor-pointer"
+                          >
+                            <LogOut className="size-3.5" />
+                            <span>Leave Station</span>
                           </DropdownMenuItem>
                         </>
                       )}
@@ -306,28 +367,42 @@ export function StationCardGrid({
                   </span>
                 </div>
 
-                {isCurrentSession ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 gap-1 px-2"
-                    onClick={() => leaveStation()}
-                  >
-                    <LogOut className="size-3" />
-                    Leave
-                  </Button>
-                ) : caps.canJoin && isOperational ? (
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="h-7 text-xs gap-1 px-2.5"
-                    disabled={isSelecting}
-                    onClick={() => selectStation(stn.id)}
-                  >
-                    <Radio className="size-3" />
-                    Join Shift
-                  </Button>
-                ) : null}
+                <div className="flex items-center gap-1.5">
+                  {joined ? (
+                    <>
+                      {!isFocused && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/10 px-2"
+                          onClick={() => switchStation(stn.id)}
+                        >
+                          Focus
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 gap-1 px-2"
+                        onClick={() => leaveStation(stn.id)}
+                      >
+                        <LogOut className="size-3" />
+                        Leave
+                      </Button>
+                    </>
+                  ) : caps.canJoin && isOperational ? (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs gap-1 px-2.5"
+                      disabled={isSelecting}
+                      onClick={() => selectStation(stn.id)}
+                    >
+                      <Radio className="size-3" />
+                      Join Shift
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </CardContent>
           </Card>

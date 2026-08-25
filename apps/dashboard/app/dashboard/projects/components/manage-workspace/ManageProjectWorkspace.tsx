@@ -6,8 +6,20 @@ import { Sheet, SheetContent } from "@workspace/ui/components/sheet";
 import { ProjectListSidebar, sortProjectsByActivity } from "./left-sidebar/ProjectListSidebar";
 import { ProjectChatPanel } from "./chat-panel/ProjectChatPanel";
 import { ProjectDetailsSidebar } from "./right-sidebar/ProjectDetailsSidebar";
-import { FolderKanban, Loader2, Plus, ShieldAlert } from "lucide-react";
+import {
+  FolderKanban,
+  Loader2,
+  Plus,
+  ShieldAlert,
+  Radio,
+  Layers,
+  Briefcase,
+  Globe,
+  ArrowRight,
+  Clock,
+} from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
+import { Badge } from "@workspace/ui/components/badge";
 import type {
   ProjectWorkspaceItem,
   ChatMessage,
@@ -20,6 +32,12 @@ import type {
 } from "./types";
 import { api } from "@/lib/api";
 import { useProjectSocket } from "@/lib/socket/useProjectSocket";
+import {
+  useStationSession,
+  formatSessionDuration,
+  formatSessionStartTime,
+} from "@/lib/station/StationContext";
+import { SelectStationModal } from "@/app/dashboard/stations/components/SelectStationModal";
 import { toast } from "sonner";
 import { cn } from "@workspace/ui/lib/utils";
 import { PermissionGate } from "@/components/permission-gate";
@@ -33,6 +51,26 @@ export function ManageProjectWorkspace({
   initialProjectId,
   onNewProject,
 }: ManageProjectWorkspaceProps) {
+  const {
+    activeSessions,
+    currentStationId,
+    activeContext,
+    myStations,
+    switchStation,
+    selectModalOpen,
+    setSelectModalOpen,
+  } = useStationSession();
+
+  // Initialize stationFilter from URL query param if present, or default to focused station
+  const [stationFilter, setStationFilter] = React.useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const paramStation = params.get("stationId");
+      if (paramStation) return paramStation;
+    }
+    return currentStationId || "all";
+  });
+
   const [projects, setProjects] = React.useState<ProjectWorkspaceItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(() => {
     if (typeof window !== "undefined") {
@@ -78,51 +116,102 @@ export function ManageProjectWorkspace({
   const [targetScrollMessageId, setTargetScrollMessageId] = React.useState<string | null>(null);
 
   // 1. Fetch live projects from backend API for command center
-  const fetchWorkspaceProjects = React.useCallback(async () => {
-    setIsLoadingProjects(true);
+  const fetchWorkspaceProjects = React.useCallback(
+    async (filterStationId?: string) => {
+      setIsLoadingProjects(true);
 
-    try {
-      const res = await api.get<any>("/projects/workspace");
-      const data = res?.data || res;
-      const liveProjects: ProjectWorkspaceItem[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-        ? data.items
-        : [];
+      try {
+        const activeFilter = filterStationId !== undefined ? filterStationId : stationFilter;
+        const queryParam =
+          activeFilter && activeFilter !== "all"
+            ? `?stationId=${encodeURIComponent(activeFilter)}`
+            : "";
 
-      setProjects(() => {
-        const sorted = sortProjectsByActivity(liveProjects);
+        const res = await api.get<any>(`/projects/workspace${queryParam}`);
+        const data = res?.data || res;
+        const liveProjects: ProjectWorkspaceItem[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.items)
+          ? data.items
+          : [];
 
-        if (sorted.length > 0) {
-          setSelectedProjectId((current) => {
-            // 1. If currently selected project exists in loaded projects, maintain it!
-            if (current && sorted.some((p) => p.id === current)) {
-              return current;
-            }
-            // 2. If URL or initialProjectId matches a project, select it
-            const targetId =
-              (typeof window !== "undefined"
-                ? new URLSearchParams(window.location.search).get("projectId")
-                : null) || initialProjectId;
-            if (targetId && sorted.some((p) => p.id === targetId)) {
-              return targetId;
-            }
-            // 3. Fallback to first available project
-            return sorted[0]?.id ?? null;
-          });
+        setProjects(() => {
+          const sorted = sortProjectsByActivity(liveProjects);
+
+          if (sorted.length > 0) {
+            setSelectedProjectId((current) => {
+              // 1. If currently selected project exists in loaded projects, maintain it!
+              if (current && sorted.some((p) => p.id === current)) {
+                return current;
+              }
+              // 2. If URL or initialProjectId matches a project, select it
+              const targetId =
+                (typeof window !== "undefined"
+                  ? new URLSearchParams(window.location.search).get("projectId")
+                  : null) || initialProjectId;
+              if (targetId && sorted.some((p) => p.id === targetId)) {
+                return targetId;
+              }
+              // 3. Fallback to first available project
+              return sorted[0]?.id ?? null;
+            });
+          } else {
+            setSelectedProjectId(null);
+          }
+          return sorted;
+        });
+      } catch (err: any) {
+        console.error("Failed to load workspace projects:", err);
+        toast.error(err.message || "Failed to load projects");
+        setProjects([]);
+        setSelectedProjectId(null);
+      } finally {
+        setIsLoadingProjects(false);
+        setIsLoadingMoreProjects(false);
+      }
+    },
+    [initialProjectId, stationFilter]
+  );
+
+  // Handler when user changes workstation scope filter
+  const handleStationFilterChange = React.useCallback(
+    (newStationId: string) => {
+      setStationFilter(newStationId);
+      if (typeof window !== "undefined") {
+        const currentUrl = new URL(window.location.href);
+        if (newStationId && newStationId !== "all") {
+          currentUrl.searchParams.set("stationId", newStationId);
+        } else {
+          currentUrl.searchParams.delete("stationId");
         }
-        return sorted;
-      });
-    } catch (err: any) {
-      console.error("Failed to load workspace projects:", err);
-      toast.error(err.message || "Failed to load projects");
-      setProjects([]);
-      setSelectedProjectId(null);
-    } finally {
-      setIsLoadingProjects(false);
-      setIsLoadingMoreProjects(false);
+        window.history.replaceState(null, "", currentUrl.toString());
+      }
+      // If user selected an active station, also switch active focus in context
+      if (newStationId && newStationId !== "all" && activeSessions.some((s) => s.station.id === newStationId)) {
+        switchStation(newStationId);
+      }
+      fetchWorkspaceProjects(newStationId);
+    },
+    [activeSessions, switchStation, fetchWorkspaceProjects]
+  );
+
+  // Synchronize when focused station changes in top dashboard header widget
+  const prevFocusedStationRef = React.useRef<string | null | undefined>(currentStationId);
+  React.useEffect(() => {
+    if (
+      currentStationId &&
+      currentStationId !== prevFocusedStationRef.current
+    ) {
+      prevFocusedStationRef.current = currentStationId;
+      setStationFilter(currentStationId);
+      if (typeof window !== "undefined") {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set("stationId", currentStationId);
+        window.history.replaceState(null, "", currentUrl.toString());
+      }
+      fetchWorkspaceProjects(currentStationId);
     }
-  }, [initialProjectId]);
+  }, [currentStationId, fetchWorkspaceProjects]);
 
   React.useEffect(() => {
     fetchWorkspaceProjects();
@@ -148,12 +237,17 @@ export function ManageProjectWorkspace({
         if (pId) {
           setSelectedProjectId((current) => (current !== pId ? pId : current));
         }
+        const sId = params.get("stationId");
+        if (sId) {
+          setStationFilter(sId);
+          fetchWorkspaceProjects(sId);
+        }
       }
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [fetchWorkspaceProjects]);
 
   const handleLoadMoreProjects = React.useCallback(() => {
     // All active projects loaded in workspace mode
@@ -344,12 +438,12 @@ export function ManageProjectWorkspace({
           };
         });
 
-return sortProjectsByActivity(updated);
+        return sortProjectsByActivity(updated);
       });
 
       triggerProjectHighlight(projectId);
     },
-    onProjectActivityBump: (data) => {
+    onProjectActivityBump: (data: any) => {
       setProjects((prev) => {
         const targetIndex = prev.findIndex((p) => p.id === data.projectId);
         if (targetIndex === -1) return prev;
@@ -469,6 +563,7 @@ return sortProjectsByActivity(updated);
     clientMessageType?: ClientMessageType;
     outboundType?: OutboundMessageType;
     replyTo?: { id: string; senderName: string; text: string };
+    replyToMessageId?: string;
     attachments?: ChatAttachment[];
   }) => {
     if (!selectedProjectId) return;
@@ -488,7 +583,7 @@ return sortProjectsByActivity(updated);
       purpose: payload.purpose,
       clientDirection: payload.clientDirection,
       clientMessageType: payload.clientMessageType || payload.outboundType,
-      replyToMessageId: payload.replyTo?.id,
+      replyToMessageId: payload.replyTo?.id || payload.replyToMessageId,
       attachments: formattedAttachments,
     };
 
@@ -598,13 +693,21 @@ return sortProjectsByActivity(updated);
       }
     } catch {
       // Local optimistic update fallback
-      setMessagesByProject((prev) => ({
-        ...prev,
-        [selectedProjectId]: (prev[selectedProjectId] || []).map((m) =>
-          m.id === messageId ? { ...m, approval: updatedWorkflow } : m
-        ),
-      }));
+      setMessagesByProject((prev) => {
+        const current = prev[selectedProjectId] || [];
+        return {
+          ...prev,
+          [selectedProjectId]: current.map((m) =>
+            m.id === messageId ? { ...m, approval: updatedWorkflow } : m
+          ),
+        };
+      });
     }
+  };
+
+  // Handle reaction on a message
+  const handleToggleReaction = (messageId: string, emoji: string) => {
+    socketClient.sendReaction(messageId, emoji);
   };
 
   // Handle editing a message (WebSocket with REST fallback)
@@ -679,17 +782,7 @@ return sortProjectsByActivity(updated);
     [selectedProjectId, socketClient, fetchProjectMessages]
   );
 
-  // Handle toggling reaction
-  const handleToggleReaction = (messageId: string, emoji: string) => {
-    socketClient.sendReaction(messageId, emoji);
-  };
-
-  // Handle scrolling to a pinned message or announcement
-  const handleScrollToMessage = (messageId: string) => {
-    setTargetScrollMessageId(messageId);
-  };
-
-  // Handle pinning/unpinning a message
+  // Handle message pin toggle
   const handleTogglePinMessage = async (messageId: string) => {
     if (!selectedProjectId) return;
     try {
@@ -743,6 +836,41 @@ return sortProjectsByActivity(updated);
     }
   };
 
+  // Helper station details for empty state
+  const activeStationInfo = React.useMemo(() => {
+    if (!stationFilter || stationFilter === "all") return null;
+    const sessionMatch = activeSessions.find((s) => s.station.id === stationFilter);
+    if (sessionMatch) {
+      return {
+        id: sessionMatch.station.id,
+        name: sessionMatch.station.name,
+        code: sessionMatch.station.code,
+        department: sessionMatch.station.department?.name,
+        isJoined: true,
+        session: sessionMatch.session,
+        profiles: sessionMatch.activeProfiles || [],
+      };
+    }
+    const myMatch = myStations.find((s) => s.id === stationFilter);
+    if (myMatch) {
+      return {
+        id: myMatch.id,
+        name: myMatch.name,
+        code: myMatch.code,
+        department: myMatch.department?.name,
+        isJoined: false,
+        session: null,
+        profiles: myMatch.activeProfiles || [],
+      };
+    }
+    return null;
+  }, [stationFilter, activeSessions, myStations]);
+
+  // Other active sessions to switch to
+  const otherActiveSessions = React.useMemo(() => {
+    return activeSessions.filter((s) => s.station.id !== stationFilter);
+  }, [activeSessions, stationFilter]);
+
   // Loading state skeleton
   if (isLoadingProjects && projects.length === 0) {
     return (
@@ -751,35 +879,6 @@ return sortProjectsByActivity(updated);
           <Loader2 className="size-8 animate-spin text-primary" />
           <p className="text-sm font-semibold text-foreground">Loading workspace projects...</p>
           <p className="text-xs text-muted-foreground">Evaluating your scoped permissions</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Zero accessible projects empty state
-  if (!isLoadingProjects && projects.length === 0) {
-    return (
-      <div className="flex h-[calc(100vh-4rem)] w-full items-center justify-center bg-background text-foreground p-6">
-        <div className="flex flex-col items-center gap-3 text-center max-w-md">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground shadow-2xs">
-            <ShieldAlert className="size-6 text-muted-foreground/80" />
-          </div>
-          <h2 className="text-base font-bold text-foreground">No Accessible Projects</h2>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            You do not currently have permission to access or view any active projects in this workspace, or no projects have been assigned to your scope yet.
-          </p>
-          {onNewProject && (
-            <PermissionGate code="project.create">
-              <Button
-                size="sm"
-                onClick={onNewProject}
-                className="mt-2 text-xs font-semibold gap-1.5 cursor-pointer"
-              >
-                <Plus className="size-3.5" />
-                <span>Create New Project</span>
-              </Button>
-            </PermissionGate>
-          )}
         </div>
       </div>
     );
@@ -806,6 +905,13 @@ return sortProjectsByActivity(updated);
           hasMoreProjects={hasMoreProjects}
           isLoadingMoreProjects={isLoadingMoreProjects}
           onLoadMoreProjects={handleLoadMoreProjects}
+          stationFilter={stationFilter}
+          onStationFilterChange={handleStationFilterChange}
+          activeSessions={activeSessions}
+          currentStationId={currentStationId}
+          activeStation={activeContext?.station}
+          myStations={myStations}
+          onOpenStationModal={() => setSelectModalOpen(true)}
         />
       </div>
 
@@ -828,10 +934,17 @@ return sortProjectsByActivity(updated);
           hasMoreProjects={hasMoreProjects}
           isLoadingMoreProjects={isLoadingMoreProjects}
           onLoadMoreProjects={handleLoadMoreProjects}
+          stationFilter={stationFilter}
+          onStationFilterChange={handleStationFilterChange}
+          activeSessions={activeSessions}
+          currentStationId={currentStationId}
+          activeStation={activeContext?.station}
+          myStations={myStations}
+          onOpenStationModal={() => setSelectModalOpen(true)}
         />
       </div>
 
-      {/* 3. Center Chat Panel (or Mobile Chat Screen) */}
+      {/* 3. Center Chat Panel (or Workstation Empty State) */}
       <div
         className={cn(
           "flex-1 flex flex-col min-w-0 bg-muted/20 relative h-full",
@@ -861,10 +974,165 @@ return sortProjectsByActivity(updated);
             onMobileBack={() => setMobileActiveScreen("list")}
             onOpenMobileDetails={() => setMobileDrawerOpen(true)}
           />
+        ) : projects.length === 0 ? (
+          /* Rich Workstation Context & Corner Case Empty State */
+          <div className="flex h-full flex-col items-center justify-center p-6 text-center max-w-xl mx-auto space-y-6">
+            <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-sm">
+              {activeStationInfo ? (
+                <Radio className="size-7 text-emerald-500 animate-pulse" />
+              ) : (
+                <FolderKanban className="size-7 text-primary" />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-base font-bold text-foreground">
+                {activeStationInfo
+                  ? `No Projects on ${activeStationInfo.name}`
+                  : "No Accessible Projects in Scope"}
+              </h2>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {activeStationInfo ? (
+                  activeStationInfo.profiles.length === 0 ? (
+                    <>
+                      Workstation <strong>{activeStationInfo.name}</strong> ({activeStationInfo.code}) has no platform profiles allocated. Projects are linked via platform profiles.
+                    </>
+                  ) : (
+                    <>
+                      Workstation <strong>{activeStationInfo.name}</strong> ({activeStationInfo.code}) currently has {activeStationInfo.profiles.length} connected profile(s), but no active projects yet.
+                    </>
+                  )
+                ) : (
+                  "You do not currently have any active projects in your selected filter scope, or no projects have been assigned yet."
+                )}
+              </p>
+
+              {activeStationInfo?.isJoined && activeStationInfo.session && (
+                <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground pt-1 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <Clock className="size-3 text-emerald-600 dark:text-emerald-400" />
+                    Shift active: <strong className="text-foreground font-semibold">{formatSessionDuration(activeStationInfo.session.joinedAt)}</strong>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Started: {formatSessionStartTime(activeStationInfo.session.joinedAt)}
+                  </span>
+                  {activeStationInfo.session.ipAddress && (
+                    <>
+                      <span>•</span>
+                      <span className="font-mono text-[11px]">IP: {activeStationInfo.session.ipAddress}</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Profile badges if station has profiles */}
+            {activeStationInfo && activeStationInfo.profiles.length > 0 && (
+              <div className="p-3 rounded-xl border bg-card/60 w-full text-left space-y-2">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Hosted Platform Profiles:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeStationInfo.profiles.map((p) => (
+                    <Badge key={p.id} variant="secondary" className="text-xs gap-1 py-0.5 px-2">
+                      <Briefcase className="size-3 text-primary" />
+                      <span className="font-semibold">{p.profile?.username}</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        ({p.profile?.platform?.name || "Platform"})
+                      </span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Other Active Workstations Switcher */}
+            {otherActiveSessions.length > 0 && (
+              <div className="p-4 rounded-xl border bg-emerald-500/[0.04] border-emerald-500/20 w-full space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Layers className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    Your Other Active Shifts ({otherActiveSessions.length})
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Click to switch</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {otherActiveSessions.map((s) => {
+                    const dur = formatSessionDuration(s.session?.joinedAt);
+                    return (
+                      <div
+                        key={s.station.id}
+                        onClick={() => handleStationFilterChange(s.station.id)}
+                        className="group p-2.5 rounded-lg border bg-background hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all cursor-pointer flex items-center justify-between gap-2 text-left"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-foreground group-hover:text-emerald-600 truncate">
+                              {s.station.name}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-mono block">
+                            {s.station.code} • {dur} • {s.activeProfiles.length}p
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px] text-emerald-600 group-hover:bg-emerald-500/10"
+                        >
+                          Switch <ArrowRight className="size-2.5 ml-1" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Actions Bar */}
+            <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+              {stationFilter !== "all" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs gap-1.5"
+                  onClick={() => handleStationFilterChange("all")}
+                >
+                  <Globe className="size-3.5" />
+                  Show All Projects
+                </Button>
+              )}
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs gap-1.5"
+                onClick={() => setSelectModalOpen(true)}
+              >
+                <Radio className="size-3.5 text-primary" />
+                Join / Switch Station
+              </Button>
+
+              {onNewProject && (
+                <PermissionGate code="project.create">
+                  <Button
+                    size="sm"
+                    onClick={onNewProject}
+                    className="text-xs font-semibold gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="size-3.5" />
+                    <span>Create New Project</span>
+                  </Button>
+                </PermissionGate>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-center p-8 text-muted-foreground">
             <FolderKanban className="size-8 text-muted-foreground/50 mb-2" />
-            <p className="text-xs font-semibold text-foreground">Select a project to view conversation</p>
+            <p className="text-xs font-semibold text-foreground">Select a project from the sidebar to view conversation</p>
           </div>
         )}
       </div>
@@ -877,7 +1145,7 @@ return sortProjectsByActivity(updated);
             messages={currentMessages}
             onUpdateApproval={handleUpdateApproval}
             onTogglePin={handleTogglePinProject}
-            onScrollToMessage={handleScrollToMessage}
+            onScrollToMessage={(msgId) => setTargetScrollMessageId(msgId)}
             onClose={() => setIsRightSidebarOpen(false)}
           />
         </div>
@@ -894,13 +1162,19 @@ return sortProjectsByActivity(updated);
               onTogglePin={handleTogglePinProject}
               onScrollToMessage={(msgId) => {
                 setMobileDrawerOpen(false);
-                handleScrollToMessage(msgId);
+                setTargetScrollMessageId(msgId);
               }}
               onClose={() => setMobileDrawerOpen(false)}
             />
           </SheetContent>
         </Sheet>
       )}
+
+      {/* Station Join / Switch Modal */}
+      <SelectStationModal
+        open={selectModalOpen}
+        onOpenChange={setSelectModalOpen}
+      />
     </div>
   );
 }

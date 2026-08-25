@@ -30,13 +30,18 @@ import {
   UserPlus,
   ArrowRightLeft,
   CheckCircle2,
-  Eye,
   Building2,
   LogOut,
   FolderKanban,
+  Eye,
+  Check,
 } from "lucide-react";
 import type { StationItem } from "@workspace/shared";
-import { useStationSession } from "@/lib/station/StationContext";
+import {
+  useStationSession,
+  formatSessionDuration,
+  formatSessionStartTime,
+} from "@/lib/station/StationContext";
 import { useRouter } from "next/navigation";
 
 interface StationTableProps {
@@ -59,8 +64,15 @@ export function StationTable({
   onReassignProfile,
 }: StationTableProps) {
   const router = useRouter();
-  const { activeContext, selectStation, leaveStation, isSelecting } =
-    useStationSession();
+  const {
+    isJoined,
+    currentStationId,
+    activeSessions,
+    switchStation,
+    selectStation,
+    leaveStation,
+    isSelecting,
+  } = useStationSession();
 
   if (stations.length === 0) {
     return (
@@ -83,15 +95,16 @@ export function StationTable({
           <TableRow>
             <TableHead className="w-[280px]">Workstation</TableHead>
             <TableHead>Type & Status</TableHead>
-            <TableHead>Org Unit</TableHead>
+            <TableHead>Organization Scope</TableHead>
             <TableHead>Shift Operators</TableHead>
-            <TableHead>Hosted Profiles</TableHead>
+            <TableHead>Allocated Profiles</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {stations.map((stn) => {
-            const isCurrentSession = activeContext?.station?.id === stn.id;
+            const joined = isJoined(stn.id);
+            const isFocused = currentStationId === stn.id;
             const caps = stn._capabilities || {};
             const activeProfiles = stn.activeProfiles || [];
             const assignedUsers = stn.assignedUsers || [];
@@ -101,28 +114,32 @@ export function StationTable({
             return (
               <TableRow
                 key={stn.id}
-                className={`group cursor-pointer transition-colors ${
-                  isCurrentSession
-                    ? "bg-primary/[0.03] hover:bg-primary/[0.06]"
-                    : "hover:bg-muted/50"
+                className={`group hover:bg-muted/40 cursor-pointer transition-colors ${
+                  isFocused
+                    ? "bg-primary/[0.03]"
+                    : joined
+                    ? "bg-emerald-500/[0.02]"
+                    : ""
                 }`}
                 onClick={() => onSelectDetail(stn)}
               >
-                {/* 1. Station Name & Code */}
-                <TableCell className="font-medium">
-                  <div className="flex items-start gap-3">
+                {/* 1. Workstation Identity */}
+                <TableCell>
+                  <div className="flex items-center gap-3">
                     <div
-                      className={`size-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                        isCurrentSession
-                          ? "bg-primary text-primary-foreground font-bold"
+                      className={`size-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${
+                        isFocused
+                          ? "bg-primary text-primary-foreground"
+                          : joined
+                          ? "bg-emerald-500 text-white"
                           : "bg-muted text-muted-foreground group-hover:text-foreground"
                       }`}
                     >
                       <Monitor className="size-4" />
                     </div>
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm hover:underline">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-sm text-foreground truncate">
                           {stn.name}
                         </span>
                         <Badge
@@ -131,12 +148,17 @@ export function StationTable({
                         >
                           {stn.code}
                         </Badge>
-                        {isCurrentSession && (
-                          <Badge className="bg-emerald-500 hover:bg-emerald-600 text-[10px] py-0 px-1.5 gap-1">
+                        {isFocused ? (
+                          <Badge className="bg-primary hover:bg-primary text-[10px] py-0 px-1.5 gap-1 font-medium">
                             <CheckCircle2 className="size-2.5" />
-                            Active
+                            Focused ({formatSessionDuration(activeSessions.find((s) => s.station.id === stn.id)?.session?.joinedAt)})
                           </Badge>
-                        )}
+                        ) : joined ? (
+                          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] py-0 px-1.5 gap-1 font-medium">
+                            <CheckCircle2 className="size-2.5" />
+                            Active ({formatSessionDuration(activeSessions.find((s) => s.station.id === stn.id)?.session?.joinedAt)})
+                          </Badge>
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground line-clamp-1">
                         {stn.description || "No description provided"}
@@ -174,6 +196,16 @@ export function StationTable({
                         <span className="text-muted-foreground text-xs">
                           {stn.status.name}
                         </span>
+                        {stn.isIpRestricted ? (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+                            • IP ({stn.ipWhitelist?.length || 0})
+                          </span>
+                        ) : null}
+                        {stn.isMacRestricted ? (
+                          <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono">
+                            • MAC ({stn.macWhitelist?.length || 0})
+                          </span>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -246,17 +278,29 @@ export function StationTable({
                 {/* 6. Capability-Gated Actions Menu (Rule FE-1) */}
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">
-                    {/* Quick Connect / Leave Button */}
-                    {isCurrentSession ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
-                        onClick={() => leaveStation()}
-                      >
-                        <LogOut className="size-3.5" />
-                        <span className="hidden xl:inline">Leave</span>
-                      </Button>
+                    {/* Quick Connect / Leave / Focus Button */}
+                    {joined ? (
+                      <>
+                        {!isFocused && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                            onClick={() => switchStation(stn.id)}
+                          >
+                            Focus
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
+                          onClick={() => leaveStation(stn.id)}
+                        >
+                          <LogOut className="size-3.5" />
+                          <span className="hidden xl:inline">Leave</span>
+                        </Button>
+                      </>
                     ) : caps.canJoin && isOperational ? (
                       <Button
                         size="sm"
@@ -307,6 +351,16 @@ export function StationTable({
                           <span>View Station Projects</span>
                         </DropdownMenuItem>
 
+                        {joined && !isFocused && (
+                          <DropdownMenuItem
+                            onClick={() => switchStation(stn.id)}
+                            className="text-xs gap-2 cursor-pointer font-medium"
+                          >
+                            <Check className="size-3.5 text-primary" />
+                            <span>Set as Active Focus</span>
+                          </DropdownMenuItem>
+                        )}
+
                         {caps.canAssignProfile && (
                           <DropdownMenuItem
                             onClick={() => onManageProfiles(stn)}
@@ -346,6 +400,19 @@ export function StationTable({
                             >
                               <Edit2 className="size-3.5 text-blue-500" />
                               <span>Edit Station</span>
+                            </DropdownMenuItem>
+                          </>
+                        )}
+
+                        {joined && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => leaveStation(stn.id)}
+                              className="text-xs gap-2 text-destructive focus:text-destructive cursor-pointer"
+                            >
+                              <LogOut className="size-3.5" />
+                              <span>Leave Station</span>
                             </DropdownMenuItem>
                           </>
                         )}

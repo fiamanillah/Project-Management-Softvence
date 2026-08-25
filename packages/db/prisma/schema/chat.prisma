@@ -63,6 +63,7 @@ model ChatMessageRead {
   user    User        @relation(fields: [userId], references: [id])
 
   @@unique([chatMessageId, userId])
+  @@index([userId])
   @@map("chat_message_reads")
 }
 
@@ -107,9 +108,13 @@ model ProjectMessage {
   revisions        ProjectMessageRevision[]
 
   @@index([projectId, createdAt])
+  @@index([projectId, deletedAt, createdAt])
   @@index([projectId, purpose])
   @@index([projectId, isPinned])
   @@index([senderId])
+  @@index([messageTypeId])
+  @@index([replyToMessageId])
+  @@index([pinnedById])
   @@map("project_messages")
 }
 
@@ -160,6 +165,10 @@ model MessageApprovalWorkflow {
   auditTrail          ApprovalStageAudit[]
 
   @@index([statusId])
+  @@index([requestedById])
+  @@index([leadApprovedById])
+  @@index([salesDispatchedById])
+  @@index([rejectedById])
   @@map("message_approval_workflows")
 }
 
@@ -178,6 +187,7 @@ model ApprovalStageAudit {
   actor           User                    @relation(fields: [actorId], references: [id])
 
   @@index([workflowId])
+  @@index([actorId])
   @@map("approval_stage_audits")
 }
 
@@ -210,7 +220,7 @@ model ProjectMessageReaction {
   user      User           @relation(fields: [userId], references: [id])
 
   @@unique([messageId, userId, emoji])
-  @@index([messageId])
+  @@index([userId])
   @@map("project_message_reactions")
 }
 
@@ -224,6 +234,7 @@ model ProjectMessageReadReceipt {
   user      User           @relation(fields: [userId], references: [id])
 
   @@unique([messageId, userId])
-  @@index([messageId])
+  @@index([userId])
   @@map("project_message_read_receipts")
 }
+

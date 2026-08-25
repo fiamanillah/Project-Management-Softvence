@@ -3,23 +3,24 @@
 // ==========================================
 
 model Issue {
-  id          String      @id @default(uuid()) @db.Uuid
-  projectId   String      @map("project_id") @db.Uuid
-  componentId String?     @map("component_id") @db.Uuid
-  authorId    String      @map("author_id") @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  componentId String?   @map("component_id") @db.Uuid
+  authorId    String    @map("author_id") @db.Uuid
   title       String
-  content     String?     @db.Text
-  status      IssueStatus @default(NRI)
-  priorityId  String      @map("priority_id") @db.Uuid
-  issueTypeId String      @map("issue_type_id") @db.Uuid
-  resolvedBy  String?     @map("resolved_by") @db.Uuid
-  resolvedAt  DateTime?   @map("resolved_at")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime?   @map("updated_at")
+  content     String?   @db.Text
+  statusId    String    @map("status_id") @db.Uuid
+  priorityId  String    @map("priority_id") @db.Uuid
+  issueTypeId String    @map("issue_type_id") @db.Uuid
+  resolvedBy  String?   @map("resolved_by") @db.Uuid
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @map("updated_at")
 
   project   Project           @relation(fields: [projectId], references: [id])
   component ProjectComponent? @relation(fields: [componentId], references: [id])
   author    User              @relation("IssueAuthor", fields: [authorId], references: [id])
+  status    IssueStatusLookup @relation(fields: [statusId], references: [id])
   priority  Priority          @relation(fields: [priorityId], references: [id])
   issueType IssueType         @relation(fields: [issueTypeId], references: [id])
   resolver  User?             @relation("IssueResolver", fields: [resolvedBy], references: [id])
@@ -29,8 +30,12 @@ model Issue {
 
   @@index([projectId])
   @@index([componentId])
-  @@index([status])
-  @@index([projectId, priorityId, status])
+  @@index([statusId])
+  @@index([authorId])
+  @@index([priorityId])
+  @@index([issueTypeId])
+  @@index([resolvedBy])
+  @@index([projectId, priorityId, statusId])
   @@map("issues")
 }
 
@@ -45,17 +50,18 @@ model IssueComment {
   author User  @relation(fields: [authorId], references: [id])
 
   @@index([issueId])
+  @@index([authorId])
   @@map("issue_comments")
 }
 
 model SupportTicket {
-  id        String   @id @default(uuid()) @db.Uuid
-  projectId String   @map("project_id") @db.Uuid
-  ticketRef String   @unique @map("ticket_ref")
-  authorId  String   @map("author_id") @db.Uuid
-  statusId  String   @map("status_id") @db.Uuid
+  id        String    @id @default(uuid()) @db.Uuid
+  projectId String    @map("project_id") @db.Uuid
+  ticketRef String    @unique @map("ticket_ref")
+  authorId  String    @map("author_id") @db.Uuid
+  statusId  String    @map("status_id") @db.Uuid
   subject   String
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime? @map("updated_at")
 
   project Project             @relation(fields: [projectId], references: [id])
@@ -64,5 +70,7 @@ model SupportTicket {
 
   @@index([projectId])
   @@index([statusId])
+  @@index([authorId])
   @@map("support_tickets")
 }
+

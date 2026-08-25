@@ -10,6 +10,9 @@ import type {
   MessageReadReceiptItem,
   CreateProjectMessageDTO,
   EditProjectMessageDTO,
+  StationItem,
+  StationSessionItem,
+  StationProfileAssignmentItem,
 } from "@workspace/shared";
 
 /**
@@ -24,6 +27,14 @@ export interface ClientToServerEvents {
   ) => void;
   "room:leave": (
     data: { room: string },
+    callback?: (res: { success: boolean }) => void,
+  ) => void;
+  "station:join_room": (
+    data: { stationId: string },
+    callback?: (res: { success: boolean; error?: string }) => void,
+  ) => void;
+  "station:leave_room": (
+    data: { stationId: string },
     callback?: (res: { success: boolean }) => void,
   ) => void;
   "chat:send_message": (
@@ -83,6 +94,31 @@ export interface ServerToClientEvents {
   }) => void;
   "chat:user_typing": (data: { projectId: string; userId: string; userName: string }) => void;
   "chat:user_stopped_typing": (data: { projectId: string; userId: string }) => void;
+  "station:session_joined": (data: {
+    stationId: string;
+    session: StationSessionItem;
+    currentOccupancy: number;
+    maxConcurrentUsers: number;
+  }) => void;
+  "station:session_left": (data: {
+    stationId: string;
+    sessionId: string;
+    userId: string;
+    remainingOccupancy: number;
+  }) => void;
+  "station:occupancy_updated": (data: {
+    stationId: string;
+    currentOccupancy: number;
+    maxConcurrentUsers: number;
+  }) => void;
+  "station:updated": (data: {
+    stationId: string;
+    station: StationItem;
+  }) => void;
+  "station:profiles_updated": (data: {
+    stationId: string;
+    activeProfiles: StationProfileAssignmentItem[];
+  }) => void;
   [event: string]: (...args: any[]) => void;
 }
 

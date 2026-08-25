@@ -25,8 +25,10 @@ model BdOrder {
   assignments BdOrderAssignment[]
 
   @@index([orderTypeId])
+  @@index([platformId])
   @@index([teamId])
   @@index([statusId])
+  @@index([createdBy])
   @@map("bd_orders")
 }
 
@@ -44,6 +46,9 @@ model BdOrderAssignment {
   role    AssignmentRole @relation(fields: [roleId], references: [id])
 
   @@index([bdOrderId, userId])
+  @@index([userId])
+  @@index([userId, unassignedAt])
   @@index([roleId])
   @@map("bd_order_assignments")
 }
+

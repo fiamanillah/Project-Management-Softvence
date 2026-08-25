@@ -146,6 +146,22 @@ model IssueType {
   @@map("issue_types")
 }
 
+model IssueStatusLookup {
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String   @unique
+  name           String
+  requiresAction Boolean  @default(false) @map("requires_action")
+  isTerminal     Boolean  @default(false) @map("is_terminal")
+  sortOrder      Int      @default(0) @map("sort_order")
+  color          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  issues Issue[]
+
+  @@map("issue_statuses")
+}
+
 model SupportTicketStatus {
   id         String   @id @default(uuid()) @db.Uuid
   code       String   @unique

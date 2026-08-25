@@ -1,6 +1,5 @@
-// src/Modules/Stations/services/stations.query.service.ts
-
 import type { PrismaClient } from "@workspace/db";
+import type { CacheManager } from "@workspace/cache";
 import { NotFoundError } from "@/core/errors/AppError";
 import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
 import type {
@@ -14,7 +13,10 @@ import {
 } from "./stations.capability.helper";
 
 export class StationsQueryService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly cacheManager?: CacheManager,
+  ) {}
 
   /**
    * List stations with pagination, multi-attribute filtering, scoped authorization,
@@ -147,8 +149,24 @@ export class StationsQueryService {
 
   /**
    * Get single station by ID or code with full relations and capability decoration.
+   * Cached in Redis (station:raw:{id}) with automatic capability decoration per actor.
    */
   public async getStationById(id: string, actor: AuthenticatedUser): Promise<StationItem> {
+    const cacheKey = `station:raw:${id.toLowerCase()}`;
+
+    // 1. Check Redis Cache
+    if (this.cacheManager) {
+      try {
+        const cachedRaw = await this.cacheManager.get<any>(cacheKey);
+        if (cachedRaw) {
+          return sanitizeAndDecorateStation(cachedRaw, actor);
+        }
+      } catch {
+        // Fallback to database on cache error
+      }
+    }
+
+    // 2. Query Database
     const station = await this.prisma.station.findFirst({
       where: {
         OR: [{ id }, { code: id.toUpperCase() }],
@@ -189,13 +207,39 @@ export class StationsQueryService {
       throw new NotFoundError("Station not found");
     }
 
+    // 3. Cache raw record in Redis for 1 hour (3600 seconds)
+    if (this.cacheManager) {
+      try {
+        await Promise.all([
+          this.cacheManager.set(`station:raw:${station.id.toLowerCase()}`, station, { ttlSeconds: 3600 }),
+          this.cacheManager.set(`station:raw:${station.code.toLowerCase()}`, station, { ttlSeconds: 3600 }),
+        ]);
+      } catch {
+        // Non-blocking
+      }
+    }
+
     return sanitizeAndDecorateStation(station, actor);
   }
 
   /**
    * Get stations assigned to the current requesting user.
+   * Cached in Redis for high-frequency workspace and header queries.
    */
   public async getMyStations(actor: AuthenticatedUser): Promise<StationItem[]> {
+    const cacheKey = `station:user_assigned:raw:${actor.id}`;
+
+    if (this.cacheManager) {
+      try {
+        const cachedRaw = await this.cacheManager.get<any[]>(cacheKey);
+        if (cachedRaw && Array.isArray(cachedRaw)) {
+          return Promise.all(cachedRaw.map((rec) => sanitizeAndDecorateStation(rec, actor)));
+        }
+      } catch {
+        // Fallback to database on cache error
+      }
+    }
+
     const records = await this.prisma.station.findMany({
       where: {
         deletedAt: null,
@@ -239,7 +283,35 @@ export class StationsQueryService {
       },
     });
 
+    if (this.cacheManager) {
+      try {
+        await this.cacheManager.set(cacheKey, records, { ttlSeconds: 3600 });
+      } catch {
+        // Non-blocking
+      }
+    }
+
     return Promise.all(records.map((rec) => sanitizeAndDecorateStation(rec, actor)));
+  }
+
+  /**
+   * Invalidate cached station raw records.
+   */
+  public async invalidateStation(id: string, code?: string): Promise<void> {
+    if (!this.cacheManager) return;
+    const keys = [`station:raw:${id.toLowerCase()}`, `station:detail:${id.toLowerCase()}`];
+    if (code) {
+      keys.push(`station:raw:${code.toLowerCase()}`, `station:detail:${code.toLowerCase()}`);
+    }
+    await this.cacheManager.del(keys).catch(() => {});
+  }
+
+  /**
+   * Invalidate cached assigned stations for a user.
+   */
+  public async invalidateUserAssigned(userId: string): Promise<void> {
+    if (!this.cacheManager) return;
+    await this.cacheManager.del(`station:user_assigned:raw:${userId}`).catch(() => {});
   }
 
   /**

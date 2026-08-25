@@ -5,7 +5,6 @@ import { CacheManager } from "@workspace/cache";
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import { AppLogger } from "@/core/logging/logger";
 import { config } from "@/core/config";
-import { AuditLogService } from "@/core/audit/audit.service";
 import { ScopeEvaluator } from "./ScopeEvaluator";
 import { getScopeWeight } from "@/core/permissions/scopePresets";
 import type {
@@ -86,32 +85,9 @@ export class AuthorizationEngine {
     prisma: PrismaClient = defaultPrisma,
   ): Promise<boolean> {
     // -----------------------------------------------------------------
-    // Step 1: SuperAdmin Bypass (BE-6: Logged for sensitive permissions)
+    // Step 1: SuperAdmin Bypass (Fast-path: noise-free capability evaluations)
     // -----------------------------------------------------------------
     if (user.systemRole === "SuperAdmin") {
-      if (isSensitivePermission(permissionCode)) {
-        AuditLogService.log({
-          module: "Authorization",
-          action: "SUPER_ADMIN_BYPASS",
-          entityTable: "permissions",
-          entityId: permissionCode,
-          actor: {
-            id: user.id,
-            email: user.email,
-            role: user.systemRole,
-            ipAddress: user.ipAddress,
-            userAgent: user.userAgent,
-          },
-          metadata: {
-            permissionCode,
-            resource,
-            isBypass: true,
-            isSensitive: true,
-          },
-          status: "SUCCESS",
-        });
-      }
-
       return true;
     }
 

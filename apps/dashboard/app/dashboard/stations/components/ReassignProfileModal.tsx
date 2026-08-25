@@ -36,6 +36,7 @@ import type {
   StationProfileAssignmentItem,
 } from "@workspace/shared";
 import { useStationSession } from "@/lib/station/StationContext";
+import { ScrollArea } from "@workspace/ui/components/scroll-area";
 
 interface ReassignProfileModalProps {
   open: boolean;
@@ -157,7 +158,7 @@ export function ReassignProfileModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-xl p-0 gap-0 overflow-hidden shadow-2xl">
+      <DialogContent className="w-full min-w-[min(100vw-2rem,44rem)] sm:min-w-[580px] md:min-w-[660px] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden shadow-2xl">
         <DialogHeader className="p-6 pb-4 border-b bg-muted/20">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600">
@@ -174,197 +175,224 @@ export function ReassignProfileModal({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Station Handoff Visual Route */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/30 border border-border/60">
-            <div className="space-y-0.5">
-              <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
-                Origin Station
-              </span>
-              <p className="text-xs font-bold text-foreground line-clamp-1">
-                {fromStation?.name || "Select Source"}
-              </p>
-              {fromStation && (
-                <Badge variant="outline" className="text-[9px] font-mono py-0">
-                  {fromStation.code}
-                </Badge>
-              )}
-            </div>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <ScrollArea className="flex-1 max-h-[calc(90vh-140px)] px-6 py-5">
+            <div className="space-y-4">
+              {/* Station Handoff Visual Route */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+                    Origin Station
+                  </span>
+                  <p className="text-xs font-bold text-foreground line-clamp-1">
+                    {fromStation?.name || "Select Source"}
+                  </p>
+                  {fromStation && (
+                    <Badge variant="outline" className="text-[9px] font-mono py-0">
+                      {fromStation.code}
+                    </Badge>
+                  )}
+                </div>
 
-            <div className="p-2 rounded-full bg-primary/10 text-primary">
-              <ArrowRight className="size-4" />
-            </div>
+                <div className="p-2 rounded-full bg-primary/10 text-primary">
+                  <ArrowRight className="size-4" />
+                </div>
 
-            <div className="space-y-0.5 text-right">
-              <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
-                Destination Station
-              </span>
-              <p className="text-xs font-bold text-foreground line-clamp-1">
-                {targetStation?.name || "Select Target"}
-              </p>
-              {targetStation && (
-                <Badge variant="outline" className="text-[9px] font-mono py-0">
-                  {targetStation.code}
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* From Station */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">
-                Source Workstation <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={fromStationId}
-                onValueChange={(val: string | null) => {
-                  if (val) {
-                    setFromStationId(val);
-                    setProfileId("");
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select origin station" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stations.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name} ({s.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Target Station */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">
-                Destination Workstation <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={toStationId}
-                onValueChange={(val: string | null) => {
-                  if (val) setToStationId(val);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select target station" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stations
-                    .filter((s) => s.id !== fromStationId)
-                    .map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} ({s.code})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {fieldErrors.toStationId && (
-                <p className="text-[11px] text-destructive">{fieldErrors.toStationId}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Profile Selector */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">
-              Profile to Transfer <span className="text-destructive">*</span>
-            </Label>
-            <Select
-              value={profileId}
-              onValueChange={(val: string | null) => {
-                if (val) setProfileId(val);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select active profile to transfer" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableProfiles.length === 0 ? (
-                  <SelectItem value="none" disabled>
-                    No active profiles on source station
-                  </SelectItem>
-                ) : (
-                  availableProfiles.map((p) => (
-                    <SelectItem key={p.profileId} value={p.profileId}>
-                      <span className="flex items-center gap-2">
-                        <Briefcase className="size-3.5 text-primary" />
-                        <strong className="font-semibold">
-                          {p.profile?.username}
-                        </strong>
-                        <span className="text-muted-foreground text-xs">
-                          ({p.profile?.platform?.name || "Platform"})
-                        </span>
-                        {p.isPrimary && (
-                          <Badge variant="secondary" className="text-[9px] py-0">
-                            Primary
-                          </Badge>
-                        )}
-                      </span>
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-            {fieldErrors.profileId && (
-              <p className="text-[11px] text-destructive">{fieldErrors.profileId}</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Shift */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Shift Timing</Label>
-              <Select
-                value={shift}
-                onValueChange={(val: string | null) => {
-                  if (val) setShift(val);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select shift" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Day">Day Shift</SelectItem>
-                  <SelectItem value="Night">Night Shift</SelectItem>
-                  <SelectItem value="Morning">Morning Rotation</SelectItem>
-                  <SelectItem value="Evening">Evening Rotation</SelectItem>
-                  <SelectItem value="Rotational">Rotational / Flexible</SelectItem>
-                  <SelectItem value="none">Not Specified</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Primary Toggle */}
-            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
-              <div className="space-y-0.5">
-                <Label className="text-xs font-semibold">Primary Profile</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Mark as lead profile on target station
-                </p>
+                <div className="space-y-0.5 text-right">
+                  <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+                    Destination Station
+                  </span>
+                  <p className="text-xs font-bold text-foreground line-clamp-1">
+                    {targetStation?.name || "Select Target"}
+                  </p>
+                  {targetStation && (
+                    <Badge variant="outline" className="text-[9px] font-mono py-0">
+                      {targetStation.code}
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <Switch checked={isPrimary} onCheckedChange={setIsPrimary} />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* From Station */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    Source Workstation <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={fromStationId}
+                    onValueChange={(val: string | null) => {
+                      if (val) {
+                        setFromStationId(val);
+                        setProfileId("");
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select origin station">
+                        {fromStation ? `${fromStation.name} (${fromStation.code})` : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stations.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Target Station */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    Destination Workstation <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={toStationId}
+                    onValueChange={(val: string | null) => {
+                      if (val) setToStationId(val);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select target station">
+                        {targetStation ? `${targetStation.name} (${targetStation.code})` : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stations
+                        .filter((s) => s.id !== fromStationId)
+                        .map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} ({s.code})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {fieldErrors.toStationId && (
+                    <p className="text-[11px] text-destructive">{fieldErrors.toStationId}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Profile Selector */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">
+                  Profile to Transfer <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={profileId}
+                  onValueChange={(val: string | null) => {
+                    if (val) setProfileId(val);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select active profile to transfer">
+                      {(() => {
+                        const sel = availableProfiles.find((p) => p.profileId === profileId);
+                        return sel ? `${sel.profile?.username} (${sel.profile?.platform?.name || "Platform"})` : undefined;
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableProfiles.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No active profiles on source station
+                      </SelectItem>
+                    ) : (
+                      availableProfiles.map((p) => (
+                        <SelectItem key={p.profileId} value={p.profileId}>
+                          <span className="flex items-center gap-2">
+                            <Briefcase className="size-3.5 text-primary" />
+                            <strong className="font-semibold">
+                              {p.profile?.username}
+                            </strong>
+                            <span className="text-muted-foreground text-xs">
+                              ({p.profile?.platform?.name || "Platform"})
+                            </span>
+                            {p.isPrimary && (
+                              <Badge variant="secondary" className="text-[9px] py-0">
+                                Primary
+                              </Badge>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {fieldErrors.profileId && (
+                  <p className="text-[11px] text-destructive">{fieldErrors.profileId}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Shift */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Shift Timing</Label>
+                  <Select
+                    value={shift}
+                    onValueChange={(val: string | null) => {
+                      if (val) setShift(val);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select shift">
+                        {shift === "Day"
+                          ? "Day Shift"
+                          : shift === "Night"
+                          ? "Night Shift"
+                          : shift === "Morning"
+                          ? "Morning Rotation"
+                          : shift === "Evening"
+                          ? "Evening Rotation"
+                          : shift === "Rotational"
+                          ? "Rotational / Flexible"
+                          : shift === "none"
+                          ? "Not Specified"
+                          : shift}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Day">Day Shift</SelectItem>
+                      <SelectItem value="Night">Night Shift</SelectItem>
+                      <SelectItem value="Morning">Morning Rotation</SelectItem>
+                      <SelectItem value="Evening">Evening Rotation</SelectItem>
+                      <SelectItem value="Rotational">Rotational / Flexible</SelectItem>
+                      <SelectItem value="none">Not Specified</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Primary Toggle */}
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-semibold">Primary Profile</Label>
+                    <p className="text-[10px] text-muted-foreground">
+                      Mark as lead profile on target station
+                    </p>
+                  </div>
+                  <Switch checked={isPrimary} onCheckedChange={setIsPrimary} />
+                </div>
+              </div>
+
+              {/* Handoff Note */}
+              <div className="space-y-1.5">
+                <Label htmlFor="transfer-note" className="text-xs font-semibold">
+                  Handoff / Rotation Note
+                </Label>
+                <Textarea
+                  id="transfer-note"
+                  rows={2}
+                  placeholder="e.g. Reassigned for night shift client support coverage..."
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
+          </ScrollArea>
 
-          {/* Handoff Note */}
-          <div className="space-y-1.5">
-            <Label htmlFor="transfer-note" className="text-xs font-semibold">
-              Handoff / Rotation Note
-            </Label>
-            <Textarea
-              id="transfer-note"
-              rows={2}
-              placeholder="e.g. Reassigned for night shift client support coverage..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </div>
-
-          <DialogFooter className="pt-3 border-t gap-2 sm:gap-0">
+          <DialogFooter className="p-4 border-t gap-2 sm:gap-0 bg-muted/10">
             <Button
               type="button"
               variant="outline"

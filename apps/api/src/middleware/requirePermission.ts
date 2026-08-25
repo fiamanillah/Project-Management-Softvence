@@ -44,7 +44,7 @@ export function requirePermission(
       if (!isAllowed) {
         // Log non-blocking 403 access denial event to RabbitMQ -> MongoDB pipeline
         AuditLogService.log({
-          module: "Authorization",
+          module: "AUTHORIZATION",
           action: "ACCESS_DENIED",
           entityTable: "permissions",
           entityId: permissionCode,

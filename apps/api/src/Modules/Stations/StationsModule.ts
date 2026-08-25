@@ -15,12 +15,16 @@ import {
   assignStationProfileSchema,
   reassignProfileSchema,
   selectStationSchema,
+  leaveStationSchema,
   createStationTypeSchema,
   updateStationTypeSchema,
   createStationStatusSchema,
   updateStationStatusSchema,
   createStationRoleSchema,
   updateStationRoleSchema,
+  createProfileWithStationsSchema,
+  updateProfileWithStationsSchema,
+  assignProfileToStationsSchema,
 } from "./StationDTO";
 
 export class StationsModule extends BaseModule {
@@ -65,8 +69,14 @@ export class StationsModule extends BaseModule {
     this.router.use(authenticate);
 
     // ==========================================
-    // LOOKUPS (Dynamic Types, Statuses, Roles)
+    // LOOKUPS (Dynamic Types, Statuses, Roles, Scope Context)
     // ==========================================
+    this.router.get(
+      "/lookups/scope-context",
+      requirePermission("station.view"),
+      controller.getStationScopeContext.bind(controller),
+    );
+
     this.router.get(
       "/lookups/types",
       requirePermission("station.view"),
@@ -142,9 +152,16 @@ export class StationsModule extends BaseModule {
       controller.getActiveSession.bind(controller),
     );
 
+    this.router.get(
+      "/active-sessions",
+      requirePermission("station.join"),
+      controller.getActiveSessions.bind(controller),
+    );
+
     this.router.post(
       "/leave",
       requirePermission("station.join"),
+      validateRequest({ body: leaveStationSchema.optional() }),
       controller.leaveStation.bind(controller),
     );
 
@@ -160,6 +177,54 @@ export class StationsModule extends BaseModule {
       requirePermission("station.join"),
       validateRequest({ body: selectStationSchema }),
       controller.selectStation.bind(controller),
+    );
+
+    // ==========================================
+    // PLATFORM PROFILES MANAGEMENT (Rule BE-1)
+    // ==========================================
+    this.router.get(
+      "/profiles",
+      requirePermission("station.view"),
+      controller.getProfiles.bind(controller),
+    );
+
+    this.router.post(
+      "/profiles",
+      requirePermission("station.assign_profile"),
+      validateRequest({ body: createProfileWithStationsSchema }),
+      controller.createProfile.bind(controller),
+    );
+
+    this.router.get(
+      "/profiles/:id",
+      requirePermission("station.view"),
+      controller.getProfileById.bind(controller),
+    );
+
+    this.router.patch(
+      "/profiles/:id",
+      requirePermission("station.assign_profile"),
+      validateRequest({ body: updateProfileWithStationsSchema }),
+      controller.updateProfile.bind(controller),
+    );
+
+    this.router.delete(
+      "/profiles/:id",
+      requirePermission("station.manage"),
+      controller.deleteProfile.bind(controller),
+    );
+
+    this.router.post(
+      "/profiles/:id/stations",
+      requirePermission("station.assign_profile"),
+      validateRequest({ body: assignProfileToStationsSchema }),
+      controller.assignProfileToStations.bind(controller),
+    );
+
+    this.router.delete(
+      "/profiles/:id/stations/:stationId",
+      requirePermission("station.assign_profile"),
+      controller.removeProfileFromStation.bind(controller),
     );
 
     // ==========================================
@@ -202,6 +267,13 @@ export class StationsModule extends BaseModule {
       "/:id/join",
       requirePermission("station.join", loadStationResource),
       controller.selectStation.bind(controller),
+    );
+
+    // Leave specific station by ID
+    this.router.post(
+      "/:id/leave",
+      requirePermission("station.join", loadStationResource),
+      controller.leaveStation.bind(controller),
     );
 
     // User Operator Assignments

@@ -30,12 +30,12 @@ export function DeleteStationDialog({
   station,
   onSuccess,
 }: DeleteStationDialogProps) {
-  const { activeContext, leaveStation } = useStationSession();
+  const { isJoined, leaveStation } = useStationSession();
   const [loading, setLoading] = React.useState(false);
 
   if (!station) return null;
 
-  const isCurrent = activeContext?.station?.id === station.id;
+  const isCurrent = isJoined(station.id);
   const activeProfilesCount = station.activeProfilesCount ?? station.activeProfiles?.length ?? 0;
   const activeUsersCount = station.activeUsersCount ?? station.assignedUsers?.length ?? 0;
 
@@ -43,7 +43,7 @@ export function DeleteStationDialog({
     setLoading(true);
     try {
       if (isCurrent) {
-        await leaveStation();
+        await leaveStation(station.id);
       }
       await api.delete(`/stations/${station.id}`);
       toast.success(`Workstation "${station.name}" deleted successfully.`);

@@ -23,7 +23,15 @@ export class ProjectsWorkspaceService {
    * Strictly enforces scoped permissions (Rules BE-1, BE-17).
    */
   public async getWorkspaceProjects(
-    query: { search?: string; statusId?: string; priorityId?: string; page?: number | string; limit?: number | string },
+    query: {
+      search?: string;
+      statusId?: string;
+      priorityId?: string;
+      stationId?: string;
+      profileId?: string;
+      page?: number | string;
+      limit?: number | string;
+    },
     actor: AuthenticatedUser,
   ): Promise<{ items: ProjectWorkspaceItem[]; pagination?: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean } } | ProjectWorkspaceItem[]> {
     const where: any = {
@@ -42,6 +50,23 @@ export class ProjectsWorkspaceService {
       where.status = { isTerminal: true };
     } else if ((query as any).includeTerminal !== "true" && (query as any).includeTerminal !== true) {
       where.status = { isTerminal: false };
+    }
+
+    // Workstation specific filtering
+    if (query.stationId && query.stationId !== "all") {
+      where.profile = {
+        ...(where.profile || {}),
+        stationAssignments: {
+          some: {
+            stationId: query.stationId,
+            unassignedAt: null,
+          },
+        },
+      };
+    }
+
+    if (query.profileId && query.profileId !== "all") {
+      where.profileId = query.profileId;
     }
 
     if (query.search && query.search.trim() !== "") {

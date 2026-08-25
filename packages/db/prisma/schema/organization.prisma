@@ -116,6 +116,7 @@ model Team {
   scopeTargets         RolePermissionScopeTarget[]
   overrideTargets      UserPermissionOverride[]
 
+  @@index([departmentId])
   @@map("teams")
 }
 
@@ -133,10 +134,12 @@ model TeamMember {
   role AssignmentRole @relation(fields: [roleId], references: [id])
 
   @@index([teamId, userId])
+  @@index([teamId, leftAt])
   @@index([userId, leftAt])
   @@index([roleId])
   @@map("team_members")
 }
+
 
 model ServiceLine {
   id                  String   @id @default(uuid()) @db.Uuid

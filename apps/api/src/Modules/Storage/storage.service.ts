@@ -2,6 +2,7 @@ import { Readable } from "stream";
 import { type PrismaClient, type AttachmentEntity } from "@workspace/db";
 import { StorageManager, type UploadResult } from "@workspace/storage";
 import { can } from "@/core/authorization/AuthorizationEngine";
+import { AuditLogService } from "@/core/audit/audit.service";
 import { AppLogger } from "@/core/logging/logger";
 import { AppError } from "@/core/errors/AppError";
 import { HTTPStatusCode } from "@/types/HTTPStatusCode";
@@ -124,6 +125,34 @@ export class StorageService {
       projectId: options.entityType === "project" ? options.entityId : undefined,
     });
 
+    AuditLogService.log({
+      module: "STORAGE",
+      action: "FILE_UPLOADED",
+      entityTable: "attachments",
+      entityId: attachmentId || uploadResult.key,
+      actor: {
+        id: user?.id,
+        email: user?.email,
+        role: user?.systemRole,
+        ipAddress: user?.ipAddress,
+        userAgent: user?.userAgent,
+      },
+      newPayload: {
+        key: uploadResult.key,
+        fileName: options.fileName,
+        mimeType: uploadResult.contentType,
+        entityType: options.entityType,
+        entityId: options.entityId,
+        isPublic,
+      },
+      metadata: {
+        key: uploadResult.key,
+        bucket: uploadResult.bucket,
+        size: uploadResult.size,
+      },
+      status: "SUCCESS",
+    }).catch(() => {});
+
     return {
       file: uploadResult,
       attachmentId,
@@ -195,6 +224,34 @@ export class StorageService {
     const capabilities = await this.computeCapabilities(user, {
       projectId: dto.entityType === "project" ? dto.entityId : undefined,
     });
+
+    AuditLogService.log({
+      module: "STORAGE",
+      action: "FILE_UPLOADED",
+      entityTable: "attachments",
+      entityId: attachmentId || dto.key,
+      actor: {
+        id: user?.id,
+        email: user?.email,
+        role: user?.systemRole,
+        ipAddress: user?.ipAddress,
+        userAgent: user?.userAgent,
+      },
+      newPayload: {
+        key: dto.key,
+        fileName: dto.fileName,
+        mimeType: metadata.contentType || dto.mimeType,
+        entityType: dto.entityType,
+        entityId: dto.entityId,
+        isPublic,
+      },
+      metadata: {
+        key: dto.key,
+        bucket,
+        size: metadata.size,
+      },
+      status: "SUCCESS",
+    }).catch(() => {});
 
     return {
       key: dto.key,
@@ -279,6 +336,26 @@ export class StorageService {
         error: dbErr,
       });
     }
+
+    AuditLogService.log({
+      module: "STORAGE",
+      action: "FILE_DELETED",
+      entityTable: "attachments",
+      entityId: key,
+      actor: {
+        id: user?.id,
+        email: user?.email,
+        role: user?.systemRole,
+        ipAddress: user?.ipAddress,
+        userAgent: user?.userAgent,
+      },
+      metadata: {
+        key,
+        bucket,
+        isPublic,
+      },
+      status: "SUCCESS",
+    }).catch(() => {});
 
     return { success: true, key };
   }

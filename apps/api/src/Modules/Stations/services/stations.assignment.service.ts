@@ -435,9 +435,18 @@ export class StationsAssignmentService {
    */
   private async invalidateStationCaches(stationId: string, userId?: string) {
     if (this.cacheManager) {
-      await this.cacheManager.del(`station:active_profiles:${stationId}`);
+      await Promise.all([
+        this.cacheManager.del(`station:active_profiles:${stationId}`),
+        this.cacheManager.del(`station:raw:${stationId.toLowerCase()}`),
+        this.cacheManager.del(`station:detail:${stationId.toLowerCase()}`),
+      ]).catch(() => {});
+
       if (userId) {
-        await this.cacheManager.del(`station:user_active:${userId}`);
+        await Promise.all([
+          this.cacheManager.del(`station:user_active:${userId}`),
+          this.cacheManager.del(`station:user_active_sessions:${userId}`),
+          this.cacheManager.del(`station:user_assigned:raw:${userId}`),
+        ]).catch(() => {});
       }
     }
     // Bump global permission version so any scoped grants refresh

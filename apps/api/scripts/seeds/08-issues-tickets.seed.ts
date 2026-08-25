@@ -20,6 +20,10 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
   const urgentPrioId = ctx.priorities.get("URGENT")!;
   const criticalPrioId = ctx.priorities.get("CRITICAL")!;
 
+  const nriIssueStatusId = ctx.issueStatuses.get("NRI")!;
+  const wipIssueStatusId = ctx.issueStatuses.get("WIP")!;
+  const solvedIssueStatusId = ctx.issueStatuses.get("SOLVE") || ctx.issueStatuses.get("RESOLVED")!;
+
   const openTicketStatusId = ctx.ticketStatuses.get("OPEN")!;
   const inProgressTicketStatusId = ctx.ticketStatuses.get("IN_PROGRESS")!;
   const resolvedTicketStatusId = ctx.ticketStatuses.get("RESOLVED")!;
@@ -52,7 +56,7 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
           authorId: tomUser.id,
           title: issue1Title,
           content: "When test events arrive with a timestamp delta > 30s, the webhook handler rejects valid payload signatures with HTTP 400.",
-          status: "Solve",
+          statusId: solvedIssueStatusId,
           priorityId: highPrioId,
           issueTypeId: bugTypeId,
           resolvedBy: jamesUser.id,
@@ -92,7 +96,7 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
           authorId: tomUser.id,
           title: issue2Title,
           content: "Dragging column divider on Safari macOS causes parent scroll container to flicker horizontally due to subpixel calculations.",
-          status: "WIP",
+          statusId: wipIssueStatusId,
           priorityId: medPrioId,
           issueTypeId: uiGlitchTypeId,
         },
@@ -144,7 +148,7 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
           authorId: emilyUser.id,
           title: issue3Title,
           content: "When cancelling FaceID 3 times, fallback to custom 6-digit MPIN view fails to mount.",
-          status: "NRI",
+          statusId: nriIssueStatusId,
           priorityId: urgentPrioId,
           issueTypeId: bugTypeId,
         },
@@ -195,7 +199,7 @@ export async function seedIssuesAndTickets(ctx: SeedContext): Promise<void> {
           authorId: tomUser.id,
           title: issue4Title,
           content: "Rendering 10k real-time GPS pings simultaneously causes 40fps frame drops on Chrome GPU layer.",
-          status: "WIP",
+          statusId: wipIssueStatusId,
           priorityId: highPrioId,
           issueTypeId: performanceTypeId,
         },

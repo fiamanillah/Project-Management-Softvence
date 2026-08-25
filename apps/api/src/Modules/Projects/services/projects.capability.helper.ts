@@ -127,6 +127,10 @@ export async function buildProjectScopedWhereConditions(
   prisma: PrismaClient,
   actor: AuthenticatedUser,
 ): Promise<any[] | null> {
+  if (actor.systemRole === "SuperAdmin") {
+    return null;
+  }
+
   const userPerms = await getUserPermissions(actor);
   const viewPerm = userPerms["project.view"];
   const isGlobal =
@@ -199,7 +203,7 @@ export async function buildProjectScopedWhereConditions(
   }
 
   // 5. Active Station Session Profiles (Station & Sales Desk Context)
-  const activeStationSession = await prisma.stationSession.findFirst({
+  const activeStationSessions = await prisma.stationSession.findMany({
     where: { userId: actor.id, isCurrent: true, leftAt: null },
     select: {
       station: {
@@ -213,8 +217,13 @@ export async function buildProjectScopedWhereConditions(
     },
   });
 
-  const activeStationProfileIds =
-    activeStationSession?.station?.stationProfiles?.map((sp) => sp.profileId) || [];
+  const activeStationProfileIds = Array.from(
+    new Set(
+      activeStationSessions.flatMap(
+        (s) => s.station?.stationProfiles?.map((sp) => sp.profileId) || []
+      )
+    )
+  );
 
   if (activeStationProfileIds.length > 0) {
     scopedConditions.push({

@@ -15,7 +15,11 @@
     "bootstrap:admin": "bun --filter api bootstrap:admin",
     "sync:permissions": "bun --filter api sync:permissions",
     "db:seed": "bun --filter api db:seed",
-    "seed:dummy": "bun --filter api seed:dummy"
+    "seed:dummy": "bun --filter api seed:dummy",
+    "storage:admin": "bash scripts/rustfs-admin.sh",
+    "storage:pools": "bash scripts/rustfs-admin.sh pools",
+    "storage:rebalance": "bash scripts/rustfs-admin.sh rebalance:status",
+    "storage:rebalance:start": "bash scripts/rustfs-admin.sh rebalance:start"
   },
   "devDependencies": {
     "prettier": "^3.8.3",

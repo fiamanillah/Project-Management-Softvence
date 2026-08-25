@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import { ScrollArea } from "@workspace/ui/components/scroll-area";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import type {
@@ -133,8 +134,8 @@ export function ManageComponentsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto p-6">
-        <DialogHeader>
+      <DialogContent className="w-full min-w-[min(100vw-2rem,38rem)] sm:min-w-[540px] md:min-w-[620px] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden shadow-2xl">
+        <DialogHeader className="p-6 pb-4 border-b bg-muted/20">
           <div className="flex items-center gap-2.5">
             <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
               <Layers className="size-5" />
@@ -148,96 +149,97 @@ export function ManageComponentsModal({
           </div>
         </DialogHeader>
 
-        <div className="space-y-5 pt-2">
-          {/* Add New Component Form */}
-          <form onSubmit={handleAddComponent} className="p-3.5 bg-muted/30 rounded-xl border space-y-3">
-            <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <Plus className="size-3.5 text-primary" /> Add New Component
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-              <div className="sm:col-span-7">
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Component Name (e.g. Auth Service)"
-                  required
-                  className="h-9 text-xs"
-                />
+        <ScrollArea className="flex-1 max-h-[calc(90vh-140px)] px-6 py-5">
+          <div className="space-y-5">
+            {/* Add New Component Form */}
+            <form onSubmit={handleAddComponent} className="p-3.5 bg-muted/30 rounded-xl border space-y-3">
+              <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Plus className="size-3.5 text-primary" /> Add New Component
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <div className="sm:col-span-7">
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Component Name (e.g. Auth Service)"
+                    required
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="sm:col-span-5 flex gap-2">
+                  <Select value={newStatusId} onValueChange={(val: string | null) => setNewStatusId(val || "")}>
+                    <SelectTrigger className="h-9 text-xs flex-1">
+                      <SelectValue placeholder="Status">
+                        {lookups?.statuses.find((st) => st.id === newStatusId)?.name}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lookups?.statuses.map((st) => (
+                        <SelectItem key={st.id} value={st.id} className="text-xs">
+                          {st.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button type="submit" disabled={loading || !newName.trim()} className="h-9 text-xs shrink-0">
+                    <Plus className="size-3.5 mr-1" /> Add
+                  </Button>
+                </div>
               </div>
+            </form>
 
-              <div className="sm:col-span-5 flex gap-2">
-                <Select value={newStatusId} onValueChange={(val: string | null) => setNewStatusId(val || "")}>
-                  <SelectTrigger className="h-9 text-xs flex-1">
-                    <SelectValue placeholder="Status">
-                      {lookups?.statuses.find((st) => st.id === newStatusId)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {lookups?.statuses.map((st) => (
-                      <SelectItem key={st.id} value={st.id} className="text-xs">
-                        {st.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {/* List of Components */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Existing Components ({components.length})
+              </Label>
 
-                <Button type="submit" disabled={loading || !newName.trim()} className="h-9 text-xs shrink-0">
-                  <Plus className="size-3.5 mr-1" /> Add
-                </Button>
-              </div>
-            </div>
-          </form>
+              {components.length > 0 ? (
+                <div className="space-y-2 p-1 bg-muted/20 rounded-lg border">
+                  {components.map((comp) => {
+                    const isEditing = editingId === comp.id;
 
-          {/* List of Components */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              Existing Components ({components.length})
-            </Label>
-
-            {components.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto p-1 bg-muted/20 rounded-lg border">
-                {components.map((comp) => {
-                  const isEditing = editingId === comp.id;
-
-                  if (isEditing) {
-                    return (
-                      <div
-                        key={comp.id}
-                        className="p-2.5 bg-card rounded-lg border space-y-2"
-                      >
-                        <div className="flex gap-2">
-                          <Input
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="h-8 text-xs flex-1"
-                          />
-                          <Select value={editStatusId} onValueChange={(val: string | null) => setEditStatusId(val || "")}>
-                            <SelectTrigger className="h-8 text-xs w-32">
-                              <SelectValue>
-                                {lookups?.statuses.find((st) => st.id === editStatusId)?.name}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {lookups?.statuses.map((st) => (
-                                <SelectItem key={st.id} value={st.id} className="text-xs">
-                                  {st.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditingId(null)}
-                            className="h-7 text-xs"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleUpdateComponent(comp.id)}
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={comp.id}
+                          className="p-2.5 bg-card rounded-lg border space-y-2"
+                        >
+                          <div className="flex gap-2">
+                            <Input
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className="h-8 text-xs flex-1"
+                            />
+                            <Select value={editStatusId} onValueChange={(val: string | null) => setEditStatusId(val || "")}>
+                              <SelectTrigger className="h-8 text-xs w-32">
+                                <SelectValue>
+                                  {lookups?.statuses.find((st) => st.id === editStatusId)?.name}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {lookups?.statuses.map((st) => (
+                                  <SelectItem key={st.id} value={st.id} className="text-xs">
+                                    {st.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingId(null)}
+                              className="h-7 text-xs"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleUpdateComponent(comp.id)}
                             disabled={loading}
                             className="h-7 text-xs"
                           >
@@ -302,10 +304,11 @@ export function ManageComponentsModal({
                 No components created yet for this project.
               </p>
             )}
+            </div>
           </div>
-        </div>
+        </ScrollArea>
 
-        <DialogFooter className="pt-3 border-t">
+        <DialogFooter className="p-4 border-t bg-muted/10">
           <Button
             type="button"
             variant="outline"

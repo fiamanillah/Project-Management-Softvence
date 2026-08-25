@@ -78,6 +78,18 @@ export class StationsController extends BaseController {
     );
   }
 
+  public async getActiveSessions(req: Request, res: Response) {
+    const actor = getActor(req);
+    const sessionsState = await this.stationsService.session.getActiveSessions(actor!);
+    return this.sendResponse(
+      req,
+      res,
+      "Active station sessions retrieved successfully",
+      200,
+      sessionsState,
+    );
+  }
+
   public async getStationById(req: Request, res: Response) {
     const actor = getActor(req);
     const stationId = req.params.id as string;
@@ -124,7 +136,13 @@ export class StationsController extends BaseController {
 
   public async leaveStation(req: Request, res: Response) {
     const actor = getActor(req);
-    const result = await this.stationsService.session.leaveStation(actor!, req);
+    const stationId =
+      (req.params.id as string) ||
+      (req.validatedBody as any)?.stationId ||
+      (req.body?.stationId as string) ||
+      (req.query?.stationId as string) ||
+      undefined;
+    const result = await this.stationsService.session.leaveStation(actor!, stationId, req);
     return this.sendResponse(req, res, result.message, 200, result);
   }
 
@@ -223,9 +241,80 @@ export class StationsController extends BaseController {
   }
 
   public async updateStationRole(req: Request, res: Response) {
-    const id = req.params.id as string;
-    const dto = req.validatedBody as UpdateStationRoleDTO;
-    const updated = await this.stationsService.lookup.updateStationRole(id, dto);
+    const idParam = req.params.id as string;
+    const dtoBody = req.validatedBody as UpdateStationRoleDTO;
+    const updated = await this.stationsService.lookup.updateStationRole(idParam, dtoBody);
     return this.sendResponse(req, res, "Station role updated successfully", 200, updated);
+  }
+
+  public async getStationScopeContext(req: Request, res: Response) {
+    const actor = getActor(req);
+    const scopeContext = await this.stationsService.lookup.getStationScopeContext(actor!);
+    return this.sendResponse(
+      req,
+      res,
+      "Station scope context retrieved successfully",
+      200,
+      scopeContext,
+    );
+  }
+
+  // ==========================================
+  // PLATFORM PROFILES MANAGEMENT HANDLERS
+  // ==========================================
+
+  public async getProfiles(req: Request, res: Response) {
+    const result = await this.stationsService.profile.getProfiles(req.query as any);
+    return this.sendPaginatedResponse(
+      req,
+      res,
+      result.pagination,
+      "Platform profiles retrieved successfully",
+      result.items,
+    );
+  }
+
+  public async getProfileById(req: Request, res: Response) {
+    const id = req.params.id as string;
+    const profile = await this.stationsService.profile.getProfileById(id);
+    return this.sendResponse(req, res, "Profile retrieved successfully", 200, profile);
+  }
+
+  public async createProfile(req: Request, res: Response) {
+    const actor = getActor(req);
+    const dto = req.validatedBody;
+    const profile = await this.stationsService.profile.createProfile(dto, actor!, req);
+    return this.sendCreatedResponse(req, res, profile, "Profile created successfully");
+  }
+
+  public async updateProfile(req: Request, res: Response) {
+    const actor = getActor(req);
+    const id = req.params.id as string;
+    const dto = req.validatedBody;
+    const updated = await this.stationsService.profile.updateProfile(id, dto, actor!, req);
+    return this.sendResponse(req, res, "Profile updated successfully", 200, updated);
+  }
+
+  public async deleteProfile(req: Request, res: Response) {
+    const actor = getActor(req);
+    const id = req.params.id as string;
+    const result = await this.stationsService.profile.deleteProfile(id, actor!, req);
+    return this.sendResponse(req, res, result.message, 200, result);
+  }
+
+  public async assignProfileToStations(req: Request, res: Response) {
+    const actor = getActor(req);
+    const id = req.params.id as string;
+    const dto = req.validatedBody;
+    const result = await this.stationsService.profile.assignToStations(id, dto, actor!, req);
+    return this.sendResponse(req, res, "Profile assigned to workstation(s) successfully", 200, result);
+  }
+
+  public async removeProfileFromStation(req: Request, res: Response) {
+    const actor = getActor(req);
+    const id = req.params.id as string;
+    const stationId = req.params.stationId as string;
+    const result = await this.stationsService.profile.removeFromStation(id, stationId, actor!, req);
+    return this.sendResponse(req, res, result.message, 200, result);
   }
 }

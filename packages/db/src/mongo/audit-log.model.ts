@@ -44,13 +44,13 @@ export interface IAuditLogDocument extends Document {
 
 const AuditLogSchema = new Schema<IAuditLogDocument>(
   {
-    auditId: { type: String, required: true, index: true },
-    module: { type: String, required: true, index: true },
-    action: { type: String, required: true, index: true },
-    entityTable: { type: String, required: true, index: true },
-    entityId: { type: String, required: true, index: true },
+    auditId: { type: String, required: true, unique: true, index: true },
+    module: { type: String, required: true },
+    action: { type: String, required: true },
+    entityTable: { type: String, required: true },
+    entityId: { type: String, required: true },
     actor: {
-      id: { type: String, index: true },
+      id: { type: String },
       email: { type: String },
       role: { type: String },
       ipAddress: { type: String },

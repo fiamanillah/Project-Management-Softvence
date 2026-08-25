@@ -65,6 +65,35 @@ export class CoreRealtimeGateway extends BaseSocketGateway {
       }
       callback?.({ success: true });
     });
+
+    // 5. Dedicated Station Room Join
+    socket.on("station:join_room", async ({ stationId }, callback) => {
+      if (!stationId || typeof stationId !== "string") {
+        return callback?.({ success: false, error: "Invalid station identifier" });
+      }
+      const room = `station:${stationId}`;
+      const allowed = await this.evaluateRoomAccess(socket, room);
+      if (!allowed) {
+        this.logger.warn(`User ${user?.id} denied access to join station room '${room}'`);
+        return callback?.({ success: false, error: "Access to station room denied" });
+      }
+
+      await socket.join(room);
+      socket.data.rooms.add(room);
+      this.logger.info(`Socket ${socket.id} (user=${user?.id}) joined station room '${room}'`);
+      callback?.({ success: true });
+    });
+
+    // 6. Dedicated Station Room Leave
+    socket.on("station:leave_room", async ({ stationId }, callback) => {
+      if (stationId && typeof stationId !== "string") {
+        const room = `station:${stationId}`;
+        await socket.leave(room);
+        socket.data.rooms.delete(room);
+        this.logger.info(`Socket ${socket.id} (user=${user?.id}) left station room '${room}'`);
+      }
+      callback?.({ success: true });
+    });
   }
 
   public async onDisconnect(socket: AuthenticatedSocket): Promise<void> {
@@ -99,7 +128,22 @@ export class CoreRealtimeGateway extends BaseSocketGateway {
       return canSocket(socket, "project.view", { projectId });
     }
 
-    // 3. Organization / Branch / Department rooms
+    // 3. Station rooms: 'station:{stationId}' and 'stations:overview'
+    if (room.startsWith("station:")) {
+      const stationId = room.split(":")[1];
+      if (!stationId) return false;
+      const canView = await canSocket(socket, "station.view", { stationId });
+      if (canView) return true;
+      return await canSocket(socket, "station.session.join", { stationId });
+    }
+
+    if (room === "stations:overview" || room === "stations") {
+      const canView = await canSocket(socket, "station.view");
+      if (canView) return true;
+      return await canSocket(socket, "station.session.join");
+    }
+
+    // 4. Organization / Branch / Department rooms
     if (room.startsWith("branch:")) {
       const branchId = room.split(":")[1];
       if (!branchId) return false;
@@ -112,7 +156,7 @@ export class CoreRealtimeGateway extends BaseSocketGateway {
       return await canSocket(socket, "organization.department.view", { departmentId });
     }
 
-    // 4. General broadcast room 'global' or 'announcements' (authenticated users only)
+    // 5. General broadcast room 'global' or 'announcements' (authenticated users only)
     if (room === "global" || room === "announcements") {
       return true;
     }
