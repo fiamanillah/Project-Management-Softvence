@@ -15,7 +15,6 @@ import {
   X,
   Users,
   Flag,
-  Layers,
   SplitSquareVertical,
   Building2,
   FolderKanban,
@@ -25,13 +24,12 @@ import {
   Flame,
   UserX,
   SlidersHorizontal,
-  ChevronDown,
   LayoutGrid,
   AlignJustify,
 } from "lucide-react";
 import { useTaskStore } from "../data/task-store";
 import { TASK_PRIORITIES } from "../data/mock-tasks";
-import type { SwimlaneMode } from "../types";
+import type { SwimlaneMode, TaskFilterState } from "../types";
 
 export function TaskFilters() {
   const {
@@ -47,8 +45,22 @@ export function TaskFilters() {
   } = useTaskStore();
 
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const [localSearch, setLocalSearch] = React.useState(filterState.search);
 
-  // Keyboard shortcut listener for '/' to focus search
+  // Sync local search when external filterState resets
+  React.useEffect(() => {
+    setLocalSearch(filterState.search);
+  }, [filterState.search]);
+
+  // Debounced search propagation
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilterState((prev) => (prev.search === localSearch ? prev : { ...prev, search: localSearch }));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [localSearch, setFilterState]);
+
+  // Keyboard shortcut listener for '/' to focus search & 'Escape' to clear
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -58,11 +70,15 @@ export function TaskFilters() {
       ) {
         e.preventDefault();
         searchInputRef.current?.focus();
+      } else if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
+        setLocalSearch("");
+        setFilterState((prev) => ({ ...prev, search: "" }));
+        searchInputRef.current?.blur();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [setFilterState]);
 
   // Filter teams by selected department if one is selected
   const visibleTeams = React.useMemo(() => {
@@ -92,39 +108,18 @@ export function TaskFilters() {
   const selectedAssignee = assignees.find((a) => a.id === filterState.assigneeId);
   const selectedPriority = TASK_PRIORITIES[filterState.priority];
 
-  // Quick filter helpers
+  // Generic preset filter toggle helper
+  const toggleFilter = (key: keyof TaskFilterState, activeVal: string) => {
+    setFilterState((prev) => ({
+      ...prev,
+      [key]: prev[key] === activeVal ? "ALL" : activeVal,
+    }));
+  };
+
   const isMyTasksActive = filterState.assigneeId === "MY_TASKS";
   const isActiveSprintActive = filterState.sprintId === "ACTIVE";
   const isHighPriorityActive = filterState.priority === "HIGH" || filterState.priority === "URGENT";
   const isUnassignedActive = filterState.assigneeId === "UNASSIGNED";
-
-  const toggleMyTasks = () => {
-    setFilterState((prev) => ({
-      ...prev,
-      assigneeId: isMyTasksActive ? "ALL" : "MY_TASKS",
-    }));
-  };
-
-  const toggleActiveSprint = () => {
-    setFilterState((prev) => ({
-      ...prev,
-      sprintId: isActiveSprintActive ? "ALL" : "ACTIVE",
-    }));
-  };
-
-  const toggleHighPriority = () => {
-    setFilterState((prev) => ({
-      ...prev,
-      priority: isHighPriorityActive ? "ALL" : "HIGH",
-    }));
-  };
-
-  const toggleUnassigned = () => {
-    setFilterState((prev) => ({
-      ...prev,
-      assigneeId: isUnassignedActive ? "ALL" : "UNASSIGNED",
-    }));
-  };
 
   return (
     <div className="flex flex-col gap-2.5 border-b border-border/40 bg-muted/20 px-6 py-3">
@@ -138,19 +133,18 @@ export function TaskFilters() {
             <Input
               ref={searchInputRef}
               placeholder="Search key, title, tag..."
-              value={filterState.search}
-              onChange={(e) =>
-                setFilterState((prev) => ({ ...prev, search: e.target.value }))
-              }
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
               className="pl-8 pr-12 h-8.5 text-xs bg-background shadow-none border-border/70 focus-visible:ring-1"
             />
-            {filterState.search ? (
+            {localSearch ? (
               <button
-                onClick={() =>
-                  setFilterState((prev) => ({ ...prev, search: "" }))
-                }
-                className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground"
-                title="Clear search"
+                onClick={() => {
+                  setLocalSearch("");
+                  setFilterState((prev) => ({ ...prev, search: "" }));
+                }}
+                className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Clear search (Escape)"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -166,10 +160,10 @@ export function TaskFilters() {
           {/* Quick Preset Filter Chips */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
-              onClick={toggleMyTasks}
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+              onClick={() => toggleFilter("assigneeId", "MY_TASKS")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
                 isMyTasksActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-primary text-primary-foreground shadow-xs"
                   : "bg-background border border-border/70 text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
@@ -178,10 +172,10 @@ export function TaskFilters() {
             </button>
 
             <button
-              onClick={toggleActiveSprint}
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+              onClick={() => toggleFilter("sprintId", "ACTIVE")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
                 isActiveSprintActive
-                  ? "bg-emerald-600 text-white shadow-sm"
+                  ? "bg-emerald-600 text-white shadow-xs"
                   : "bg-background border border-border/70 text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
@@ -190,10 +184,10 @@ export function TaskFilters() {
             </button>
 
             <button
-              onClick={toggleHighPriority}
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+              onClick={() => toggleFilter("priority", "HIGH")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
                 isHighPriorityActive
-                  ? "bg-orange-600 text-white shadow-sm"
+                  ? "bg-orange-600 text-white shadow-xs"
                   : "bg-background border border-border/70 text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
@@ -202,10 +196,10 @@ export function TaskFilters() {
             </button>
 
             <button
-              onClick={toggleUnassigned}
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+              onClick={() => toggleFilter("assigneeId", "UNASSIGNED")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
                 isUnassignedActive
-                  ? "bg-slate-700 text-white shadow-sm"
+                  ? "bg-slate-700 text-white shadow-xs"
                   : "bg-background border border-border/70 text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
@@ -222,7 +216,7 @@ export function TaskFilters() {
               variant="ghost"
               size="sm"
               onClick={resetFilters}
-              className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1 px-2.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1 px-2.5 hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
               <span>Clear filters</span>

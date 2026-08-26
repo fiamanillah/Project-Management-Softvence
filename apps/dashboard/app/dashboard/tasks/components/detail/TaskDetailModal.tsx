@@ -8,7 +8,6 @@ import {
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Textarea } from "@workspace/ui/components/textarea";
-import { Badge } from "@workspace/ui/components/badge";
 import {
   Select,
   SelectContent,
@@ -32,13 +31,34 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useTaskStore } from "../../data/task-store";
-import { TASK_TYPES, TASK_PRIORITIES } from "../../data/mock-tasks";
+import { TASK_PRIORITIES } from "../../data/mock-tasks";
 import type { TaskPriorityKey, TaskTypeKey } from "../../types";
 import { TaskChecklist } from "./TaskChecklist";
 import { TaskComments } from "./TaskComments";
 import { TaskTimeTracker } from "./TaskTimeTracker";
 import { TaskDependencies } from "./TaskDependencies";
 import { toast } from "sonner";
+
+function renderTypeIcon(type: TaskTypeKey) {
+  switch (type) {
+    case "STORY":
+      return <BookmarkCheck className="h-4 w-4 text-emerald-500" />;
+    case "BUG":
+      return <Bug className="h-4 w-4 text-red-500" />;
+    case "SPIKE":
+      return <Zap className="h-4 w-4 text-amber-500" />;
+    case "IMPROVEMENT":
+      return <Sparkles className="h-4 w-4 text-purple-500" />;
+    case "DESIGN_ASSET":
+      return <Palette className="h-4 w-4 text-pink-500" />;
+    case "CONTENT":
+      return <FileText className="h-4 w-4 text-cyan-500" />;
+    default:
+      return <CheckSquare className="h-4 w-4 text-blue-500" />;
+  }
+}
+
+const FIBONACCI_POINTS = [1, 2, 3, 5, 8, 13, 21];
 
 export function TaskDetailModal() {
   const {
@@ -49,11 +69,8 @@ export function TaskDetailModal() {
     moveTaskStatus,
     moveTaskSprint,
     sprints,
-    epics,
     assignees,
     activeStatuses,
-    departments,
-    projects,
   } = useTaskStore();
 
   const [copied, setCopied] = React.useState(false);
@@ -66,27 +83,6 @@ export function TaskDetailModal() {
     toast.success(`Copied ${selectedTask.key} to clipboard!`);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const renderTypeIcon = (type: TaskTypeKey) => {
-    switch (type) {
-      case "STORY":
-        return <BookmarkCheck className="h-4 w-4 text-emerald-500" />;
-      case "BUG":
-        return <Bug className="h-4 w-4 text-red-500" />;
-      case "SPIKE":
-        return <Zap className="h-4 w-4 text-amber-500" />;
-      case "IMPROVEMENT":
-        return <Sparkles className="h-4 w-4 text-purple-500" />;
-      case "DESIGN_ASSET":
-        return <Palette className="h-4 w-4 text-pink-500" />;
-      case "CONTENT":
-        return <FileText className="h-4 w-4 text-cyan-500" />;
-      default:
-        return <CheckSquare className="h-4 w-4 text-blue-500" />;
-    }
-  };
-
-  const fibonacciPoints = [1, 2, 3, 5, 8, 13, 21];
 
   return (
     <Dialog
@@ -105,7 +101,7 @@ export function TaskDetailModal() {
             </span>
             <button
               onClick={handleCopyKey}
-              className="flex items-center gap-1.5 font-mono text-xs font-bold text-foreground hover:text-primary transition-colors bg-muted/70 px-2 py-0.5 rounded-md border border-border/50"
+              className="flex items-center gap-1.5 font-mono text-xs font-bold text-foreground hover:text-primary transition-colors bg-muted/70 px-2 py-0.5 rounded-md border border-border/50 cursor-pointer"
             >
               <span>{selectedTask.key}</span>
               {copied ? (
@@ -151,7 +147,7 @@ export function TaskDetailModal() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive cursor-pointer"
               onClick={() => deleteTask(selectedTask.id)}
               title="Delete task"
             >
@@ -192,7 +188,7 @@ export function TaskDetailModal() {
 
             {/* Custom Fields (Dynamic metadata per project/domain) */}
             {selectedTask.customFields && selectedTask.customFields.length > 0 && (
-              <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-3.5 shadow-xs">
+              <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs">
                 <span className="text-[11px] font-bold text-muted-foreground uppercase">
                   Project Custom Fields
                 </span>
@@ -307,14 +303,14 @@ export function TaskDetailModal() {
                 <span className="text-primary font-bold">{selectedTask.storyPoints || 0} pts</span>
               </label>
               <div className="flex items-center gap-1.5">
-                {fibonacciPoints.map((pts) => (
+                {FIBONACCI_POINTS.map((pts) => (
                   <button
                     key={pts}
                     type="button"
                     onClick={() => updateTask(selectedTask.id, { storyPoints: pts })}
-                    className={`flex-1 py-1 text-xs font-bold rounded-lg border transition-all ${
+                    className={`flex-1 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                       selectedTask.storyPoints === pts
-                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
                         : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/60"
                     }`}
                   >

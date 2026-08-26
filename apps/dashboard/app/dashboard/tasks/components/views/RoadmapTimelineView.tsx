@@ -21,7 +21,7 @@ export function RoadmapTimelineView() {
       </div>
 
       {/* Sprints Track */}
-      <div className="flex flex-col rounded-2xl border border-border/80 bg-card p-5 shadow-sm gap-4">
+      <div className="flex flex-col rounded-2xl border border-border/80 bg-card p-5 shadow-xs gap-4">
         <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
           <Zap className="h-4 w-4 text-amber-500" /> Sprint Iterations
         </h3>
@@ -105,7 +105,7 @@ export function RoadmapTimelineView() {
       </div>
 
       {/* Epics Milestone Progress */}
-      <div className="flex flex-col rounded-2xl border border-border/80 bg-card p-5 shadow-sm gap-4">
+      <div className="flex flex-col rounded-2xl border border-border/80 bg-card p-5 shadow-xs gap-4">
         <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
           <Layers className="h-4 w-4 text-primary" /> Epics & Feature Progress
         </h3>
@@ -162,7 +162,7 @@ export function RoadmapTimelineView() {
                     <button
                       key={t.id}
                       onClick={() => setSelectedTaskId(t.id)}
-                      className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-mono font-medium border transition-colors ${
+                      className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-mono font-medium border transition-colors cursor-pointer ${
                         t.status === "DONE"
                           ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 line-through opacity-80"
                           : "bg-muted/60 text-foreground border-border/80 hover:border-primary"

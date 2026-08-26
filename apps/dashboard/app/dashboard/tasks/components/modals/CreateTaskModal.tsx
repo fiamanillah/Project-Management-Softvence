@@ -21,7 +21,9 @@ import {
 import { useTaskStore } from "../../data/task-store";
 import { TASK_TYPES, TASK_PRIORITIES } from "../../data/mock-tasks";
 import type { TaskTypeKey, TaskPriorityKey, TaskAnchorType } from "../../types";
-import { Building2, FolderKanban, User, Plus } from "lucide-react";
+import { Building2, FolderKanban, User } from "lucide-react";
+
+const FIBONACCI_POINTS = [1, 2, 3, 5, 8, 13];
 
 export function CreateTaskModal() {
   const {
@@ -35,7 +37,6 @@ export function CreateTaskModal() {
     assignees,
     workflows,
     activeWorkflowId,
-    activeSprint,
   } = useTaskStore();
 
   const [title, setTitle] = React.useState("");
@@ -114,8 +115,6 @@ export function CreateTaskModal() {
     setCreateTaskModalOpen(false);
   };
 
-  const fibonacciPoints = [1, 2, 3, 5, 8, 13];
-
   return (
     <Dialog open={createTaskModalOpen} onOpenChange={setCreateTaskModalOpen}>
       <DialogContent className="w-full max-w-[calc(100%-2rem)] sm:max-w-2xl bg-background border border-border/80 rounded-2xl shadow-xl p-6">
@@ -135,7 +134,7 @@ export function CreateTaskModal() {
               <button
                 type="button"
                 onClick={() => setAnchorType("PROJECT")}
-                className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                   anchorType === "PROJECT"
                     ? "bg-primary/10 border-primary text-primary"
                     : "bg-muted/30 border-border/70 text-muted-foreground hover:bg-muted/50"
@@ -148,7 +147,7 @@ export function CreateTaskModal() {
               <button
                 type="button"
                 onClick={() => setAnchorType("DEPARTMENT_TEAM")}
-                className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                   anchorType === "DEPARTMENT_TEAM"
                     ? "bg-primary/10 border-primary text-primary"
                     : "bg-muted/30 border-border/70 text-muted-foreground hover:bg-muted/50"
@@ -161,7 +160,7 @@ export function CreateTaskModal() {
               <button
                 type="button"
                 onClick={() => setAnchorType("PERSONAL")}
-                className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                   anchorType === "PERSONAL"
                     ? "bg-primary/10 border-primary text-primary"
                     : "bg-muted/30 border-border/70 text-muted-foreground hover:bg-muted/50"
@@ -371,14 +370,14 @@ export function CreateTaskModal() {
               <span className="text-primary font-bold">{storyPoints} pts</span>
             </label>
             <div className="flex items-center gap-1.5">
-              {fibonacciPoints.map((pts) => (
+              {FIBONACCI_POINTS.map((pts) => (
                 <button
                   key={pts}
                   type="button"
                   onClick={() => setStoryPoints(pts)}
-                  className={`flex-1 py-1 text-xs font-bold rounded-lg border transition-all ${
+                  className={`flex-1 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                     storyPoints === pts
-                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
                       : "bg-muted/30 text-muted-foreground border-border/60 hover:bg-muted"
                   }`}
                 >
@@ -408,14 +407,14 @@ export function CreateTaskModal() {
               variant="outline"
               size="sm"
               onClick={() => setCreateTaskModalOpen(false)}
-              className="h-8 text-xs"
+              className="h-8 text-xs cursor-pointer"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               size="sm"
-              className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4"
+              className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 cursor-pointer"
             >
               Create Task
             </Button>

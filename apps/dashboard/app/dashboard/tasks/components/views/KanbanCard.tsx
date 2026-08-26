@@ -17,8 +17,6 @@ import {
   ChevronUp,
   Equal,
   ChevronDown,
-  Building2,
-  FolderKanban,
 } from "lucide-react";
 import type { AgileTask, TaskTypeKey, TaskPriorityKey } from "../../types";
 import { TASK_TYPES, TASK_PRIORITIES } from "../../data/mock-tasks";
@@ -28,6 +26,38 @@ interface KanbanCardProps {
   task: AgileTask;
   isDragging?: boolean;
   compact?: boolean;
+}
+
+function renderTypeIcon(type: TaskTypeKey) {
+  switch (type) {
+    case "STORY":
+      return <BookmarkCheck className="h-3.5 w-3.5 text-emerald-500" />;
+    case "BUG":
+      return <Bug className="h-3.5 w-3.5 text-red-500" />;
+    case "SPIKE":
+      return <Zap className="h-3.5 w-3.5 text-amber-500" />;
+    case "IMPROVEMENT":
+      return <Sparkles className="h-3.5 w-3.5 text-purple-500" />;
+    case "DESIGN_ASSET":
+      return <Palette className="h-3.5 w-3.5 text-pink-500" />;
+    case "CONTENT":
+      return <FileText className="h-3.5 w-3.5 text-cyan-500" />;
+    default:
+      return <CheckSquare className="h-3.5 w-3.5 text-blue-500" />;
+  }
+}
+
+function renderPriorityIcon(priority: TaskPriorityKey) {
+  switch (priority) {
+    case "URGENT":
+      return <Flame className="h-3.5 w-3.5 text-red-500" />;
+    case "HIGH":
+      return <ChevronUp className="h-3.5 w-3.5 text-orange-500" />;
+    case "LOW":
+      return <ChevronDown className="h-3.5 w-3.5 text-blue-400" />;
+    default:
+      return <Equal className="h-3.5 w-3.5 text-yellow-500" />;
+  }
 }
 
 export function KanbanCard({ task, compact = false }: KanbanCardProps) {
@@ -49,38 +79,6 @@ export function KanbanCard({ task, compact = false }: KanbanCardProps) {
     icon: "Equal",
   };
 
-  const renderTypeIcon = (type: TaskTypeKey) => {
-    switch (type) {
-      case "STORY":
-        return <BookmarkCheck className="h-3.5 w-3.5 text-emerald-500" />;
-      case "BUG":
-        return <Bug className="h-3.5 w-3.5 text-red-500" />;
-      case "SPIKE":
-        return <Zap className="h-3.5 w-3.5 text-amber-500" />;
-      case "IMPROVEMENT":
-        return <Sparkles className="h-3.5 w-3.5 text-purple-500" />;
-      case "DESIGN_ASSET":
-        return <Palette className="h-3.5 w-3.5 text-pink-500" />;
-      case "CONTENT":
-        return <FileText className="h-3.5 w-3.5 text-cyan-500" />;
-      default:
-        return <CheckSquare className="h-3.5 w-3.5 text-blue-500" />;
-    }
-  };
-
-  const renderPriorityIcon = (priority: TaskPriorityKey) => {
-    switch (priority) {
-      case "URGENT":
-        return <Flame className="h-3.5 w-3.5 text-red-500" />;
-      case "HIGH":
-        return <ChevronUp className="h-3.5 w-3.5 text-orange-500" />;
-      case "LOW":
-        return <ChevronDown className="h-3.5 w-3.5 text-blue-400" />;
-      default:
-        return <Equal className="h-3.5 w-3.5 text-yellow-500" />;
-    }
-  };
-
   const completedChecklist = task.checklist.filter((c) => c.isCompleted).length;
   const totalChecklist = task.checklist.length;
   const checklistPercentage =
@@ -96,7 +94,7 @@ export function KanbanCard({ task, compact = false }: KanbanCardProps) {
     setIsDragged(false);
   };
 
-  // Render High-Density Executive Compact View
+  // High-Density Executive Compact View
   if (compact) {
     return (
       <div
@@ -104,7 +102,7 @@ export function KanbanCard({ task, compact = false }: KanbanCardProps) {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onClick={() => setSelectedTaskId(task.id)}
-        className={`group relative flex items-center justify-between gap-2 rounded-lg border border-border/80 bg-card px-2.5 py-2 shadow-2xs transition-all duration-150 hover:border-primary/50 hover:shadow-xs cursor-grab active:cursor-grabbing ${
+        className={`group relative flex items-center justify-between gap-2 rounded-lg border border-border/80 bg-card px-2.5 py-2 shadow-2xs transition-all duration-150 hover:border-primary/50 hover:shadow-xs cursor-grab active:cursor-grabbing select-none ${
           isDragged ? "opacity-40 scale-[0.98] border-dashed border-primary" : "opacity-100"
         }`}
       >
@@ -137,13 +135,14 @@ export function KanbanCard({ task, compact = false }: KanbanCardProps) {
     );
   }
 
+  // Standard Detailed Card
   return (
     <div
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={() => setSelectedTaskId(task.id)}
-      className={`group relative flex flex-col gap-2.5 rounded-xl border border-border/80 bg-card p-3.5 shadow-xs transition-all duration-150 hover:border-primary/50 hover:shadow-md cursor-grab active:cursor-grabbing ${
+      className={`group relative flex flex-col gap-2.5 rounded-xl border border-border/80 bg-card p-3.5 shadow-xs transition-all duration-150 hover:border-primary/50 hover:shadow-md cursor-grab active:cursor-grabbing select-none ${
         isDragged ? "opacity-40 scale-[0.98] border-dashed border-primary" : "opacity-100"
       }`}
     >
@@ -157,7 +156,7 @@ export function KanbanCard({ task, compact = false }: KanbanCardProps) {
             {task.key}
           </span>
 
-          {/* Project or Standalone Badge */}
+          {/* Project or Department Badge */}
           {task.projectName ? (
             <span
               className="truncate rounded px-1 py-0.5 text-[10px] font-medium bg-primary/10 text-primary border border-primary/20 max-w-[110px]"
@@ -192,7 +191,7 @@ export function KanbanCard({ task, compact = false }: KanbanCardProps) {
         {task.title}
       </h3>
 
-      {/* Checklist Progress Bar (if checklist items exist) */}
+      {/* Checklist Progress Bar */}
       {totalChecklist > 0 && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">

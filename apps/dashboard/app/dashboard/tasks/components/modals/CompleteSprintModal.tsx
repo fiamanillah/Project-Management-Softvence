@@ -136,7 +136,7 @@ export function CompleteSprintModal() {
               variant="outline"
               size="sm"
               onClick={() => setCompleteSprintModalOpen(false)}
-              className="h-8 text-xs"
+              className="h-8 text-xs cursor-pointer"
             >
               Cancel
             </Button>
@@ -144,7 +144,7 @@ export function CompleteSprintModal() {
               type="button"
               size="sm"
               onClick={handleComplete}
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 gap-1.5"
+              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>Complete Sprint</span>

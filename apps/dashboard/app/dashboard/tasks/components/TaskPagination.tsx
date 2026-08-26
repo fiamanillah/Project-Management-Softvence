@@ -40,25 +40,22 @@ export function TaskPagination({
   const startItem = (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
 
-  // Generate page numbers with ellipsis
-  const getPageNumbers = () => {
-    const pages: (number | string)[] = [];
+  // Concise sliding window page generator
+  const pageNumbers = React.useMemo(() => {
     if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (currentPage > 3) pages.push("...");
-
-      const start = Math.max(2, currentPage - 1);
-      const end = Math.min(totalPages - 1, currentPage + 1);
-
-      for (let i = start; i <= end; i++) pages.push(i);
-
-      if (currentPage < totalPages - 2) pages.push("...");
-      pages.push(totalPages);
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
+    const pages: (number | string)[] = [1];
+    if (currentPage > 3) pages.push("...");
+
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+
+    if (currentPage < totalPages - 2) pages.push("...");
+    pages.push(totalPages);
     return pages;
-  };
+  }, [totalPages, currentPage]);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 bg-background/95 px-6 py-3 text-xs text-muted-foreground">
@@ -99,7 +96,7 @@ export function TaskPagination({
         <Button
           variant="outline"
           size="icon"
-          className="h-7 w-7 border-border/70"
+          className="h-7 w-7 border-border/70 cursor-pointer"
           onClick={() => onPageChange(1)}
           disabled={currentPage === 1}
           title="First page"
@@ -110,7 +107,7 @@ export function TaskPagination({
         <Button
           variant="outline"
           size="icon"
-          className="h-7 w-7 border-border/70"
+          className="h-7 w-7 border-border/70 cursor-pointer"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
           title="Previous page"
@@ -119,7 +116,7 @@ export function TaskPagination({
         </Button>
 
         <div className="flex items-center gap-1 px-1">
-          {getPageNumbers().map((p, idx) => {
+          {pageNumbers.map((p, idx) => {
             if (p === "...") {
               return (
                 <span key={`ellipsis-${idx}`} className="px-1 text-muted-foreground/60">
@@ -134,7 +131,7 @@ export function TaskPagination({
                 variant={isCurrent ? "default" : "ghost"}
                 size="sm"
                 onClick={() => onPageChange(Number(p))}
-                className={`h-7 w-7 p-0 text-xs font-semibold ${
+                className={`h-7 w-7 p-0 text-xs font-semibold cursor-pointer ${
                   isCurrent ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -147,7 +144,7 @@ export function TaskPagination({
         <Button
           variant="outline"
           size="icon"
-          className="h-7 w-7 border-border/70"
+          className="h-7 w-7 border-border/70 cursor-pointer"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           title="Next page"
@@ -158,7 +155,7 @@ export function TaskPagination({
         <Button
           variant="outline"
           size="icon"
-          className="h-7 w-7 border-border/70"
+          className="h-7 w-7 border-border/70 cursor-pointer"
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage === totalPages}
           title="Last page"

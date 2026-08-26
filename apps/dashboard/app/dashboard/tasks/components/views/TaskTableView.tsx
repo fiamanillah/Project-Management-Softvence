@@ -36,8 +36,40 @@ import {
 } from "lucide-react";
 import { TaskPagination } from "../TaskPagination";
 import { useTaskStore } from "../../data/task-store";
-import { TASK_TYPES, TASK_PRIORITIES } from "../../data/mock-tasks";
+import { TASK_PRIORITIES } from "../../data/mock-tasks";
 import type { AgileTask, TaskPriorityKey, TaskTypeKey } from "../../types";
+
+function renderTypeIcon(type: TaskTypeKey) {
+  switch (type) {
+    case "STORY":
+      return <BookmarkCheck className="h-3.5 w-3.5 text-emerald-500" />;
+    case "BUG":
+      return <Bug className="h-3.5 w-3.5 text-red-500" />;
+    case "SPIKE":
+      return <Zap className="h-3.5 w-3.5 text-amber-500" />;
+    case "IMPROVEMENT":
+      return <Sparkles className="h-3.5 w-3.5 text-purple-500" />;
+    case "DESIGN_ASSET":
+      return <Palette className="h-3.5 w-3.5 text-pink-500" />;
+    case "CONTENT":
+      return <FileText className="h-3.5 w-3.5 text-cyan-500" />;
+    default:
+      return <CheckSquare className="h-3.5 w-3.5 text-blue-500" />;
+  }
+}
+
+function renderPriorityIcon(priority: TaskPriorityKey) {
+  switch (priority) {
+    case "URGENT":
+      return <Flame className="h-3.5 w-3.5 text-red-500" />;
+    case "HIGH":
+      return <ChevronUp className="h-3.5 w-3.5 text-orange-500" />;
+    case "LOW":
+      return <ChevronDown className="h-3.5 w-3.5 text-blue-400" />;
+    default:
+      return <Equal className="h-3.5 w-3.5 text-yellow-500" />;
+  }
+}
 
 export function TaskTableView() {
   const {
@@ -56,8 +88,8 @@ export function TaskTableView() {
 
   const sortedTasks = React.useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
+      const aVal = a[sortField];
+      const bVal = b[sortField];
       if (aVal === undefined || aVal === null) return sortAsc ? 1 : -1;
       if (bVal === undefined || bVal === null) return sortAsc ? -1 : 1;
 
@@ -93,48 +125,16 @@ export function TaskTableView() {
     }
   };
 
-  const renderTypeIcon = (type: TaskTypeKey) => {
-    switch (type) {
-      case "STORY":
-        return <BookmarkCheck className="h-3.5 w-3.5 text-emerald-500" />;
-      case "BUG":
-        return <Bug className="h-3.5 w-3.5 text-red-500" />;
-      case "SPIKE":
-        return <Zap className="h-3.5 w-3.5 text-amber-500" />;
-      case "IMPROVEMENT":
-        return <Sparkles className="h-3.5 w-3.5 text-purple-500" />;
-      case "DESIGN_ASSET":
-        return <Palette className="h-3.5 w-3.5 text-pink-500" />;
-      case "CONTENT":
-        return <FileText className="h-3.5 w-3.5 text-cyan-500" />;
-      default:
-        return <CheckSquare className="h-3.5 w-3.5 text-blue-500" />;
-    }
-  };
-
-  const renderPriorityIcon = (priority: TaskPriorityKey) => {
-    switch (priority) {
-      case "URGENT":
-        return <Flame className="h-3.5 w-3.5 text-red-500" />;
-      case "HIGH":
-        return <ChevronUp className="h-3.5 w-3.5 text-orange-500" />;
-      case "LOW":
-        return <ChevronDown className="h-3.5 w-3.5 text-blue-400" />;
-      default:
-        return <Equal className="h-3.5 w-3.5 text-yellow-500" />;
-    }
-  };
-
   return (
     <div className="p-6">
-      <div className="rounded-2xl border border-border/80 bg-card shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-border/80 bg-card shadow-xs overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>
               <TableHead className="w-[110px]">
                 <button
                   onClick={() => handleSort("key")}
-                  className="flex items-center gap-1 text-xs font-bold text-foreground"
+                  className="flex items-center gap-1 text-xs font-bold text-foreground cursor-pointer"
                 >
                   Key <ArrowUpDown className="h-3 w-3" />
                 </button>
@@ -142,7 +142,7 @@ export function TaskTableView() {
               <TableHead className="min-w-[280px]">
                 <button
                   onClick={() => handleSort("title")}
-                  className="flex items-center gap-1 text-xs font-bold text-foreground"
+                  className="flex items-center gap-1 text-xs font-bold text-foreground cursor-pointer"
                 >
                   Title & Scope <ArrowUpDown className="h-3 w-3" />
                 </button>
@@ -301,7 +301,7 @@ export function TaskTableView() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                       onClick={() => deleteTask(task.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Button } from "@workspace/ui/components/button";
-import { Badge } from "@workspace/ui/components/badge";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -19,11 +18,9 @@ import {
   UserCheck,
   Plus,
   RotateCcw,
-  Sparkles,
   Zap,
   CheckCircle2,
   GitFork,
-  Building2,
   ChevronDown,
   MoreHorizontal,
   Settings2,
@@ -39,7 +36,6 @@ export function TaskHeader() {
     setViewMode,
     activeSprint,
     activeWorkflow,
-    filteredTasks,
     tasks,
     currentUser,
     setCreateTaskModalOpen,
@@ -50,9 +46,26 @@ export function TaskHeader() {
     resetToMockData,
   } = useTaskStore();
 
+  // Keyboard shortcut listener ('c' for new task, 's' for sprint)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName;
+      if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT") {
+        return;
+      }
+
+      if (e.key === "c" || e.key === "C" || e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setCreateTaskModalOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setCreateTaskModalOpen]);
+
   const myTasksCount = React.useMemo(() => {
     return tasks.filter((t) => t.assignee?.id === currentUser.id && t.status !== "DONE").length;
-  }, [tasks, currentUser]);
+  }, [tasks, currentUser.id]);
 
   const viewTabs: {
     id: AgileViewMode;
@@ -208,10 +221,14 @@ export function TaskHeader() {
           <Button
             size="sm"
             onClick={() => setCreateTaskModalOpen(true)}
-            className="h-9 gap-1.5 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-3.5 text-xs"
+            className="h-9 gap-1.5 shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-3.5 text-xs"
+            title="Create Task (Press 'c')"
           >
             <Plus className="h-4 w-4" />
             <span>New Task</span>
+            <kbd className="hidden sm:inline-block rounded bg-primary-foreground/20 px-1 py-0.2 text-[10px] font-mono font-medium">
+              C
+            </kbd>
           </Button>
         </div>
       </div>
@@ -230,7 +247,7 @@ export function TaskHeader() {
                 onClick={() => setViewMode(tab.id)}
                 className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
                   isActive
-                    ? "bg-background text-foreground shadow-sm shadow-black/5 font-semibold"
+                    ? "bg-background text-foreground shadow-xs font-semibold"
                     : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
                 }`}
               >

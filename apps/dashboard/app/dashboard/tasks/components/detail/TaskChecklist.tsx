@@ -87,7 +87,7 @@ export function TaskChecklist({ taskId, checklist }: TaskChecklistProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
               onClick={() => removeChecklistItem(taskId, item.id)}
             >
               <Trash2 className="h-3 w-3" />
@@ -106,14 +106,14 @@ export function TaskChecklist({ taskId, checklist }: TaskChecklistProps) {
             onChange={(e) => setNewTitle(e.target.value)}
             className="h-8 text-xs bg-background"
           />
-          <Button type="submit" size="sm" className="h-8 text-xs px-3">
+          <Button type="submit" size="sm" className="h-8 text-xs px-3 cursor-pointer">
             Add
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 text-xs px-2"
+            className="h-8 text-xs px-2 cursor-pointer"
             onClick={() => {
               setIsAdding(false);
               setNewTitle("");
@@ -127,7 +127,7 @@ export function TaskChecklist({ taskId, checklist }: TaskChecklistProps) {
           variant="outline"
           size="sm"
           onClick={() => setIsAdding(true)}
-          className="h-7 text-xs justify-start w-fit text-muted-foreground gap-1.5 mt-1 border-dashed"
+          className="h-7 text-xs justify-start w-fit text-muted-foreground gap-1.5 mt-1 border-dashed cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" />
           <span>Add criteria item</span>

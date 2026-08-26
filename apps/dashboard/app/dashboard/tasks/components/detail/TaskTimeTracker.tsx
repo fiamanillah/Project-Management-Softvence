@@ -29,6 +29,14 @@ export function TaskTimeTracker({
     estimatedHours > 0 ? Math.min(Math.round((loggedHours / estimatedHours) * 100), 100) : 0;
   const isOverEstimated = estimatedHours > 0 && loggedHours > estimatedHours;
 
+  const handleQuickLog = (amount: number) => {
+    addWorkLog(taskId, {
+      hoursSpent: amount,
+      description: `Worked ${amount}h on task implementation`,
+      date: new Date().toISOString().split("T")[0] ?? "2026-08-20",
+    });
+  };
+
   const handleLog = (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseFloat(hours);
@@ -46,7 +54,7 @@ export function TaskTimeTracker({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+    <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-amber-500" />
@@ -67,7 +75,40 @@ export function TaskTimeTracker({
         />
       </div>
 
-      {/* Quick Log Action */}
+      {/* Quick 1-Click Logging Buttons */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10px] text-muted-foreground font-semibold">Quick log:</span>
+        <button
+          type="button"
+          onClick={() => handleQuickLog(0.5)}
+          className="rounded-md border border-border/70 bg-muted/30 hover:bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground cursor-pointer transition-colors"
+        >
+          +30m
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQuickLog(1)}
+          className="rounded-md border border-border/70 bg-muted/30 hover:bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground cursor-pointer transition-colors"
+        >
+          +1h
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQuickLog(2)}
+          className="rounded-md border border-border/70 bg-muted/30 hover:bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground cursor-pointer transition-colors"
+        >
+          +2h
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQuickLog(4)}
+          className="rounded-md border border-border/70 bg-muted/30 hover:bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground cursor-pointer transition-colors"
+        >
+          +4h
+        </button>
+      </div>
+
+      {/* Custom Log Action */}
       {isLogging ? (
         <form onSubmit={handleLog} className="flex flex-col gap-2 pt-2 border-t border-border/40">
           <div className="grid grid-cols-3 gap-2">
@@ -97,12 +138,12 @@ export function TaskTimeTracker({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 text-xs"
+              className="h-7 text-xs cursor-pointer"
               onClick={() => setIsLogging(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="h-7 text-xs px-3">
+            <Button type="submit" size="sm" className="h-7 text-xs px-3 cursor-pointer">
               Save Work
             </Button>
           </div>
@@ -112,10 +153,10 @@ export function TaskTimeTracker({
           variant="outline"
           size="sm"
           onClick={() => setIsLogging(true)}
-          className="h-7 text-xs gap-1.5 justify-start w-fit text-muted-foreground hover:text-foreground"
+          className="h-7 text-xs gap-1.5 justify-start w-fit text-muted-foreground hover:text-foreground cursor-pointer"
         >
           <Plus className="h-3 w-3" />
-          <span>Log Work</span>
+          <span>Custom Entry</span>
         </Button>
       )}
 

@@ -21,6 +21,13 @@ import {
 import { useTaskStore } from "../../data/task-store";
 import { Zap } from "lucide-react";
 
+function calculateEndDate(start: string, duration: string): string {
+  const d = new Date(start);
+  const days = duration === "1_WEEK" ? 7 : duration === "3_WEEKS" ? 21 : duration === "4_WEEKS" ? 28 : 14;
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0] ?? "2026-09-03";
+}
+
 export function CreateSprintModal() {
   const {
     createSprintModalOpen,
@@ -33,15 +40,6 @@ export function CreateSprintModal() {
   const [name, setName] = React.useState(`Sprint ${nextNum}: Core Features & Optimization`);
   const [duration, setDuration] = React.useState("2_WEEKS");
   const [startDate, setStartDate] = React.useState(new Date().toISOString().split("T")[0] ?? "2026-08-20");
-  
-  // Calculate end date based on duration
-  const calculateEndDate = (start: string, dur: string) => {
-    const d = new Date(start);
-    const days = dur === "1_WEEK" ? 7 : dur === "3_WEEKS" ? 21 : dur === "4_WEEKS" ? 28 : 14;
-    d.setDate(d.getDate() + days);
-    return d.toISOString().split("T")[0] ?? "2026-09-03";
-  };
-
   const [endDate, setEndDate] = React.useState(() => calculateEndDate(startDate, "2_WEEKS"));
   const [goal, setGoal] = React.useState("");
 
@@ -171,14 +169,14 @@ export function CreateSprintModal() {
               variant="outline"
               size="sm"
               onClick={() => setCreateSprintModalOpen(false)}
-              className="h-8 text-xs"
+              className="h-8 text-xs cursor-pointer"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               size="sm"
-              className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4"
+              className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 cursor-pointer"
             >
               Create Sprint
             </Button>

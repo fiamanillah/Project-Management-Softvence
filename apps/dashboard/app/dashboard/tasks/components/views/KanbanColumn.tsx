@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@workspace/ui/components/button";
-import { Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Plus, PanelLeftClose } from "lucide-react";
 import type { TaskStatusConfig, AgileTask } from "../../types";
 import { KanbanCard } from "./KanbanCard";
 import { useTaskStore } from "../../data/task-store";
@@ -40,13 +40,8 @@ export function KanbanColumn({
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    if (
-      e.clientX < rect.left ||
-      e.clientX >= rect.right ||
-      e.clientY < rect.top ||
-      e.clientY >= rect.bottom
-    ) {
+    // Only reset isOver when leaving the container boundary entirely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsOver(false);
     }
   };
@@ -89,7 +84,7 @@ export function KanbanColumn({
       onDrop={handleDrop}
       className={`flex flex-col rounded-2xl border bg-muted/30 p-2.5 transition-all duration-200 min-w-[280px] max-w-[320px] w-full flex-1 shrink-0 ${
         isOver
-          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+          ? "border-primary bg-primary/5 ring-2 ring-primary/20 scale-[1.005]"
           : "border-border/60"
       }`}
     >
@@ -119,7 +114,7 @@ export function KanbanColumn({
           )}
           <button
             onClick={() => setIsCollapsed(true)}
-            className="text-muted-foreground/60 hover:text-foreground transition-colors p-0.5 rounded"
+            className="text-muted-foreground/60 hover:text-foreground transition-colors p-0.5 rounded cursor-pointer"
             title="Collapse column"
           >
             <PanelLeftClose className="h-3.5 w-3.5" />
@@ -144,7 +139,7 @@ export function KanbanColumn({
                 variant="outline"
                 size="sm"
                 onClick={() => setVisibleCount((prev) => prev + 15)}
-                className="h-6 text-[10px] px-2"
+                className="h-6 text-[10px] px-2 cursor-pointer"
               >
                 Load 15 more
               </Button>
@@ -152,7 +147,7 @@ export function KanbanColumn({
                 variant="ghost"
                 size="sm"
                 onClick={() => setVisibleCount(tasks.length)}
-                className="h-6 text-[10px] px-2 text-primary hover:text-primary"
+                className="h-6 text-[10px] px-2 text-primary hover:text-primary cursor-pointer"
               >
                 Show all
               </Button>
@@ -174,7 +169,7 @@ export function KanbanColumn({
           variant="ghost"
           size="sm"
           onClick={() => setCreateTaskModalOpen(true)}
-          className="w-full justify-start text-xs text-muted-foreground hover:text-foreground h-8 gap-1.5 hover:bg-background/80"
+          className="w-full justify-start text-xs text-muted-foreground hover:text-foreground h-8 gap-1.5 hover:bg-background/80 cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" />
           <span>Add task</span>
@@ -183,4 +178,3 @@ export function KanbanColumn({
     </div>
   );
 }
-

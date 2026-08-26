@@ -5,16 +5,20 @@ import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@workspace/ui/components/dropdown-menu";
+import {
   Zap,
   Plus,
   Calendar,
   CheckCircle2,
   Archive,
-  Building2,
-  FolderKanban,
+  ArrowRight,
 } from "lucide-react";
 import { useTaskStore } from "../../data/task-store";
-import { TASK_TYPES } from "../../data/mock-tasks";
 import type { Sprint, AgileTask, TaskStatusConfig } from "../../types";
 
 export function BacklogView() {
@@ -50,7 +54,7 @@ export function BacklogView() {
         <Button
           size="sm"
           onClick={() => setCreateSprintModalOpen(true)}
-          className="text-xs gap-1.5 h-8 bg-primary hover:bg-primary/90 text-primary-foreground"
+          className="text-xs gap-1.5 h-8 bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
         >
           <Zap className="h-3.5 w-3.5" />
           <span>Create Sprint</span>
@@ -85,7 +89,7 @@ export function BacklogView() {
       ))}
 
       {/* 3. Product Backlog */}
-      <div className="flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden shadow-sm">
+      <div className="flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xs">
         <div className="flex flex-wrap items-center justify-between px-5 py-3.5 bg-muted/40 border-b border-border/50 gap-2">
           <div className="flex items-center gap-2.5">
             <Archive className="h-4 w-4 text-slate-500" />
@@ -108,7 +112,7 @@ export function BacklogView() {
             variant="outline"
             size="sm"
             onClick={() => setCreateTaskModalOpen(true)}
-            className="h-7 text-xs gap-1"
+            className="h-7 text-xs gap-1 cursor-pointer"
           >
             <Plus className="h-3 w-3" />
             <span>Add to Backlog</span>
@@ -122,6 +126,7 @@ export function BacklogView() {
               key={task.id}
               task={task}
               statuses={activeStatuses}
+              sprints={sprints}
               onMoveToSprint={(sprintId) => moveTaskSprint(task.id, sprintId)}
               onSelect={() => setSelectedTaskId(task.id)}
             />
@@ -157,7 +162,7 @@ function SprintContainer({
   onComplete,
   onSelectTask,
 }: SprintContainerProps) {
-  const { moveTaskSprint } = useTaskStore();
+  const { moveTaskSprint, sprints } = useTaskStore();
   const totalPoints = tasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
   const donePoints = tasks
     .filter((t) => t.status === "DONE" || t.status === "ASSET_HANDOFF" || t.status === "PUBLISHED")
@@ -165,7 +170,7 @@ function SprintContainer({
 
   return (
     <div
-      className={`flex flex-col rounded-2xl border bg-card overflow-hidden shadow-sm transition-all ${
+      className={`flex flex-col rounded-2xl border bg-card overflow-hidden shadow-xs transition-all ${
         isActive
           ? "border-emerald-500/40 ring-1 ring-emerald-500/20"
           : "border-border/80"
@@ -205,7 +210,7 @@ function SprintContainer({
             <Button
               size="sm"
               onClick={onComplete}
-              className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
+              className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-2xs cursor-pointer"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>Complete Sprint</span>
@@ -216,7 +221,7 @@ function SprintContainer({
             <Button
               size="sm"
               onClick={onStart}
-              className="h-7 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+              className="h-7 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium cursor-pointer"
             >
               <Zap className="h-3.5 w-3.5" />
               <span>Start Sprint</span>
@@ -239,6 +244,7 @@ function SprintContainer({
             key={task.id}
             task={task}
             statuses={statuses}
+            sprints={sprints}
             onMoveToSprint={(targetId) => moveTaskSprint(task.id, targetId)}
             onSelect={() => onSelectTask(task.id)}
           />
@@ -257,6 +263,7 @@ function SprintContainer({
 interface BacklogItemRowProps {
   task: AgileTask;
   statuses: TaskStatusConfig[];
+  sprints: Sprint[];
   onMoveToSprint: (sprintId: string | null) => void;
   onSelect: () => void;
 }
@@ -264,6 +271,8 @@ interface BacklogItemRowProps {
 function BacklogItemRow({
   task,
   statuses,
+  sprints,
+  onMoveToSprint,
   onSelect,
 }: BacklogItemRowProps) {
   const statusConfig = statuses.find((s) => s.key === task.status) ?? {
@@ -300,7 +309,7 @@ function BacklogItemRow({
         )}
       </div>
 
-      {/* Right: Status, Points, Priority, Assignee */}
+      {/* Right: Status, Points, Priority, Assignee & Quick Move */}
       <div className="flex items-center gap-3 shrink-0 text-xs">
         <span
           className="text-[10px] font-semibold rounded px-2 py-0.5"
@@ -329,6 +338,46 @@ function BacklogItemRow({
         ) : (
           <span className="text-[10px] text-muted-foreground/60">Unassigned</span>
         )}
+
+        {/* Quick Sprint Move Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                onClick={(e) => e.stopPropagation()}
+              />
+            }
+          >
+            <span>Move</span>
+            <ArrowRight className="h-2.5 w-2.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveToSprint(null);
+              }}
+              className="text-xs cursor-pointer"
+            >
+              📦 Product Backlog
+            </DropdownMenuItem>
+            {sprints.map((s) => (
+              <DropdownMenuItem
+                key={s.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveToSprint(s.id);
+                }}
+                className="text-xs cursor-pointer"
+              >
+                ⚡ {s.name.split(":")[0]}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

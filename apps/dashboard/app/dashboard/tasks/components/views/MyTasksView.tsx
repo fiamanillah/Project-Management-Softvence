@@ -11,7 +11,6 @@ import {
   Play,
   ArrowRight,
   Building2,
-  FolderKanban,
 } from "lucide-react";
 import { useTaskStore } from "../../data/task-store";
 import type { AgileTask } from "../../types";
@@ -24,28 +23,54 @@ export function MyTasksView() {
     moveTaskStatus,
   } = useTaskStore();
 
-  const myTasks = tasks.filter((t) => t.assignee?.id === currentUser.id);
+  // Single partitioned pass for user task cockpit
+  const {
+    inProgressTasks,
+    inReviewTasks,
+    todoTasks,
+    doneTasks,
+    totalLoggedHours,
+    totalEstHours,
+  } = React.useMemo(() => {
+    const inProgress: AgileTask[] = [];
+    const inReview: AgileTask[] = [];
+    const todo: AgileTask[] = [];
+    const done: AgileTask[] = [];
+    let logged = 0;
+    let estimated = 0;
 
-  const inProgressTasks = myTasks.filter(
-    (t) => t.status === "IN_PROGRESS" || t.status === "WIREFRAMING" || t.status === "HIFI_DESIGN" || t.status === "DRAFTING"
-  );
-  const inReviewTasks = myTasks.filter(
-    (t) => t.status === "CODE_REVIEW" || t.status === "QA_TESTING" || t.status === "DESIGN_REVIEW" || t.status === "PROOFREADING"
-  );
-  const todoTasks = myTasks.filter(
-    (t) => t.status === "TODO" || t.status === "BACKLOG" || t.status === "DESIGN_BACKLOG" || t.status === "CONTENT_BRIEF"
-  );
-  const doneTasks = myTasks.filter(
-    (t) => t.status === "DONE" || t.status === "ASSET_HANDOFF" || t.status === "PUBLISHED"
-  );
+    for (const t of tasks) {
+      if (t.assignee?.id === currentUser.id) {
+        logged += t.loggedHours || 0;
+        estimated += t.estimatedHours || 0;
 
-  const totalLoggedHours = myTasks.reduce((sum, t) => sum + (t.loggedHours || 0), 0);
-  const totalEstHours = myTasks.reduce((sum, t) => sum + (t.estimatedHours || 0), 0);
+        const st = t.status;
+        if (st === "IN_PROGRESS" || st === "WIREFRAMING" || st === "HIFI_DESIGN" || st === "DRAFTING") {
+          inProgress.push(t);
+        } else if (st === "CODE_REVIEW" || st === "QA_TESTING" || st === "DESIGN_REVIEW" || st === "PROOFREADING") {
+          inReview.push(t);
+        } else if (st === "DONE" || st === "ASSET_HANDOFF" || st === "PUBLISHED") {
+          done.push(t);
+        } else {
+          todo.push(t);
+        }
+      }
+    }
+
+    return {
+      inProgressTasks: inProgress,
+      inReviewTasks: inReview,
+      todoTasks: todo,
+      doneTasks: done,
+      totalLoggedHours: logged,
+      totalEstHours: estimated,
+    };
+  }, [tasks, currentUser.id]);
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
       {/* Header with Employee Summary Card */}
-      <div className="flex flex-wrap items-center justify-between rounded-2xl border border-border/80 bg-card p-5 shadow-sm gap-4">
+      <div className="flex flex-wrap items-center justify-between rounded-2xl border border-border/80 bg-card p-5 shadow-xs gap-4">
         <div className="flex items-center gap-4">
           <Avatar className="h-12 w-12 border-2 border-primary/30">
             <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
@@ -61,7 +86,7 @@ export function MyTasksView() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
-              <Building2 className="h-3 w-3" /> {currentUser.teamName} • Sprint 14 Focus
+              <Building2 className="h-3 w-3" /> {currentUser.teamName} • Sprint Focus
             </p>
           </div>
         </div>
@@ -100,7 +125,7 @@ export function MyTasksView() {
       {/* Grid of Focus Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 1. Working On Right Now */}
-        <div className="flex flex-col rounded-2xl border border-amber-500/40 bg-card overflow-hidden shadow-sm">
+        <div className="flex flex-col rounded-2xl border border-amber-500/40 bg-card overflow-hidden shadow-xs">
           <div className="flex items-center justify-between px-4 py-3 bg-amber-500/10 border-b border-amber-500/20">
             <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
               <Play className="h-3.5 w-3.5 fill-amber-500 text-amber-500" /> Currently In Progress ({inProgressTasks.length})
@@ -126,7 +151,7 @@ export function MyTasksView() {
         </div>
 
         {/* 2. In Review / QA */}
-        <div className="flex flex-col rounded-2xl border border-purple-500/40 bg-card overflow-hidden shadow-sm">
+        <div className="flex flex-col rounded-2xl border border-purple-500/40 bg-card overflow-hidden shadow-xs">
           <div className="flex items-center justify-between px-4 py-3 bg-purple-500/10 border-b border-purple-500/20">
             <span className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 text-purple-500" /> In Review & Testing ({inReviewTasks.length})
@@ -151,7 +176,7 @@ export function MyTasksView() {
         </div>
 
         {/* 3. Up Next (To Do) */}
-        <div className="flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden shadow-sm">
+        <div className="flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xs">
           <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/50">
             <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <AlertCircle className="h-3.5 w-3.5 text-blue-500" /> Up Next in Sprint ({todoTasks.length})
@@ -245,7 +270,7 @@ function MyTaskCard({
           <Button
             size="sm"
             variant="outline"
-            className="h-6 text-[10px] gap-1 py-0 px-2"
+            className="h-6 text-[10px] gap-1 py-0 px-2 cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               onStartProgress();
@@ -259,7 +284,7 @@ function MyTaskCard({
           <Button
             size="sm"
             variant="outline"
-            className="h-6 text-[10px] gap-1 py-0 px-2 text-purple-600 dark:text-purple-400 border-purple-500/30"
+            className="h-6 text-[10px] gap-1 py-0 px-2 text-purple-600 dark:text-purple-400 border-purple-500/30 cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               onMoveToReview();

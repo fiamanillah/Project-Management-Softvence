@@ -37,7 +37,6 @@ export function KanbanBoardView() {
 
   // Columns for the active board view (exclude purely backlog if category is BACKLOG and tasks exist in active sprint)
   const boardStatuses = React.useMemo(() => {
-    // Show all non-backlog statuses, or all if backlog is selected
     const nonBacklog = activeStatuses.filter((s) => !s.isBacklog);
     return nonBacklog.length > 0 ? nonBacklog : activeStatuses;
   }, [activeStatuses]);
@@ -62,108 +61,87 @@ export function KanbanBoardView() {
     );
   }
 
-  // Swimlane View: Group by Department
-  if (filterState.swimlane === "DEPARTMENT") {
-    const departmentGroups = departments.map((d) => ({
-      id: d.id,
-      title: d.name,
-      subtitle: `Department Code: ${d.code}`,
-      color: d.color,
-      tasks: filteredTasks.filter((t) => t.departmentId === d.id),
-      icon: <Building2 className="h-4 w-4" style={{ color: d.color }} />,
-    }));
+  // Unified Swimlane Group Mapper
+  const { groupCategoryName, groups } = (() => {
+    switch (filterState.swimlane) {
+      case "DEPARTMENT":
+        return {
+          groupCategoryName: "Departments",
+          groups: departments.map((d) => ({
+            id: d.id,
+            title: d.name,
+            subtitle: `Department Code: ${d.code}`,
+            color: d.color,
+            tasks: filteredTasks.filter((t) => t.departmentId === d.id),
+            icon: <Building2 className="h-4 w-4" style={{ color: d.color }} />,
+          })),
+        };
+      case "PROJECT":
+        return {
+          groupCategoryName: "Projects",
+          groups: [
+            ...projects.map((p) => ({
+              id: p.id,
+              title: p.name,
+              subtitle: `Project Code: ${p.code}`,
+              tasks: filteredTasks.filter((t) => t.projectId === p.id),
+              icon: <FolderKanban className="h-4 w-4 text-primary" />,
+            })),
+            {
+              id: "standalone",
+              title: "Internal / Departmental Tasks",
+              subtitle: "Standalone non-project tasks",
+              tasks: filteredTasks.filter((t) => !t.projectId),
+              icon: <Building2 className="h-4 w-4 text-amber-500" />,
+            },
+          ],
+        };
+      case "ASSIGNEE":
+        return {
+          groupCategoryName: "Members",
+          groups: [
+            ...assignees.map((a) => ({
+              id: a.id,
+              title: a.name,
+              subtitle: a.designation,
+              avatar: a.avatar,
+              tasks: filteredTasks.filter((t) => t.assignee?.id === a.id),
+            })),
+            {
+              id: "unassigned",
+              title: "Unassigned Tasks",
+              subtitle: "Needs assignment",
+              avatar: undefined,
+              tasks: filteredTasks.filter((t) => !t.assignee),
+              icon: <User className="h-4 w-4 text-muted-foreground" />,
+            },
+          ],
+        };
+      case "PRIORITY":
+        return {
+          groupCategoryName: "Priorities",
+          groups: Object.entries(TASK_PRIORITIES).map(([key, config]) => ({
+            id: key,
+            title: `${config.label} Priority`,
+            subtitle: `Urgency Level ${config.level}`,
+            color: config.color,
+            tasks: filteredTasks.filter((t) => t.priority === key),
+            icon: <Flag className="h-4 w-4" style={{ color: config.color }} />,
+          })),
+        };
+      default:
+        return { groupCategoryName: "Groups", groups: [] };
+    }
+  })();
 
-    return (
-      <SwimlanePaginatedContainer
-        groupCategoryName="Departments"
-        groups={departmentGroups}
-        boardStatuses={boardStatuses}
-        isCompact={isCompact}
-      />
-    );
-  }
-
-  // Swimlane View: Group by Project
-  if (filterState.swimlane === "PROJECT") {
-    const projectGroups = [
-      ...projects.map((p) => ({
-        id: p.id,
-        title: p.name,
-        subtitle: `Project Code: ${p.code}`,
-        tasks: filteredTasks.filter((t) => t.projectId === p.id),
-        icon: <FolderKanban className="h-4 w-4 text-primary" />,
-      })),
-      {
-        id: "standalone",
-        title: "Internal / Departmental Tasks",
-        subtitle: "Standalone non-project tasks",
-        tasks: filteredTasks.filter((t) => !t.projectId),
-        icon: <Building2 className="h-4 w-4 text-amber-500" />,
-      },
-    ];
-
-    return (
-      <SwimlanePaginatedContainer
-        groupCategoryName="Projects"
-        groups={projectGroups}
-        boardStatuses={boardStatuses}
-        isCompact={isCompact}
-      />
-    );
-  }
-
-  // Swimlane View: Group by Assignee
-  if (filterState.swimlane === "ASSIGNEE") {
-    const swimlaneGroups = [
-      ...assignees.map((a) => ({
-        id: a.id,
-        title: a.name,
-        subtitle: a.designation,
-        avatar: a.avatar,
-        tasks: filteredTasks.filter((t) => t.assignee?.id === a.id),
-      })),
-      {
-        id: "unassigned",
-        title: "Unassigned Tasks",
-        subtitle: "Needs assignment",
-        avatar: undefined,
-        tasks: filteredTasks.filter((t) => !t.assignee),
-        icon: <User className="h-4 w-4 text-muted-foreground" />,
-      },
-    ];
-
-    return (
-      <SwimlanePaginatedContainer
-        groupCategoryName="Members"
-        groups={swimlaneGroups}
-        boardStatuses={boardStatuses}
-        isCompact={isCompact}
-      />
-    );
-  }
-
-  // Swimlane View: Group by Priority
-  if (filterState.swimlane === "PRIORITY") {
-    const priorityGroups = Object.entries(TASK_PRIORITIES).map(([key, config]) => ({
-      id: key,
-      title: `${config.label} Priority`,
-      subtitle: `Urgency Level ${config.level}`,
-      color: config.color,
-      tasks: filteredTasks.filter((t) => t.priority === key),
-      icon: <Flag className="h-4 w-4" style={{ color: config.color }} />,
-    }));
-
-    return (
-      <SwimlanePaginatedContainer
-        groupCategoryName="Priorities"
-        groups={priorityGroups}
-        boardStatuses={boardStatuses}
-        isCompact={isCompact}
-      />
-    );
-  }
-
-  return null;
+  return (
+    <SwimlanePaginatedContainer
+      groupCategoryName={groupCategoryName}
+      groups={groups}
+      boardStatuses={boardStatuses}
+      isCompact={isCompact}
+    />
+  );
 }
 
 interface SwimlaneGroupItem {
@@ -232,7 +210,7 @@ function SwimlanePaginatedContainer({
               setHideEmpty(!hideEmpty);
               setGroupPage(1);
             }}
-            className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded transition-colors ${
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded transition-colors cursor-pointer ${
               hideEmpty
                 ? "bg-primary/10 text-primary font-semibold"
                 : "text-muted-foreground hover:text-foreground"
@@ -252,7 +230,7 @@ function SwimlanePaginatedContainer({
             <Button
               variant="outline"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 cursor-pointer"
               onClick={() => setGroupPage(1)}
               disabled={groupPage === 1}
               title="First group page"
@@ -262,7 +240,7 @@ function SwimlanePaginatedContainer({
             <Button
               variant="outline"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 cursor-pointer"
               onClick={() => setGroupPage((p) => p - 1)}
               disabled={groupPage === 1}
               title="Previous groups"
@@ -272,7 +250,7 @@ function SwimlanePaginatedContainer({
             <Button
               variant="outline"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 cursor-pointer"
               onClick={() => setGroupPage((p) => p + 1)}
               disabled={groupPage === totalGroupPages}
               title="Next groups"
@@ -282,7 +260,7 @@ function SwimlanePaginatedContainer({
             <Button
               variant="outline"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 cursor-pointer"
               onClick={() => setGroupPage(totalGroupPages)}
               disabled={groupPage === totalGroupPages}
               title="Last group page"
@@ -342,7 +320,7 @@ function SwimlaneRow({
       {/* Swimlane Accordion Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center justify-between px-5 py-3 bg-muted/40 hover:bg-muted/60 transition-colors border-b border-border/50 text-left"
+        className="flex items-center justify-between px-5 py-3 bg-muted/40 hover:bg-muted/60 transition-colors border-b border-border/50 text-left cursor-pointer"
       >
         <div className="flex items-center gap-3">
           {isExpanded ? (
@@ -395,4 +373,3 @@ function SwimlaneRow({
     </div>
   );
 }
-
