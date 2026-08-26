@@ -1,172 +1,146 @@
 // src/Modules/Stations/services/stations.capability.helper.ts
 
-import type { PrismaClient } from "@workspace/db";
-import { can, getUserPermissions } from "@/core/authorization/AuthorizationEngine";
+import type { PrismaClient } from "@workspace/db"
+import {
+  can,
+  getUserPermissions,
+} from "@/core/authorization/AuthorizationEngine"
 import type {
   AuthenticatedUser,
   AuthorizationResourceContext,
-} from "@/core/authorization/authorization.types";
+} from "@/core/authorization/authorization.types"
 import type {
   StationItem,
   StationCapabilities,
   StationProfileAssignmentItem,
   StationUserAssignmentItem,
   StationSessionItem,
-} from "../StationDTO";
+} from "../StationDTO"
 
 /**
  * Extracts authorization resource context from a station entity.
  */
-export function getStationResourceContext(station: any): AuthorizationResourceContext {
+export function getStationResourceContext(
+  station: any
+): AuthorizationResourceContext {
   return {
     stationId: station.id,
     branchId: station.branchId || undefined,
     departmentId: station.departmentId || undefined,
-  };
+  }
 }
 
 /**
- * Evaluates scoped permissions for a station and generates its _capabilities map (Rule BE-17).
+ * Pure transformation from raw station database record to sanitized StationItem.
  */
-export async function computeStationCapabilities(
+export function formatStationEntity(
   station: any,
-  actor: AuthenticatedUser,
-): Promise<StationCapabilities> {
-  const resourceContext = getStationResourceContext(station);
-
-  const [
-    canEdit,
-    canDelete,
-    canAssignUser,
-    canAssignProfile,
-    canJoin,
-  ] = await Promise.all([
-    can(actor, "station.manage", resourceContext),
-    can(actor, "station.delete", resourceContext),
-    can(actor, "station.assign_user", resourceContext),
-    can(actor, "station.assign_profile", resourceContext),
-    can(actor, "station.join", resourceContext),
-  ]);
-
-  return {
-    canEdit,
-    canDelete,
-    canAssignUser,
-    canAssignProfile,
-    canReassignProfile: canAssignProfile,
-    canJoin,
-  };
-}
-
-/**
- * Sanitizes and decorates a station object with computed capabilities.
- */
-export async function sanitizeAndDecorateStation(
-  station: any,
-  actor: AuthenticatedUser,
-): Promise<StationItem> {
-  const capabilities = await computeStationCapabilities(station, actor);
-
+  capabilities: StationCapabilities
+): StationItem {
   const activeProfiles: StationProfileAssignmentItem[] = (
     station.stationProfiles || []
-  ).filter((sp: any) => !sp.unassignedAt).map((sp: any) => ({
-    id: sp.id,
-    stationId: sp.stationId,
-    profileId: sp.profileId,
-    assignedById: sp.assignedById,
-    unassignedById: sp.unassignedById,
-    assignedAt: sp.assignedAt,
-    unassignedAt: sp.unassignedAt,
-    shift: sp.shift,
-    isPrimary: sp.isPrimary,
-    note: sp.note,
-    profile: sp.profile
-      ? {
-          id: sp.profile.id,
-          username: sp.profile.username,
-          isActive: sp.profile.isActive,
-          platform: sp.profile.platform
-            ? {
-                id: sp.profile.platform.id,
-                code: sp.profile.platform.code,
-                name: sp.profile.platform.name,
-              }
-            : null,
-          _count: sp.profile._count,
-        }
-      : undefined,
-    assignedBy: sp.assignedBy
-      ? {
-          id: sp.assignedBy.id,
-          firstName: sp.assignedBy.firstName,
-          lastName: sp.assignedBy.lastName,
-          email: sp.assignedBy.email,
-        }
-      : undefined,
-  }));
+  )
+    .filter((sp: any) => !sp.unassignedAt)
+    .map((sp: any) => ({
+      id: sp.id,
+      stationId: sp.stationId,
+      profileId: sp.profileId,
+      assignedById: sp.assignedById,
+      unassignedById: sp.unassignedById,
+      assignedAt: sp.assignedAt,
+      unassignedAt: sp.unassignedAt,
+      shift: sp.shift,
+      isPrimary: sp.isPrimary,
+      note: sp.note,
+      profile: sp.profile
+        ? {
+            id: sp.profile.id,
+            username: sp.profile.username,
+            isActive: sp.profile.isActive,
+            platform: sp.profile.platform
+              ? {
+                  id: sp.profile.platform.id,
+                  code: sp.profile.platform.code,
+                  name: sp.profile.platform.name,
+                }
+              : null,
+            _count: sp.profile._count,
+          }
+        : undefined,
+      assignedBy: sp.assignedBy
+        ? {
+            id: sp.assignedBy.id,
+            firstName: sp.assignedBy.firstName,
+            lastName: sp.assignedBy.lastName,
+            email: sp.assignedBy.email,
+          }
+        : undefined,
+    }))
 
   const assignedUsers: StationUserAssignmentItem[] = (
     station.assignedUsers || []
-  ).filter((au: any) => !au.unassignedAt).map((au: any) => ({
-    id: au.id,
-    stationId: au.stationId,
-    userId: au.userId,
-    roleId: au.roleId,
-    assignedById: au.assignedById,
-    unassignedById: au.unassignedById,
-    assignedAt: au.assignedAt,
-    unassignedAt: au.unassignedAt,
-    shift: au.shift,
-    note: au.note,
-    user: au.user
-      ? {
-          id: au.user.id,
-          firstName: au.user.firstName,
-          lastName: au.user.lastName,
-          email: au.user.email,
-          avatarUrl: au.user.avatarUrl,
-          systemRole: au.user.systemRole,
-        }
-      : undefined,
-    role: au.role
-      ? {
-          id: au.role.id,
-          code: au.role.code,
-          name: au.role.name,
-          canManageProfiles: au.role.canManageProfiles,
-          canOperate: au.role.canOperate,
-        }
-      : undefined,
-  }));
+  )
+    .filter((au: any) => !au.unassignedAt)
+    .map((au: any) => ({
+      id: au.id,
+      stationId: au.stationId,
+      userId: au.userId,
+      roleId: au.roleId,
+      assignedById: au.assignedById,
+      unassignedById: au.unassignedById,
+      assignedAt: au.assignedAt,
+      unassignedAt: au.unassignedAt,
+      shift: au.shift,
+      note: au.note,
+      user: au.user
+        ? {
+            id: au.user.id,
+            firstName: au.user.firstName,
+            lastName: au.user.lastName,
+            email: au.user.email,
+            avatarUrl: au.user.avatarUrl,
+            systemRole: au.user.systemRole,
+          }
+        : undefined,
+      role: au.role
+        ? {
+            id: au.role.id,
+            code: au.role.code,
+            name: au.role.name,
+            canManageProfiles: au.role.canManageProfiles,
+            canOperate: au.role.canOperate,
+          }
+        : undefined,
+    }))
 
-  const currentSessions: StationSessionItem[] = (
-    station.sessions || []
-  ).filter((s: any) => s.isCurrent && !s.leftAt).map((s: any) => ({
-    id: s.id,
-    stationId: s.stationId,
-    userId: s.userId,
-    refreshTokenId: s.refreshTokenId,
-    ipAddress: s.ipAddress,
-    deviceInfo: s.deviceInfo,
-    joinedAt: s.joinedAt,
-    leftAt: s.leftAt,
-    lastActiveAt: s.lastActiveAt,
-    isCurrent: s.isCurrent,
-    user: s.user
-      ? {
-          id: s.user.id,
-          firstName: s.user.firstName,
-          lastName: s.user.lastName,
-          email: s.user.email,
-          avatarUrl: s.user.avatarUrl,
-        }
-      : undefined,
-    station: {
-      id: station.id,
-      code: station.code,
-      name: station.name,
-    },
-  }));
+  const currentSessions: StationSessionItem[] = (station.sessions || [])
+    .filter((s: any) => s.isCurrent && !s.leftAt)
+    .map((s: any) => ({
+      id: s.id,
+      stationId: s.stationId,
+      userId: s.userId,
+      refreshTokenId: s.refreshTokenId,
+      ipAddress: s.ipAddress,
+      deviceInfo: s.deviceInfo,
+      joinedAt: s.joinedAt,
+      leftAt: s.leftAt,
+      lastActiveAt: s.lastActiveAt,
+      isCurrent: s.isCurrent,
+      user: s.user
+        ? {
+            id: s.user.id,
+            firstName: s.user.firstName,
+            lastName: s.user.lastName,
+            email: s.user.email,
+            avatarUrl: s.user.avatarUrl,
+          }
+        : undefined,
+      station: {
+        id: station.id,
+        code: station.code,
+        name: station.name,
+      },
+    }))
 
   return {
     id: station.id,
@@ -225,7 +199,116 @@ export async function sanitizeAndDecorateStation(
     assignedUsers,
     currentSessions,
     _capabilities: capabilities,
-  };
+  }
+}
+
+/**
+ * Evaluates scoped permissions for a station and generates its _capabilities map (Rule BE-17).
+ */
+export async function computeStationCapabilities(
+  station: any,
+  actor: AuthenticatedUser
+): Promise<StationCapabilities> {
+  if (actor.systemRole === "SuperAdmin") {
+    return {
+      canEdit: true,
+      canDelete: true,
+      canAssignUser: true,
+      canAssignProfile: true,
+      canReassignProfile: true,
+      canJoin: true,
+    }
+  }
+
+  const resourceContext = getStationResourceContext(station)
+
+  const [canEdit, canDelete, canAssignUser, canAssignProfile, canJoin] =
+    await Promise.all([
+      can(actor, "station.manage", resourceContext),
+      can(actor, "station.delete", resourceContext),
+      can(actor, "station.assign_user", resourceContext),
+      can(actor, "station.assign_profile", resourceContext),
+      can(actor, "station.join", resourceContext),
+    ])
+
+  return {
+    canEdit,
+    canDelete,
+    canAssignUser,
+    canAssignProfile,
+    canReassignProfile: canAssignProfile,
+    canJoin,
+  }
+}
+
+/**
+ * Batch resolves capabilities and sanitizes a list of station entities with minimal database/cache queries.
+ * Under high concurrency, avoids the N*5 query storm by pre-evaluating actor permissions once.
+ */
+export async function batchSanitizeAndDecorateStations(
+  stations: any[],
+  actor: AuthenticatedUser
+): Promise<StationItem[]> {
+  if (!stations || stations.length === 0) return []
+
+  // SuperAdmin fast path
+  if (actor.systemRole === "SuperAdmin") {
+    const superCaps: StationCapabilities = {
+      canEdit: true,
+      canDelete: true,
+      canAssignUser: true,
+      canAssignProfile: true,
+      canReassignProfile: true,
+      canJoin: true,
+    }
+    return stations.map((stn) => formatStationEntity(stn, superCaps))
+  }
+
+  const userPerms = await getUserPermissions(actor)
+
+  const permCodes = [
+    "station.manage",
+    "station.delete",
+    "station.assign_user",
+    "station.assign_profile",
+    "station.join",
+  ] as const
+
+  // Check if all permissions have Global scope
+  const isAllGlobal = permCodes.every(
+    (code) => userPerms[code]?.allowed && userPerms[code]?.scope === "Global"
+  )
+
+  if (isAllGlobal) {
+    const globalCaps: StationCapabilities = {
+      canEdit: true,
+      canDelete: true,
+      canAssignUser: true,
+      canAssignProfile: true,
+      canReassignProfile: true,
+      canJoin: true,
+    }
+    return stations.map((stn) => formatStationEntity(stn, globalCaps))
+  }
+
+  // Evaluate each station efficiently
+  return Promise.all(
+    stations.map(async (stn) => {
+      const caps = await computeStationCapabilities(stn, actor)
+      return formatStationEntity(stn, caps)
+    })
+  )
+}
+
+/**
+ * Sanitizes and decorates a single station object with computed capabilities.
+ */
+export async function sanitizeAndDecorateStation(
+  station: any,
+  actor: AuthenticatedUser
+): Promise<StationItem> {
+  const capabilities = await computeStationCapabilities(station, actor)
+  return formatStationEntity(station, capabilities)
 }
 
 /**
@@ -233,17 +316,18 @@ export async function sanitizeAndDecorateStation(
  */
 export async function buildStationScopedWhereConditions(
   prisma: PrismaClient,
-  actor: AuthenticatedUser,
+  actor: AuthenticatedUser
 ): Promise<any[] | null> {
-  const userPerms = await getUserPermissions(actor);
-  const viewPerm = userPerms["station.view"];
+  const userPerms = await getUserPermissions(actor)
+  const viewPerm = userPerms["station.view"]
   const isGlobal =
     viewPerm?.scope === "Global" ||
     viewPerm?.scope === "Override" ||
-    (viewPerm?.allowed === true && (!viewPerm.scope || viewPerm.scope === "Global"));
+    (viewPerm?.allowed === true &&
+      (!viewPerm.scope || viewPerm.scope === "Global"))
 
   if (isGlobal) {
-    return null;
+    return null
   }
 
   const scopedConditions: any[] = [
@@ -266,22 +350,24 @@ export async function buildStationScopedWhereConditions(
         },
       },
     },
-  ];
+  ]
 
   // 3. Branch scope
   if (actor.branchId) {
-    scopedConditions.push({ branchId: actor.branchId });
+    scopedConditions.push({ branchId: actor.branchId })
   }
 
   // 4. Department scope
   const userTeams = await prisma.teamMember.findMany({
     where: { userId: actor.id, leftAt: null },
     select: { team: { select: { departmentId: true } } },
-  });
-  const deptIds = Array.from(new Set(userTeams.map((t) => t.team.departmentId).filter(Boolean)));
+  })
+  const deptIds = Array.from(
+    new Set(userTeams.map((t) => t.team.departmentId).filter(Boolean))
+  )
   if (deptIds.length > 0) {
-    scopedConditions.push({ departmentId: { in: deptIds } });
+    scopedConditions.push({ departmentId: { in: deptIds } })
   }
 
-  return scopedConditions;
+  return scopedConditions
 }

@@ -1,31 +1,38 @@
-"use client";
+"use client"
 
-import * as React from "react";
+import * as React from "react"
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@workspace/ui/components/dialog";
-import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import { Textarea } from "@workspace/ui/components/textarea";
+} from "@workspace/ui/components/dialog"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Textarea } from "@workspace/ui/components/textarea"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@workspace/ui/components/select";
-import { useTaskStore } from "../../data/task-store";
-import { Zap } from "lucide-react";
+} from "@workspace/ui/components/select"
+import { useTaskStore } from "../../data/task-store"
+import { Zap } from "lucide-react"
 
 function calculateEndDate(start: string, duration: string): string {
-  const d = new Date(start);
-  const days = duration === "1_WEEK" ? 7 : duration === "3_WEEKS" ? 21 : duration === "4_WEEKS" ? 28 : 14;
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0] ?? "2026-09-03";
+  const d = new Date(start)
+  const days =
+    duration === "1_WEEK"
+      ? 7
+      : duration === "3_WEEKS"
+        ? 21
+        : duration === "4_WEEKS"
+          ? 28
+          : 14
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split("T")[0] ?? "2026-09-03"
 }
 
 export function CreateSprintModal() {
@@ -34,56 +41,65 @@ export function CreateSprintModal() {
     setCreateSprintModalOpen,
     createSprint,
     sprints,
-  } = useTaskStore();
+  } = useTaskStore()
 
-  const nextNum = sprints.length + 13;
-  const [name, setName] = React.useState(`Sprint ${nextNum}: Core Features & Optimization`);
-  const [duration, setDuration] = React.useState("2_WEEKS");
-  const [startDate, setStartDate] = React.useState(new Date().toISOString().split("T")[0] ?? "2026-08-20");
-  const [endDate, setEndDate] = React.useState(() => calculateEndDate(startDate, "2_WEEKS"));
-  const [goal, setGoal] = React.useState("");
+  const nextNum = sprints.length + 13
+  const [name, setName] = React.useState(
+    `Sprint ${nextNum}: Core Features & Optimization`
+  )
+  const [duration, setDuration] = React.useState("2_WEEKS")
+  const [startDate, setStartDate] = React.useState(
+    new Date().toISOString().split("T")[0] ?? "2026-08-20"
+  )
+  const [endDate, setEndDate] = React.useState(() =>
+    calculateEndDate(startDate, "2_WEEKS")
+  )
+  const [goal, setGoal] = React.useState("")
 
   React.useEffect(() => {
     if (createSprintModalOpen) {
-      const today = new Date().toISOString().split("T")[0] ?? "2026-08-20";
-      setName(`Sprint ${nextNum}: Features & Improvements`);
-      setStartDate(today);
-      setEndDate(calculateEndDate(today, duration));
-      setGoal("");
+      const today = new Date().toISOString().split("T")[0] ?? "2026-08-20"
+      setName(`Sprint ${nextNum}: Features & Improvements`)
+      setStartDate(today)
+      setEndDate(calculateEndDate(today, duration))
+      setGoal("")
     }
-  }, [createSprintModalOpen, nextNum, duration]);
+  }, [createSprintModalOpen, nextNum, duration])
 
   const handleDurationChange = (val: string | null) => {
     if (val !== null) {
-      setDuration(val);
-      setEndDate(calculateEndDate(startDate, val));
+      setDuration(val)
+      setEndDate(calculateEndDate(startDate, val))
     }
-  };
+  }
 
   const handleStartDateChange = (val: string) => {
-    setStartDate(val);
-    setEndDate(calculateEndDate(val, duration));
-  };
+    setStartDate(val)
+    setEndDate(calculateEndDate(val, duration))
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
+    e.preventDefault()
+    if (!name.trim()) return
 
     createSprint({
       name: name.trim(),
       goal: goal.trim() || undefined,
       startDate,
       endDate,
-    });
+    })
 
-    setCreateSprintModalOpen(false);
-  };
+    setCreateSprintModalOpen(false)
+  }
 
   return (
-    <Dialog open={createSprintModalOpen} onOpenChange={setCreateSprintModalOpen}>
-      <DialogContent className="w-full max-w-[calc(100%-2rem)] sm:max-w-[540px] bg-background border border-border/80 rounded-2xl shadow-xl p-6">
+    <Dialog
+      open={createSprintModalOpen}
+      onOpenChange={setCreateSprintModalOpen}
+    >
+      <DialogContent className="w-full max-w-[calc(100%-2rem)] rounded-2xl border border-border/80 bg-background p-6 shadow-xl sm:max-w-[540px]">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
             <Zap className="h-4 w-4 text-amber-500" />
             Create Agile Sprint
           </DialogTitle>
@@ -100,7 +116,7 @@ export function CreateSprintModal() {
               placeholder="e.g. Sprint 15: Checkout & Analytics"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="text-xs bg-background"
+              className="bg-background text-xs"
               autoFocus
             />
           </div>
@@ -111,7 +127,7 @@ export function CreateSprintModal() {
               Sprint Duration
             </label>
             <Select value={duration} onValueChange={handleDurationChange}>
-              <SelectTrigger className="h-9 text-xs bg-background">
+              <SelectTrigger className="h-9 bg-background text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -133,7 +149,7 @@ export function CreateSprintModal() {
                 type="date"
                 value={startDate}
                 onChange={(e) => handleStartDateChange(e.target.value)}
-                className="text-xs bg-background"
+                className="bg-background text-xs"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -144,7 +160,7 @@ export function CreateSprintModal() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="text-xs bg-background"
+                className="bg-background text-xs"
               />
             </div>
           </div>
@@ -159,7 +175,7 @@ export function CreateSprintModal() {
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               rows={3}
-              className="text-xs bg-background resize-none leading-relaxed"
+              className="resize-none bg-background text-xs leading-relaxed"
             />
           </div>
 
@@ -169,14 +185,14 @@ export function CreateSprintModal() {
               variant="outline"
               size="sm"
               onClick={() => setCreateSprintModalOpen(false)}
-              className="h-8 text-xs cursor-pointer"
+              className="h-8 cursor-pointer text-xs"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               size="sm"
-              className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 cursor-pointer"
+              className="h-8 cursor-pointer bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
             >
               Create Sprint
             </Button>
@@ -184,5 +200,5 @@ export function CreateSprintModal() {
         </form>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

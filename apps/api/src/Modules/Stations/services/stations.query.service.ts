@@ -1,21 +1,18 @@
-import type { PrismaClient } from "@workspace/db";
-import type { CacheManager } from "@workspace/cache";
-import { NotFoundError } from "@/core/errors/AppError";
-import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
-import type {
-  GetStationsQuery,
-  StationItem,
-  StationStats,
-} from "../StationDTO";
+import type { PrismaClient } from "@workspace/db"
+import type { CacheManager } from "@workspace/cache"
+import { NotFoundError } from "@/core/errors/AppError"
+import type { AuthenticatedUser } from "@/core/authorization/authorization.types"
+import type { GetStationsQuery, StationItem, StationStats } from "../StationDTO"
 import {
   sanitizeAndDecorateStation,
+  batchSanitizeAndDecorateStations,
   buildStationScopedWhereConditions,
-} from "./stations.capability.helper";
+} from "./stations.capability.helper"
 
 export class StationsQueryService {
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly cacheManager?: CacheManager,
+    private readonly cacheManager?: CacheManager
   ) {}
 
   /**
@@ -24,70 +21,81 @@ export class StationsQueryService {
    */
   public async getStations(
     query: GetStationsQuery,
-    actor: AuthenticatedUser,
-  ): Promise<{ items: StationItem[]; pagination: { total: number; page: number; limit: number; totalPages: number; hasNext: boolean; hasPrevious: boolean } }> {
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
-    const skip = (page - 1) * limit;
+    actor: AuthenticatedUser
+  ): Promise<{
+    items: StationItem[]
+    pagination: {
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+      hasNext: boolean
+      hasPrevious: boolean
+    }
+  }> {
+    const page = Math.max(1, Number(query.page) || 1)
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20))
+    const skip = (page - 1) * limit
 
-    const where: any = {
-      deletedAt: null,
-    };
+    const andConditions: any[] = [{ deletedAt: null }]
 
     // Scoped query restriction for non-SuperAdmin users
     if (actor.systemRole !== "SuperAdmin") {
-      const scopedConditions = await buildStationScopedWhereConditions(this.prisma, actor);
+      const scopedConditions = await buildStationScopedWhereConditions(
+        this.prisma,
+        actor
+      )
       if (scopedConditions && scopedConditions.length > 0) {
-        where.OR = scopedConditions;
+        andConditions.push({ OR: scopedConditions })
       }
     }
 
     // Search query
     if (query.search && query.search.trim() !== "") {
-      const search = query.search.trim();
-      const searchFilter = {
+      const search = query.search.trim()
+      andConditions.push({
         OR: [
           { name: { contains: search, mode: "insensitive" } },
           { code: { contains: search, mode: "insensitive" } },
           { description: { contains: search, mode: "insensitive" } },
         ],
-      };
-
-      if (where.OR) {
-        where.AND = [searchFilter];
-      } else {
-        where.OR = searchFilter.OR;
-      }
+      })
     }
 
     // Additional filters
     if (query.stationTypeId && query.stationTypeId !== "all") {
-      where.stationTypeId = query.stationTypeId;
+      andConditions.push({ stationTypeId: query.stationTypeId })
     }
 
     if (query.statusId && query.statusId !== "all") {
-      where.statusId = query.statusId;
+      andConditions.push({ statusId: query.statusId })
     }
 
     if (query.branchId && query.branchId !== "all") {
-      where.branchId = query.branchId;
+      andConditions.push({ branchId: query.branchId })
     }
 
     if (query.departmentId && query.departmentId !== "all") {
-      where.departmentId = query.departmentId;
+      andConditions.push({ departmentId: query.departmentId })
     }
 
     if (query.isSales !== undefined && query.isSales !== "all") {
-      where.stationType = { isSales: String(query.isSales) === "true" };
+      andConditions.push({
+        stationType: { isSales: String(query.isSales) === "true" },
+      })
     }
 
     if (query.isOperational !== undefined && query.isOperational !== "all") {
-      where.status = { isOperational: String(query.isOperational) === "true" };
+      andConditions.push({
+        status: { isOperational: String(query.isOperational) === "true" },
+      })
     }
 
     if (query.isActive !== undefined && query.isActive !== "all") {
-      where.isActive = String(query.isActive) === "true";
+      andConditions.push({ isActive: String(query.isActive) === "true" })
     }
+
+    const where: any = { AND: andConditions }
 
     const [total, records] = await Promise.all([
       this.prisma.station.count({ where }),
@@ -107,7 +115,9 @@ export class StationsQueryService {
               profile: {
                 include: {
                   platform: true,
-                  _count: { select: { projects: { where: { deletedAt: null } } } },
+                  _count: {
+                    select: { projects: { where: { deletedAt: null } } },
+                  },
                 },
               },
               assignedBy: true,
@@ -126,13 +136,11 @@ export class StationsQueryService {
           },
         },
       }),
-    ]);
+    ])
 
-    const items = await Promise.all(
-      records.map((rec) => sanitizeAndDecorateStation(rec, actor)),
-    );
+    const items = await batchSanitizeAndDecorateStations(records, actor)
 
-    const totalPages = Math.ceil(total / limit) || 1;
+    const totalPages = Math.ceil(total / limit) || 1
 
     return {
       items,
@@ -144,22 +152,25 @@ export class StationsQueryService {
         hasNext: page < totalPages,
         hasPrevious: page > 1,
       },
-    };
+    }
   }
 
   /**
    * Get single station by ID or code with full relations and capability decoration.
    * Cached in Redis (station:raw:{id}) with automatic capability decoration per actor.
    */
-  public async getStationById(id: string, actor: AuthenticatedUser): Promise<StationItem> {
-    const cacheKey = `station:raw:${id.toLowerCase()}`;
+  public async getStationById(
+    id: string,
+    actor: AuthenticatedUser
+  ): Promise<StationItem> {
+    const cacheKey = `station:raw:${id.toLowerCase()}`
 
     // 1. Check Redis Cache
     if (this.cacheManager) {
       try {
-        const cachedRaw = await this.cacheManager.get<any>(cacheKey);
+        const cachedRaw = await this.cacheManager.get<any>(cacheKey)
         if (cachedRaw) {
-          return sanitizeAndDecorateStation(cachedRaw, actor);
+          return sanitizeAndDecorateStation(cachedRaw, actor)
         }
       } catch {
         // Fallback to database on cache error
@@ -183,7 +194,9 @@ export class StationsQueryService {
             profile: {
               include: {
                 platform: true,
-                _count: { select: { projects: { where: { deletedAt: null } } } },
+                _count: {
+                  select: { projects: { where: { deletedAt: null } } },
+                },
               },
             },
             assignedBy: true,
@@ -201,25 +214,33 @@ export class StationsQueryService {
           include: { user: true },
         },
       },
-    });
+    })
 
     if (!station) {
-      throw new NotFoundError("Station not found");
+      throw new NotFoundError("Station not found")
     }
 
     // 3. Cache raw record in Redis for 1 hour (3600 seconds)
     if (this.cacheManager) {
       try {
         await Promise.all([
-          this.cacheManager.set(`station:raw:${station.id.toLowerCase()}`, station, { ttlSeconds: 3600 }),
-          this.cacheManager.set(`station:raw:${station.code.toLowerCase()}`, station, { ttlSeconds: 3600 }),
-        ]);
+          this.cacheManager.set(
+            `station:raw:${station.id.toLowerCase()}`,
+            station,
+            { ttlSeconds: 3600 }
+          ),
+          this.cacheManager.set(
+            `station:raw:${station.code.toLowerCase()}`,
+            station,
+            { ttlSeconds: 3600 }
+          ),
+        ])
       } catch {
         // Non-blocking
       }
     }
 
-    return sanitizeAndDecorateStation(station, actor);
+    return sanitizeAndDecorateStation(station, actor)
   }
 
   /**
@@ -227,13 +248,13 @@ export class StationsQueryService {
    * Cached in Redis for high-frequency workspace and header queries.
    */
   public async getMyStations(actor: AuthenticatedUser): Promise<StationItem[]> {
-    const cacheKey = `station:user_assigned:raw:${actor.id}`;
+    const cacheKey = `station:user_assigned:raw:${actor.id}`
 
     if (this.cacheManager) {
       try {
-        const cachedRaw = await this.cacheManager.get<any[]>(cacheKey);
+        const cachedRaw = await this.cacheManager.get<any[]>(cacheKey)
         if (cachedRaw && Array.isArray(cachedRaw)) {
-          return Promise.all(cachedRaw.map((rec) => sanitizeAndDecorateStation(rec, actor)));
+          return batchSanitizeAndDecorateStations(cachedRaw, actor)
         }
       } catch {
         // Fallback to database on cache error
@@ -263,7 +284,9 @@ export class StationsQueryService {
             profile: {
               include: {
                 platform: true,
-                _count: { select: { projects: { where: { deletedAt: null } } } },
+                _count: {
+                  select: { projects: { where: { deletedAt: null } } },
+                },
               },
             },
             assignedBy: true,
@@ -281,43 +304,65 @@ export class StationsQueryService {
           include: { user: true },
         },
       },
-    });
+    })
 
     if (this.cacheManager) {
       try {
-        await this.cacheManager.set(cacheKey, records, { ttlSeconds: 3600 });
+        await this.cacheManager.set(cacheKey, records, { ttlSeconds: 3600 })
       } catch {
         // Non-blocking
       }
     }
 
-    return Promise.all(records.map((rec) => sanitizeAndDecorateStation(rec, actor)));
+    return batchSanitizeAndDecorateStations(records, actor)
   }
 
   /**
    * Invalidate cached station raw records.
    */
   public async invalidateStation(id: string, code?: string): Promise<void> {
-    if (!this.cacheManager) return;
-    const keys = [`station:raw:${id.toLowerCase()}`, `station:detail:${id.toLowerCase()}`];
+    if (!this.cacheManager) return
+    const keys = [
+      `station:raw:${id.toLowerCase()}`,
+      `station:detail:${id.toLowerCase()}`,
+    ]
     if (code) {
-      keys.push(`station:raw:${code.toLowerCase()}`, `station:detail:${code.toLowerCase()}`);
+      keys.push(
+        `station:raw:${code.toLowerCase()}`,
+        `station:detail:${code.toLowerCase()}`
+      )
     }
-    await this.cacheManager.del(keys).catch(() => {});
+    keys.push("station:stats")
+    await this.cacheManager.del(keys).catch(() => {})
   }
 
   /**
    * Invalidate cached assigned stations for a user.
    */
   public async invalidateUserAssigned(userId: string): Promise<void> {
-    if (!this.cacheManager) return;
-    await this.cacheManager.del(`station:user_assigned:raw:${userId}`).catch(() => {});
+    if (!this.cacheManager) return
+    await this.cacheManager
+      .del(`station:user_assigned:raw:${userId}`)
+      .catch(() => {})
   }
 
   /**
    * Get operational station statistics.
+   * Cached in Redis for 30s to handle high-traffic dashboard polling.
    */
-  public async getStationStats(_actor: AuthenticatedUser): Promise<StationStats> {
+  public async getStationStats(
+    _actor: AuthenticatedUser
+  ): Promise<StationStats> {
+    const cacheKey = "station:stats"
+    if (this.cacheManager) {
+      try {
+        const cached = await this.cacheManager.get<StationStats>(cacheKey)
+        if (cached) return cached
+      } catch {
+        // Non-blocking
+      }
+    }
+
     const [
       totalStations,
       activeStations,
@@ -340,15 +385,25 @@ export class StationsQueryService {
       this.prisma.stationProfileAssignment.count({
         where: { unassignedAt: null },
       }),
-    ]);
+    ])
 
-    return {
+    const stats: StationStats = {
       totalStations,
       activeStations,
       salesStations,
       maintenanceStations,
       totalActiveSessions,
       totalProfilesAssigned,
-    };
+    }
+
+    if (this.cacheManager) {
+      try {
+        await this.cacheManager.set(cacheKey, stats, { ttlSeconds: 30 })
+      } catch {
+        // Non-blocking
+      }
+    }
+
+    return stats
   }
 }

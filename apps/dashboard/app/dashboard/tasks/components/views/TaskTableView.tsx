@@ -1,6 +1,6 @@
-"use client";
+"use client"
 
-import * as React from "react";
+import * as React from "react"
 import {
   Table,
   TableBody,
@@ -8,16 +8,20 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@workspace/ui/components/table";
+} from "@workspace/ui/components/table"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@workspace/ui/components/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar";
-import { Button } from "@workspace/ui/components/button";
+} from "@workspace/ui/components/select"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@workspace/ui/components/avatar"
+import { Button } from "@workspace/ui/components/button"
 import {
   ArrowUpDown,
   BookmarkCheck,
@@ -33,41 +37,41 @@ import {
   ChevronDown,
   Clock,
   Trash2,
-} from "lucide-react";
-import { TaskPagination } from "../TaskPagination";
-import { useTaskStore } from "../../data/task-store";
-import { TASK_PRIORITIES } from "../../data/mock-tasks";
-import type { AgileTask, TaskPriorityKey, TaskTypeKey } from "../../types";
+} from "lucide-react"
+import { TaskPagination } from "../TaskPagination"
+import { useTaskStore } from "../../data/task-store"
+import { TASK_PRIORITIES } from "../../data/mock-tasks"
+import type { AgileTask, TaskPriorityKey, TaskTypeKey } from "../../types"
 
 function renderTypeIcon(type: TaskTypeKey) {
   switch (type) {
     case "STORY":
-      return <BookmarkCheck className="h-3.5 w-3.5 text-emerald-500" />;
+      return <BookmarkCheck className="h-3.5 w-3.5 text-emerald-500" />
     case "BUG":
-      return <Bug className="h-3.5 w-3.5 text-red-500" />;
+      return <Bug className="h-3.5 w-3.5 text-red-500" />
     case "SPIKE":
-      return <Zap className="h-3.5 w-3.5 text-amber-500" />;
+      return <Zap className="h-3.5 w-3.5 text-amber-500" />
     case "IMPROVEMENT":
-      return <Sparkles className="h-3.5 w-3.5 text-purple-500" />;
+      return <Sparkles className="h-3.5 w-3.5 text-purple-500" />
     case "DESIGN_ASSET":
-      return <Palette className="h-3.5 w-3.5 text-pink-500" />;
+      return <Palette className="h-3.5 w-3.5 text-pink-500" />
     case "CONTENT":
-      return <FileText className="h-3.5 w-3.5 text-cyan-500" />;
+      return <FileText className="h-3.5 w-3.5 text-cyan-500" />
     default:
-      return <CheckSquare className="h-3.5 w-3.5 text-blue-500" />;
+      return <CheckSquare className="h-3.5 w-3.5 text-blue-500" />
   }
 }
 
 function renderPriorityIcon(priority: TaskPriorityKey) {
   switch (priority) {
     case "URGENT":
-      return <Flame className="h-3.5 w-3.5 text-red-500" />;
+      return <Flame className="h-3.5 w-3.5 text-red-500" />
     case "HIGH":
-      return <ChevronUp className="h-3.5 w-3.5 text-orange-500" />;
+      return <ChevronUp className="h-3.5 w-3.5 text-orange-500" />
     case "LOW":
-      return <ChevronDown className="h-3.5 w-3.5 text-blue-400" />;
+      return <ChevronDown className="h-3.5 w-3.5 text-blue-400" />
     default:
-      return <Equal className="h-3.5 w-3.5 text-yellow-500" />;
+      return <Equal className="h-3.5 w-3.5 text-yellow-500" />
   }
 }
 
@@ -79,62 +83,62 @@ export function TaskTableView() {
     updateTask,
     deleteTask,
     activeStatuses,
-  } = useTaskStore();
+  } = useTaskStore()
 
-  const [sortField, setSortField] = React.useState<keyof AgileTask>("key");
-  const [sortAsc, setSortAsc] = React.useState(true);
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(25);
+  const [sortField, setSortField] = React.useState<keyof AgileTask>("key")
+  const [sortAsc, setSortAsc] = React.useState(true)
+  const [currentPage, setCurrentPage] = React.useState(1)
+  const [pageSize, setPageSize] = React.useState(25)
 
   const sortedTasks = React.useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-      if (aVal === undefined || aVal === null) return sortAsc ? 1 : -1;
-      if (bVal === undefined || bVal === null) return sortAsc ? -1 : 1;
+      const aVal = a[sortField]
+      const bVal = b[sortField]
+      if (aVal === undefined || aVal === null) return sortAsc ? 1 : -1
+      if (bVal === undefined || bVal === null) return sortAsc ? -1 : 1
 
       if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
       if (typeof aVal === "number" && typeof bVal === "number") {
-        return sortAsc ? aVal - bVal : bVal - aVal;
+        return sortAsc ? aVal - bVal : bVal - aVal
       }
-      return 0;
-    });
-  }, [filteredTasks, sortField, sortAsc]);
+      return 0
+    })
+  }, [filteredTasks, sortField, sortAsc])
 
-  const totalPages = Math.max(1, Math.ceil(sortedTasks.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(sortedTasks.length / pageSize))
 
   React.useEffect(() => {
     if (currentPage > totalPages) {
-      setCurrentPage(1);
+      setCurrentPage(1)
     }
-  }, [totalPages, currentPage]);
+  }, [totalPages, currentPage])
 
   const paginatedTasks = React.useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return sortedTasks.slice(start, start + pageSize);
-  }, [sortedTasks, currentPage, pageSize]);
+    const start = (currentPage - 1) * pageSize
+    return sortedTasks.slice(start, start + pageSize)
+  }, [sortedTasks, currentPage, pageSize])
 
   const handleSort = (field: keyof AgileTask) => {
     if (sortField === field) {
-      setSortAsc(!sortAsc);
+      setSortAsc(!sortAsc)
     } else {
-      setSortField(field);
-      setSortAsc(true);
+      setSortField(field)
+      setSortAsc(true)
     }
-  };
+  }
 
   return (
     <div className="p-6">
-      <div className="rounded-2xl border border-border/80 bg-card shadow-xs overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>
               <TableHead className="w-[110px]">
                 <button
                   onClick={() => handleSort("key")}
-                  className="flex items-center gap-1 text-xs font-bold text-foreground cursor-pointer"
+                  className="flex cursor-pointer items-center gap-1 text-xs font-bold text-foreground"
                 >
                   Key <ArrowUpDown className="h-3 w-3" />
                 </button>
@@ -142,7 +146,7 @@ export function TaskTableView() {
               <TableHead className="min-w-[280px]">
                 <button
                   onClick={() => handleSort("title")}
-                  className="flex items-center gap-1 text-xs font-bold text-foreground cursor-pointer"
+                  className="flex cursor-pointer items-center gap-1 text-xs font-bold text-foreground"
                 >
                   Title & Scope <ArrowUpDown className="h-3 w-3" />
                 </button>
@@ -161,11 +165,11 @@ export function TaskTableView() {
               return (
                 <TableRow
                   key={task.id}
-                  className="group hover:bg-muted/30 transition-colors"
+                  className="group transition-colors hover:bg-muted/30"
                 >
                   {/* Key */}
                   <TableCell
-                    className="font-mono text-xs font-semibold text-muted-foreground group-hover:text-primary cursor-pointer"
+                    className="cursor-pointer font-mono text-xs font-semibold text-muted-foreground group-hover:text-primary"
                     onClick={() => setSelectedTaskId(task.id)}
                   >
                     <div className="flex items-center gap-1.5">
@@ -180,12 +184,14 @@ export function TaskTableView() {
                     onClick={() => setSelectedTaskId(task.id)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                      <span className="line-clamp-1 text-xs font-semibold text-foreground transition-colors group-hover:text-primary">
                         {task.title}
                       </span>
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         {task.projectName ? (
-                          <span className="text-primary font-medium">{task.projectName}</span>
+                          <span className="font-medium text-primary">
+                            {task.projectName}
+                          </span>
                         ) : (
                           <span>{task.departmentName}</span>
                         )}
@@ -201,15 +207,19 @@ export function TaskTableView() {
                     <Select
                       value={task.status}
                       onValueChange={(val) => {
-                        if (val) moveTaskStatus(task.id, val);
+                        if (val) moveTaskStatus(task.id, val)
                       }}
                     >
-                      <SelectTrigger className="h-7 text-xs bg-background/80 border-border/70">
+                      <SelectTrigger className="h-7 border-border/70 bg-background/80 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {activeStatuses.map((s) => (
-                          <SelectItem key={s.key} value={s.key} className="text-xs">
+                          <SelectItem
+                            key={s.key}
+                            value={s.key}
+                            className="text-xs"
+                          >
                             <span className="flex items-center gap-2">
                               <span
                                 className="h-2 w-2 rounded-full"
@@ -228,10 +238,13 @@ export function TaskTableView() {
                     <Select
                       value={task.priority}
                       onValueChange={(val) => {
-                        if (val) updateTask(task.id, { priority: val as TaskPriorityKey });
+                        if (val)
+                          updateTask(task.id, {
+                            priority: val as TaskPriorityKey,
+                          })
                       }}
                     >
-                      <SelectTrigger className="h-7 text-xs bg-background/80 border-border/70">
+                      <SelectTrigger className="h-7 border-border/70 bg-background/80 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -257,17 +270,22 @@ export function TaskTableView() {
                     {task.assignee ? (
                       <div className="flex items-center gap-2">
                         <Avatar className="h-5 w-5 border border-border">
-                          <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
+                          <AvatarImage
+                            src={task.assignee.avatar}
+                            alt={task.assignee.name}
+                          />
                           <AvatarFallback className="text-[9px]">
                             {task.assignee.name.slice(0, 2)}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-xs text-foreground truncate max-w-[100px]">
+                        <span className="max-w-[100px] truncate text-xs text-foreground">
                           {task.assignee.name}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                      <span className="text-xs text-muted-foreground italic">
+                        Unassigned
+                      </span>
                     )}
                   </TableCell>
 
@@ -301,14 +319,14 @@ export function TaskTableView() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      className="h-7 w-7 cursor-pointer text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
                       onClick={() => deleteTask(task.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>
                 </TableRow>
-              );
+              )
             })}
           </TableBody>
         </Table>
@@ -327,11 +345,11 @@ export function TaskTableView() {
           totalItems={sortedTasks.length}
           onPageChange={setCurrentPage}
           onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
+            setPageSize(newSize)
+            setCurrentPage(1)
           }}
         />
       </div>
     </div>
-  );
+  )
 }

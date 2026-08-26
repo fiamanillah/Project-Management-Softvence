@@ -42,31 +42,31 @@ export {
   type ProfileManagementItem,
   type ActiveStationContext,
   type UserStationSessionsState,
-  type StationScopeContext,
   normalizeMacAddress,
   isValidMacAddress,
   isValidIpOrSubnet,
   isIpInCidr,
-} from "@workspace/shared";
+  normalizeIpAddress,
+} from "@workspace/shared"
 
 export interface GetStationsQuery {
-  page?: number | string;
-  limit?: number | string;
-  search?: string;
-  stationTypeId?: string;
-  statusId?: string;
-  branchId?: string;
-  departmentId?: string;
-  isSales?: boolean | string;
-  isOperational?: boolean | string;
-  isActive?: boolean | string;
+  page?: number | string
+  limit?: number | string
+  search?: string
+  stationTypeId?: string
+  statusId?: string
+  branchId?: string
+  departmentId?: string
+  isSales?: boolean | string
+  isOperational?: boolean | string
+  isActive?: boolean | string
 }
 
 export interface StationStats {
-  totalStations: number;
-  activeStations: number;
-  salesStations: number;
-  maintenanceStations: number;
-  totalActiveSessions: number;
-  totalProfilesAssigned: number;
+  totalStations: number
+  activeStations: number
+  salesStations: number
+  maintenanceStations: number
+  totalActiveSessions: number
+  totalProfilesAssigned: number
 }

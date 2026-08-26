@@ -1,45 +1,46 @@
 // src/Modules/Stations/stations.test.ts
 
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { prisma } from "@/lib/prisma";
-import { StationsService } from "./stations.service";
-import { ProjectsService } from "../Projects/projects.service";
-import type { AuthenticatedUser } from "@/core/authorization/authorization.types";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test"
+import { prisma } from "@/lib/prisma"
+import { StationsService } from "./stations.service"
+import { ProjectsService } from "../Projects/projects.service"
+import type { AuthenticatedUser } from "@/core/authorization/authorization.types"
 
 describe("Stations & Dynamic Profile Management Subsystem", () => {
-  let stationsService: StationsService;
-  let projectsService: ProjectsService;
+  let stationsService: StationsService
+  let projectsService: ProjectsService
 
-  let superAdminUser: AuthenticatedUser;
-  let staffUserA: AuthenticatedUser;
-  let staffUserB: AuthenticatedUser;
+  let superAdminUser: AuthenticatedUser
+  let staffUserA: AuthenticatedUser
+  let staffUserB: AuthenticatedUser
 
-  let testStationTypeId: string;
-  let testStationStatusId: string;
-  let testStationRoleId: string;
+  let testStationTypeId: string
+  let testStationStatusId: string
+  let testStationRoleId: string
 
-  let testPlatformId: string;
-  let testProfile1Id: string;
-  let testProfile2Id: string;
+  let testPlatformId: string
+  let testProfile1Id: string
+  let testProfile2Id: string
 
-  let createdStation1Id: string;
-  let createdStation2Id: string;
+  let createdStation1Id: string
+  let createdStation2Id: string
 
   beforeAll(async () => {
-    stationsService = new StationsService(prisma);
-    projectsService = new ProjectsService(prisma);
+    stationsService = new StationsService(prisma)
+    projectsService = new ProjectsService(prisma)
 
-    const timestamp = Date.now();
+    const timestamp = Date.now()
 
     // 1. Create Dynamic Lookups
     const stationType = await stationsService.lookup.createStationType({
       code: `SALES_TYPE_${timestamp}`,
       name: "Dedicated Sales Workstation",
-      description: "Equipped for outbound client communication and profile management",
+      description:
+        "Equipped for outbound client communication and profile management",
       isSales: true,
       sortOrder: 1,
-    });
-    testStationTypeId = stationType.id;
+    })
+    testStationTypeId = stationType.id
 
     const stationStatus = await stationsService.lookup.createStationStatus({
       code: `OPERATIONAL_${timestamp}`,
@@ -47,25 +48,31 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
       isOperational: true,
       isMaintenance: false,
       color: "#10b981",
-    });
-    testStationStatusId = stationStatus.id;
+    })
+    testStationStatusId = stationStatus.id
 
     const stationRole = await stationsService.lookup.createStationRole({
       code: `SALES_OPERATOR_${timestamp}`,
       name: "Sales Shift Operator",
       canManageProfiles: true,
       canOperate: true,
-    });
-    testStationRoleId = stationRole.id;
+    })
+    testStationRoleId = stationRole.id
 
     // 2. Create Platform & Profiles
-    let platform = await prisma.platform.findFirst({ where: { code: "UPWORK" } });
+    let platform = await prisma.platform.findFirst({
+      where: { code: "UPWORK" },
+    })
     if (!platform) {
       platform = await prisma.platform.create({
-        data: { code: `UPWORK_${timestamp}`, name: "Upwork Global", isActive: true },
-      });
+        data: {
+          code: `UPWORK_${timestamp}`,
+          name: "Upwork Global",
+          isActive: true,
+        },
+      })
     }
-    testPlatformId = platform.id;
+    testPlatformId = platform.id
 
     const profile1 = await prisma.profile.create({
       data: {
@@ -73,8 +80,8 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         username: `sales_agent_alpha_${timestamp}`,
         isActive: true,
       },
-    });
-    testProfile1Id = profile1.id;
+    })
+    testProfile1Id = profile1.id
 
     const profile2 = await prisma.profile.create({
       data: {
@@ -82,8 +89,8 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         username: `sales_agent_beta_${timestamp}`,
         isActive: true,
       },
-    });
-    testProfile2Id = profile2.id;
+    })
+    testProfile2Id = profile2.id
 
     // 3. Create Test Users
     const adminDbUser = await prisma.user.create({
@@ -96,12 +103,12 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         systemRole: "SuperAdmin",
         isActive: true,
       },
-    });
+    })
     superAdminUser = {
       id: adminDbUser.id,
       systemRole: "SuperAdmin",
       email: adminDbUser.email,
-    };
+    }
 
     const staffDbUserA = await prisma.user.create({
       data: {
@@ -113,12 +120,12 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         systemRole: "Staff",
         isActive: true,
       },
-    });
+    })
     staffUserA = {
       id: staffDbUserA.id,
       systemRole: "Staff",
       email: staffDbUserA.email,
-    };
+    }
 
     const staffDbUserB = await prisma.user.create({
       data: {
@@ -130,55 +137,67 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         systemRole: "Staff",
         isActive: true,
       },
-    });
+    })
     staffUserB = {
       id: staffDbUserB.id,
       systemRole: "Staff",
       email: staffDbUserB.email,
-    };
-  });
+    }
+  })
 
   afterAll(async () => {
     // Cleanup created test records
     await prisma.stationSession.deleteMany({
-      where: { userId: { in: [superAdminUser?.id, staffUserA?.id, staffUserB?.id].filter(Boolean) } },
-    });
+      where: {
+        userId: {
+          in: [superAdminUser?.id, staffUserA?.id, staffUserB?.id].filter(
+            Boolean
+          ),
+        },
+      },
+    })
     await prisma.stationProfileAssignment.deleteMany({
-      where: { profileId: { in: [testProfile1Id, testProfile2Id].filter(Boolean) } },
-    });
+      where: {
+        profileId: { in: [testProfile1Id, testProfile2Id].filter(Boolean) },
+      },
+    })
     await prisma.stationUserAssignment.deleteMany({
-      where: { userId: { in: [staffUserA?.id, staffUserB?.id].filter(Boolean) } },
-    });
+      where: {
+        userId: { in: [staffUserA?.id, staffUserB?.id].filter(Boolean) },
+      },
+    })
     if (createdStation1Id || createdStation2Id) {
       await prisma.station.deleteMany({
-        where: { id: { in: [createdStation1Id, createdStation2Id].filter(Boolean) } },
-      });
+        where: {
+          id: { in: [createdStation1Id, createdStation2Id].filter(Boolean) },
+        },
+      })
     }
-  });
+  })
 
   describe("Dynamic Lookup Tables (Rule BE-11)", () => {
     it("should fetch active station types, statuses, and roles", async () => {
-      const types = await stationsService.lookup.getStationTypes();
-      const statuses = await stationsService.lookup.getStationStatuses();
-      const roles = await stationsService.lookup.getStationRoles();
+      const types = await stationsService.lookup.getStationTypes()
+      const statuses = await stationsService.lookup.getStationStatuses()
+      const roles = await stationsService.lookup.getStationRoles()
 
-      expect(types.length).toBeGreaterThan(0);
-      expect(statuses.length).toBeGreaterThan(0);
-      expect(roles.length).toBeGreaterThan(0);
+      expect(types.length).toBeGreaterThan(0)
+      expect(statuses.length).toBeGreaterThan(0)
+      expect(roles.length).toBeGreaterThan(0)
 
-      const createdType = types.find((t) => t.id === testStationTypeId);
-      expect(createdType).toBeDefined();
-      expect(createdType?.isSales).toBe(true);
+      const createdType = types.find((t) => t.id === testStationTypeId)
+      expect(createdType).toBeDefined()
+      expect(createdType?.isSales).toBe(true)
 
-      const createdStatus = statuses.find((s) => s.id === testStationStatusId);
-      expect(createdStatus).toBeDefined();
-      expect(createdStatus?.isOperational).toBe(true);
-    });
-  });
+      const createdStatus = statuses.find((s) => s.id === testStationStatusId)
+      expect(createdStatus).toBeDefined()
+      expect(createdStatus?.isOperational).toBe(true)
+    })
+  })
 
   describe("Station Lifecycle & Capabilities Decoration", () => {
     it("should create Station 1 and Station 2 with server-computed _capabilities", async () => {
-      const timestamp = Date.now();
+      const timestamp = Date.now()
 
       const station1 = await stationsService.mutation.createStation(
         {
@@ -189,15 +208,15 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           statusId: testStationStatusId,
           maxConcurrentUsers: 2,
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      createdStation1Id = station1.id;
-      expect(station1.code).toBe(`STN_SALES_01_${timestamp}`);
-      expect(station1._capabilities?.canEdit).toBe(true);
-      expect(station1._capabilities?.canDelete).toBe(true);
-      expect(station1._capabilities?.canAssignProfile).toBe(true);
-      expect(station1._capabilities?.canJoin).toBe(true);
+      createdStation1Id = station1.id
+      expect(station1.code).toBe(`STN_SALES_01_${timestamp}`)
+      expect(station1._capabilities?.canEdit).toBe(true)
+      expect(station1._capabilities?.canDelete).toBe(true)
+      expect(station1._capabilities?.canAssignProfile).toBe(true)
+      expect(station1._capabilities?.canJoin).toBe(true)
 
       const station2 = await stationsService.mutation.createStation(
         {
@@ -208,27 +227,27 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           statusId: testStationStatusId,
           maxConcurrentUsers: 2,
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      createdStation2Id = station2.id;
-      expect(station2.code).toBe(`STN_SALES_02_${timestamp}`);
-    });
+      createdStation2Id = station2.id
+      expect(station2.code).toBe(`STN_SALES_02_${timestamp}`)
+    })
 
     it("should retrieve station list with pagination and stats", async () => {
       const result = await stationsService.query.getStations(
         { page: 1, limit: 10, isSales: true },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      expect(result.items.length).toBeGreaterThan(0);
-      expect(result.pagination.total).toBeGreaterThan(0);
+      expect(result.items.length).toBeGreaterThan(0)
+      expect(result.pagination.total).toBeGreaterThan(0)
 
-      const stats = await stationsService.query.getStationStats(superAdminUser);
-      expect(stats.totalStations).toBeGreaterThan(0);
-      expect(stats.salesStations).toBeGreaterThan(0);
-    });
-  });
+      const stats = await stationsService.query.getStationStats(superAdminUser)
+      expect(stats.totalStations).toBeGreaterThan(0)
+      expect(stats.salesStations).toBeGreaterThan(0)
+    })
+  })
 
   describe("User & Profile Assignments & Atomic Reassignments", () => {
     it("should assign Staff User A to Station 1", async () => {
@@ -240,13 +259,13 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           shift: "Morning",
           note: "Assigned as lead operator for morning rotation",
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      expect(userAssignment.stationId).toBe(createdStation1Id);
-      expect(userAssignment.userId).toBe(staffUserA.id);
-      expect(userAssignment.role?.canOperate).toBe(true);
-    });
+      expect(userAssignment.stationId).toBe(createdStation1Id)
+      expect(userAssignment.userId).toBe(staffUserA.id)
+      expect(userAssignment.role?.canOperate).toBe(true)
+    })
 
     it("should assign Profile 1 to Station 1", async () => {
       const profileAssignment = await stationsService.assignment.assignProfile(
@@ -256,20 +275,20 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           shift: "Morning",
           isPrimary: true,
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      expect(profileAssignment.stationId).toBe(createdStation1Id);
-      expect(profileAssignment.profileId).toBe(testProfile1Id);
-      expect(profileAssignment.isPrimary).toBe(true);
+      expect(profileAssignment.stationId).toBe(createdStation1Id)
+      expect(profileAssignment.profileId).toBe(testProfile1Id)
+      expect(profileAssignment.isPrimary).toBe(true)
 
       const station = await stationsService.query.getStationById(
         createdStation1Id,
-        superAdminUser,
-      );
-      expect(station.activeProfilesCount).toBe(1);
-      expect(station.activeProfiles?.[0]?.profileId).toBe(testProfile1Id);
-    });
+        superAdminUser
+      )
+      expect(station.activeProfilesCount).toBe(1)
+      expect(station.activeProfiles?.[0]?.profileId).toBe(testProfile1Id)
+    })
 
     it("should atomically reassign Profile 1 from Station 1 to Station 2", async () => {
       const reassignResult = await stationsService.assignment.reassignProfile(
@@ -280,35 +299,35 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           shift: "Night",
           note: "Shift handoff to Station 2 for night coverage",
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      expect(reassignResult.assignment.stationId).toBe(createdStation2Id);
-      expect(reassignResult.assignment.profileId).toBe(testProfile1Id);
+      expect(reassignResult.assignment.stationId).toBe(createdStation2Id)
+      expect(reassignResult.assignment.profileId).toBe(testProfile1Id)
 
       // Verify Station 1 now has 0 active profiles
       const station1 = await stationsService.query.getStationById(
         createdStation1Id,
-        superAdminUser,
-      );
-      expect(station1.activeProfilesCount).toBe(0);
+        superAdminUser
+      )
+      expect(station1.activeProfilesCount).toBe(0)
 
       // Verify Station 2 now has 1 active profile
       const station2 = await stationsService.query.getStationById(
         createdStation2Id,
-        superAdminUser,
-      );
-      expect(station2.activeProfilesCount).toBe(1);
-      expect(station2.activeProfiles?.[0]?.profileId).toBe(testProfile1Id);
+        superAdminUser
+      )
+      expect(station2.activeProfilesCount).toBe(1)
+      expect(station2.activeProfiles?.[0]?.profileId).toBe(testProfile1Id)
 
       // Verify historic assignment record in database has unassignedAt timestamp
       const historicalRecords = await prisma.stationProfileAssignment.findMany({
         where: { profileId: testProfile1Id, stationId: createdStation1Id },
-      });
-      expect(historicalRecords.length).toBeGreaterThan(0);
-      expect(historicalRecords.every((r) => r.unassignedAt !== null)).toBe(true);
-    });
-  });
+      })
+      expect(historicalRecords.length).toBeGreaterThan(0)
+      expect(historicalRecords.every((r) => r.unassignedAt !== null)).toBe(true)
+    })
+  })
 
   describe("Session Lifecycle & Station Context", () => {
     it("should allow Staff User A to select and join Station 1", async () => {
@@ -316,50 +335,56 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
       await stationsService.assignment.assignProfile(
         createdStation1Id,
         { profileId: testProfile2Id, isPrimary: true },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       const activeContext = await stationsService.session.selectStation(
         { stationId: createdStation1Id },
-        staffUserA,
-      );
+        staffUserA
+      )
 
-      expect(activeContext.station.id).toBe(createdStation1Id);
-      expect(activeContext.session.isCurrent).toBe(true);
-      expect(activeContext.activeProfileIds).toContain(testProfile2Id);
+      expect(activeContext.station.id).toBe(createdStation1Id)
+      expect(activeContext.session.isCurrent).toBe(true)
+      expect(activeContext.activeProfileIds).toContain(testProfile2Id)
 
       // Verify getActiveSession returns active session
-      const current = await stationsService.session.getActiveSession(staffUserA);
-      expect(current).not.toBeNull();
-      expect(current?.station.id).toBe(createdStation1Id);
-    });
+      const current = await stationsService.session.getActiveSession(staffUserA)
+      expect(current).not.toBeNull()
+      expect(current?.station.id).toBe(createdStation1Id)
+    })
 
     it("should allow Staff User A to leave station and clear session context", async () => {
-      const leaveResult = await stationsService.session.leaveStation(staffUserA);
-      expect(leaveResult.message).toBe("Left station successfully");
+      const leaveResult = await stationsService.session.leaveStation(staffUserA)
+      expect(leaveResult.message).toBe("Left station successfully")
 
-      const current = await stationsService.session.getActiveSession(staffUserA);
-      expect(current).toBeNull();
-    });
-  });
+      const current = await stationsService.session.getActiveSession(staffUserA)
+      expect(current).toBeNull()
+    })
+  })
 
   describe("Project Scoped Visibility Integration", () => {
-    let projectUnderStation1: any;
-    let projectUnderStation2: any;
-    let sampleStatusId: string;
-    let sampleClientId: string;
+    let projectUnderStation1: any
+    let projectUnderStation2: any
+    let sampleStatusId: string
+    let sampleClientId: string
 
     beforeAll(async () => {
-      const timestamp = Date.now();
+      const timestamp = Date.now()
 
       // Ensure status
-      let status = await prisma.projectStatus.findFirst({ where: { code: "IN_PROGRESS" } });
+      let status = await prisma.projectStatus.findFirst({
+        where: { code: "IN_PROGRESS" },
+      })
       if (!status) {
         status = await prisma.projectStatus.create({
-          data: { code: `STATUS_${timestamp}`, name: "In Progress", isTerminal: false },
-        });
+          data: {
+            code: `STATUS_${timestamp}`,
+            name: "In Progress",
+            isTerminal: false,
+          },
+        })
       }
-      sampleStatusId = status.id;
+      sampleStatusId = status.id
 
       // Ensure client
       const client = await prisma.client.create({
@@ -367,22 +392,22 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           name: `Client Station Test ${timestamp}`,
           platformId: testPlatformId,
         },
-      });
-      sampleClientId = client.id;
+      })
+      sampleClientId = client.id
 
       // Assign Profile 2 to Station 1
       await stationsService.assignment.assignProfile(
         createdStation1Id,
         { profileId: testProfile2Id, isPrimary: true },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Assign Profile 1 to Station 2
       await stationsService.assignment.assignProfile(
         createdStation2Id,
         { profileId: testProfile1Id, isPrimary: true },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Project 1 under Profile 2 (Station 1)
       projectUnderStation1 = await prisma.project.create({
@@ -394,7 +419,7 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           statusId: sampleStatusId,
           value: 2500,
         },
-      });
+      })
 
       // Project 2 under Profile 1 (Station 2)
       projectUnderStation2 = await prisma.project.create({
@@ -406,50 +431,50 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           statusId: sampleStatusId,
           value: 5000,
         },
-      });
-    });
-
-
+      })
+    })
 
     afterAll(async () => {
       if (projectUnderStation1) {
-        await prisma.project.deleteMany({ where: { id: projectUnderStation1.id } });
+        await prisma.project.deleteMany({
+          where: { id: projectUnderStation1.id },
+        })
       }
       if (projectUnderStation2) {
-        await prisma.project.deleteMany({ where: { id: projectUnderStation2.id } });
+        await prisma.project.deleteMany({
+          where: { id: projectUnderStation2.id },
+        })
       }
-    });
+    })
 
     it("should filter projects by active station profile context when user is in active session", async () => {
       // Staff User A joins Station 1 (hosts Profile 2)
       await stationsService.session.selectStation(
         { stationId: createdStation1Id },
-        staffUserA,
-      );
+        staffUserA
+      )
 
-      const projects = await projectsService.getProjects({}, staffUserA);
-      const projectIds = projects.items.map((p) => p.id);
+      const projects = await projectsService.getProjects({}, staffUserA)
+      const projectIds = projects.items.map((p) => p.id)
 
       // Staff User A on Station 1 should see projectUnderStation1 (Profile 2)
-      expect(projectIds).toContain(projectUnderStation1.id);
+      expect(projectIds).toContain(projectUnderStation1.id)
 
       // Staff User A on Station 1 should NOT see projectUnderStation2 (Profile 1 on Station 2)
-      expect(projectIds).not.toContain(projectUnderStation2.id);
-    });
+      expect(projectIds).not.toContain(projectUnderStation2.id)
+    })
 
     it("should support filtering projects explicitly by stationId query param", async () => {
       const station2Projects = await projectsService.getProjects(
         { stationId: createdStation2Id },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      const projectIds = station2Projects.items.map((p) => p.id);
-      expect(projectIds).toContain(projectUnderStation2.id);
-      expect(projectIds).not.toContain(projectUnderStation1.id);
-    });
-  });
-
-
+      const projectIds = station2Projects.items.map((p) => p.id)
+      expect(projectIds).toContain(projectUnderStation2.id)
+      expect(projectIds).not.toContain(projectUnderStation1.id)
+    })
+  })
 
   describe("Multi-Workstation Profile Assignment & IP Validation", () => {
     it("should allow a single profile to be assigned to multiple workstations simultaneously", async () => {
@@ -457,23 +482,33 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
       await stationsService.assignment.assignProfile(
         createdStation1Id,
         { profileId: testProfile2Id, isPrimary: true },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Assign Profile 2 to Station 2 as well
       await stationsService.assignment.assignProfile(
         createdStation2Id,
         { profileId: testProfile2Id, isPrimary: false },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Both stations should report Profile 2 as active
-      const station1 = await stationsService.query.getStationById(createdStation1Id, superAdminUser);
-      const station2 = await stationsService.query.getStationById(createdStation2Id, superAdminUser);
+      const station1 = await stationsService.query.getStationById(
+        createdStation1Id,
+        superAdminUser
+      )
+      const station2 = await stationsService.query.getStationById(
+        createdStation2Id,
+        superAdminUser
+      )
 
-      expect(station1.activeProfiles?.some((p) => p.profileId === testProfile2Id)).toBe(true);
-      expect(station2.activeProfiles?.some((p) => p.profileId === testProfile2Id)).toBe(true);
-    });
+      expect(
+        station1.activeProfiles?.some((p) => p.profileId === testProfile2Id)
+      ).toBe(true)
+      expect(
+        station2.activeProfiles?.some((p) => p.profileId === testProfile2Id)
+      ).toBe(true)
+    })
 
     it("should bypass IP validation when isIpRestricted is false", async () => {
       // Create station with isIpRestricted = false
@@ -486,34 +521,34 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           isIpRestricted: false,
           ipWhitelist: ["192.168.1.100"],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Assign Staff A to openStation
       await stationsService.assignment.assignUser(
         openStation.id,
         { userId: staffUserA.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Staff joins from an arbitrary IP (e.g. 10.50.1.25)
       const mockReq = {
         headers: { "x-forwarded-for": "10.50.1.25" },
         socket: { remoteAddress: "10.50.1.25" },
-      } as any;
+      } as any
 
       const session = await stationsService.session.selectStation(
         { stationId: openStation.id },
         staffUserA,
-        mockReq,
-      );
+        mockReq
+      )
 
-      expect(session.session.stationId).toBe(openStation.id);
+      expect(session.session.stationId).toBe(openStation.id)
 
       // Cleanup
-      await stationsService.session.leaveStation(staffUserA);
-      await prisma.station.delete({ where: { id: openStation.id } });
-    });
+      await stationsService.session.leaveStation(staffUserA)
+      await prisma.station.delete({ where: { id: openStation.id } })
+    })
 
     it("should enforce IP validation and reject non-whitelisted IPs when isIpRestricted is true", async () => {
       const restrictedStation = await stationsService.mutation.createStation(
@@ -525,47 +560,49 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           isIpRestricted: true,
           ipWhitelist: ["192.168.1.50", "10.0.0.*"],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       await stationsService.assignment.assignUser(
         restrictedStation.id,
         { userId: staffUserB.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Unauthorized IP attempt
       const unauthorizedReq = {
         headers: { "x-forwarded-for": "203.0.113.195" },
         socket: { remoteAddress: "203.0.113.195" },
-      } as any;
+      } as any
 
       expect(
         stationsService.session.selectStation(
           { stationId: restrictedStation.id },
           staffUserB,
-          unauthorizedReq,
-        ),
-      ).rejects.toThrow("Access denied: Your IP address is not authorized for this workstation.");
+          unauthorizedReq
+        )
+      ).rejects.toThrow(
+        "Access denied: Your IP address is not authorized for this workstation."
+      )
 
       // Authorized IP attempt (exact match)
       const authorizedReq = {
         headers: { "x-forwarded-for": "192.168.1.50" },
         socket: { remoteAddress: "192.168.1.50" },
-      } as any;
+      } as any
 
       const session = await stationsService.session.selectStation(
         { stationId: restrictedStation.id },
         staffUserB,
-        authorizedReq,
-      );
+        authorizedReq
+      )
 
-      expect(session.session.stationId).toBe(restrictedStation.id);
+      expect(session.session.stationId).toBe(restrictedStation.id)
 
       // Cleanup
-      await stationsService.session.leaveStation(staffUserB);
-      await prisma.station.delete({ where: { id: restrictedStation.id } });
-    });
+      await stationsService.session.leaveStation(staffUserB)
+      await prisma.station.delete({ where: { id: restrictedStation.id } })
+    })
 
     it("should bypass MAC validation when isMacRestricted is false", async () => {
       const openMacStation = await stationsService.mutation.createStation(
@@ -577,27 +614,27 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           isMacRestricted: false,
           macWhitelist: ["00:1A:2B:3C:4D:5E"],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       await stationsService.assignment.assignUser(
         openMacStation.id,
         { userId: staffUserA.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Join with arbitrary MAC address
       const session = await stationsService.session.selectStation(
         { stationId: openMacStation.id, macAddress: "FF:FF:FF:FF:FF:FF" },
-        staffUserA,
-      );
+        staffUserA
+      )
 
-      expect(session.session.stationId).toBe(openMacStation.id);
+      expect(session.session.stationId).toBe(openMacStation.id)
 
       // Cleanup
-      await stationsService.session.leaveStation(staffUserA);
-      await prisma.station.delete({ where: { id: openMacStation.id } });
-    });
+      await stationsService.session.leaveStation(staffUserA)
+      await prisma.station.delete({ where: { id: openMacStation.id } })
+    })
 
     it("should enforce MAC validation and accept normalized MAC entries when isMacRestricted is true", async () => {
       const restrictedMacStation = await stationsService.mutation.createStation(
@@ -609,36 +646,41 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           isMacRestricted: true,
           macWhitelist: ["00:1A:2B:3C:4D:5E", "A1-B2-C3-D4-E5-F6"],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       await stationsService.assignment.assignUser(
         restrictedMacStation.id,
         { userId: staffUserB.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // 1. Missing MAC / unauthorized MAC
       expect(
         stationsService.session.selectStation(
-          { stationId: restrictedMacStation.id, macAddress: "00:00:00:00:00:00" },
-          staffUserB,
-        ),
-      ).rejects.toThrow("Access denied: Your MAC address is not authorized for this workstation.");
+          {
+            stationId: restrictedMacStation.id,
+            macAddress: "00:00:00:00:00:00",
+          },
+          staffUserB
+        )
+      ).rejects.toThrow(
+        "Access denied: Your MAC address is not authorized for this workstation."
+      )
 
       // 2. Authorized MAC via header or DTO with different casing/delimiters
       // '00-1a-2b-3c-4d-5e' should normalize and match '00:1A:2B:3C:4D:5E'
       const session = await stationsService.session.selectStation(
         { stationId: restrictedMacStation.id, macAddress: "00-1a-2b-3c-4d-5e" },
-        staffUserB,
-      );
+        staffUserB
+      )
 
-      expect(session.session.stationId).toBe(restrictedMacStation.id);
+      expect(session.session.stationId).toBe(restrictedMacStation.id)
 
       // Cleanup
-      await stationsService.session.leaveStation(staffUserB);
-      await prisma.station.delete({ where: { id: restrictedMacStation.id } });
-    });
+      await stationsService.session.leaveStation(staffUserB)
+      await prisma.station.delete({ where: { id: restrictedMacStation.id } })
+    })
 
     it("should accurately validate IP addresses against RFC-compliant CIDR subnet masks", async () => {
       const cidrStation = await stationsService.mutation.createStation(
@@ -650,45 +692,47 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           isIpRestricted: true,
           ipWhitelist: ["192.168.1.0/24", "10.0.0.0/8"],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       await stationsService.assignment.assignUser(
         cidrStation.id,
         { userId: staffUserA.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // 1. Within 192.168.1.0/24
       const session1 = await stationsService.session.selectStation(
         { stationId: cidrStation.id },
         staffUserA,
-        { headers: { "x-forwarded-for": "192.168.1.75" } } as any,
-      );
-      expect(session1.session.stationId).toBe(cidrStation.id);
-      await stationsService.session.leaveStation(staffUserA);
+        { headers: { "x-forwarded-for": "192.168.1.75" } } as any
+      )
+      expect(session1.session.stationId).toBe(cidrStation.id)
+      await stationsService.session.leaveStation(staffUserA)
 
       // 2. Within 10.0.0.0/8
       const session2 = await stationsService.session.selectStation(
         { stationId: cidrStation.id },
         staffUserA,
-        { headers: { "x-forwarded-for": "10.250.33.19" } } as any,
-      );
-      expect(session2.session.stationId).toBe(cidrStation.id);
-      await stationsService.session.leaveStation(staffUserA);
+        { headers: { "x-forwarded-for": "10.250.33.19" } } as any
+      )
+      expect(session2.session.stationId).toBe(cidrStation.id)
+      await stationsService.session.leaveStation(staffUserA)
 
       // 3. Outside both CIDRs (192.168.2.1) -> should reject
       expect(
         stationsService.session.selectStation(
           { stationId: cidrStation.id },
           staffUserA,
-          { headers: { "x-forwarded-for": "192.168.2.1" } } as any,
-        ),
-      ).rejects.toThrow("Access denied: Your IP address is not authorized for this workstation.");
+          { headers: { "x-forwarded-for": "192.168.2.1" } } as any
+        )
+      ).rejects.toThrow(
+        "Access denied: Your IP address is not authorized for this workstation."
+      )
 
       // Cleanup
-      await prisma.station.delete({ where: { id: cidrStation.id } });
-    });
+      await prisma.station.delete({ where: { id: cidrStation.id } })
+    })
 
     it("should terminate active operator sessions and invalidate cache when station is deactivated", async () => {
       const activeStation = await stationsService.mutation.createStation(
@@ -699,106 +743,123 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           statusId: testStationStatusId,
           isActive: true,
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       await stationsService.assignment.assignUser(
         activeStation.id,
         { userId: staffUserA.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // User joins station
       await stationsService.session.selectStation(
         { stationId: activeStation.id },
-        staffUserA,
-      );
+        staffUserA
+      )
 
-      const activeContextBefore = await stationsService.session.getActiveSession(staffUserA);
-      expect(activeContextBefore).not.toBeNull();
-      expect(activeContextBefore?.station.id).toBe(activeStation.id);
+      const activeContextBefore =
+        await stationsService.session.getActiveSession(staffUserA)
+      expect(activeContextBefore).not.toBeNull()
+      expect(activeContextBefore?.station.id).toBe(activeStation.id)
 
       // Admin deactivates station
       await stationsService.mutation.updateStation(
         activeStation.id,
         { isActive: false },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // Active session in DB must be terminated
       const sessionsInDb = await prisma.stationSession.findMany({
-        where: { stationId: activeStation.id, userId: staffUserA.id, isCurrent: true },
-      });
-      expect(sessionsInDb.length).toBe(0);
+        where: {
+          stationId: activeStation.id,
+          userId: staffUserA.id,
+          isCurrent: true,
+        },
+      })
+      expect(sessionsInDb.length).toBe(0)
 
       // Session context should now be null
-      const activeContextAfter = await stationsService.session.getActiveSession(staffUserA);
-      expect(activeContextAfter).toBeNull();
+      const activeContextAfter =
+        await stationsService.session.getActiveSession(staffUserA)
+      expect(activeContextAfter).toBeNull()
 
       // Cleanup
-      await prisma.station.delete({ where: { id: activeStation.id } });
-    });
+      await prisma.station.delete({ where: { id: activeStation.id } })
+    })
 
     it("should allow a single operator to join multiple stations simultaneously and switch between them", async () => {
       // 1. Assign staffUserA to both createdStation1Id and createdStation2Id
       await stationsService.assignment.assignUser(
         createdStation1Id,
         { userId: staffUserA.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
       await stationsService.assignment.assignUser(
         createdStation2Id,
         { userId: staffUserA.id, roleId: testStationRoleId },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
       // 2. Join Station 1
       const context1 = await stationsService.session.selectStation(
         { stationId: createdStation1Id },
-        staffUserA,
-      );
-      expect(context1.station.id).toBe(createdStation1Id);
+        staffUserA
+      )
+      expect(context1.station.id).toBe(createdStation1Id)
 
       // 3. Join Station 2 (Station 1 should NOT be disconnected)
       const context2 = await stationsService.session.selectStation(
         { stationId: createdStation2Id },
-        staffUserA,
-      );
-      expect(context2.station.id).toBe(createdStation2Id);
+        staffUserA
+      )
+      expect(context2.station.id).toBe(createdStation2Id)
 
       // 4. Check getActiveSessions: both should be active
-      const multiState = await stationsService.session.getActiveSessions(staffUserA);
-      expect(multiState.activeSessions.length).toBe(2);
-      expect(multiState.activeStationIds).toContain(createdStation1Id);
-      expect(multiState.activeStationIds).toContain(createdStation2Id);
+      const multiState =
+        await stationsService.session.getActiveSessions(staffUserA)
+      expect(multiState.activeSessions.length).toBe(2)
+      expect(multiState.activeStationIds).toContain(createdStation1Id)
+      expect(multiState.activeStationIds).toContain(createdStation2Id)
 
       // 5. Joining Station 1 again should not create duplicate sessions
       await stationsService.session.selectStation(
         { stationId: createdStation1Id },
-        staffUserA,
-      );
-      const multiStateAfterRejoin = await stationsService.session.getActiveSessions(staffUserA);
-      expect(multiStateAfterRejoin.activeSessions.length).toBe(2);
+        staffUserA
+      )
+      const multiStateAfterRejoin =
+        await stationsService.session.getActiveSessions(staffUserA)
+      expect(multiStateAfterRejoin.activeSessions.length).toBe(2)
 
       // 6. Leave only Station 1
-      const leaveRes1 = await stationsService.session.leaveStation(staffUserA, createdStation1Id);
-      expect(leaveRes1.remainingActiveStationIds).toContain(createdStation2Id);
-      expect(leaveRes1.remainingActiveStationIds).not.toContain(createdStation1Id);
+      const leaveRes1 = await stationsService.session.leaveStation(
+        staffUserA,
+        createdStation1Id
+      )
+      expect(leaveRes1.remainingActiveStationIds).toContain(createdStation2Id)
+      expect(leaveRes1.remainingActiveStationIds).not.toContain(
+        createdStation1Id
+      )
 
       // Verify Station 2 is still active
-      const multiStateAfterLeave1 = await stationsService.session.getActiveSessions(staffUserA);
-      expect(multiStateAfterLeave1.activeSessions.length).toBe(1);
-      expect(multiStateAfterLeave1.activeStationIds).toEqual([createdStation2Id]);
+      const multiStateAfterLeave1 =
+        await stationsService.session.getActiveSessions(staffUserA)
+      expect(multiStateAfterLeave1.activeSessions.length).toBe(1)
+      expect(multiStateAfterLeave1.activeStationIds).toEqual([
+        createdStation2Id,
+      ])
 
       // 7. Leave all remaining stations
-      await stationsService.session.leaveStation(staffUserA);
-      const multiStateFinal = await stationsService.session.getActiveSessions(staffUserA);
-      expect(multiStateFinal.activeSessions.length).toBe(0);
-    });
-  });
+      await stationsService.session.leaveStation(staffUserA)
+      const multiStateFinal =
+        await stationsService.session.getActiveSessions(staffUserA)
+      expect(multiStateFinal.activeSessions.length).toBe(0)
+    })
+  })
 
   describe("Platform Profiles Management Service", () => {
-    let createdProfileId: string;
+    let createdProfileId: string
 
     it("should create a new platform profile linked to multiple stations", async () => {
       const newProfile = await stationsService.profile.createProfile(
@@ -808,26 +869,30 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           isActive: true,
           stationIds: [createdStation1Id, createdStation2Id],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      createdProfileId = newProfile.id;
-      expect(newProfile.id).toBeDefined();
-      expect(newProfile.stationIds.length).toBe(2);
-      expect(newProfile.assignedStations.map((s) => s.stationId)).toContain(createdStation1Id);
-      expect(newProfile.assignedStations.map((s) => s.stationId)).toContain(createdStation2Id);
-    });
+      createdProfileId = newProfile.id
+      expect(newProfile.id).toBeDefined()
+      expect(newProfile.stationIds.length).toBe(2)
+      expect(newProfile.assignedStations.map((s) => s.stationId)).toContain(
+        createdStation1Id
+      )
+      expect(newProfile.assignedStations.map((s) => s.stationId)).toContain(
+        createdStation2Id
+      )
+    })
 
     it("should list platform profiles with assigned workstations", async () => {
       const result = await stationsService.profile.getProfiles({
         platformId: testPlatformId,
-      });
+      })
 
-      expect(result.items.length).toBeGreaterThan(0);
-      const found = result.items.find((p) => p.id === createdProfileId);
-      expect(found).toBeDefined();
-      expect(found?.assignedStations.length).toBe(2);
-    });
+      expect(result.items.length).toBeGreaterThan(0)
+      const found = result.items.find((p) => p.id === createdProfileId)
+      expect(found).toBeDefined()
+      expect(found?.assignedStations.length).toBe(2)
+    })
 
     it("should update profile and sync station memberships", async () => {
       // Remove from Station 1, keep Station 2
@@ -836,39 +901,41 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
         {
           stationIds: [createdStation2Id],
         },
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      expect(updated.stationIds).toEqual([createdStation2Id]);
-      expect(updated.assignedStations.length).toBe(1);
-      expect(updated.assignedStations[0]?.stationId).toBe(createdStation2Id);
-    });
+      expect(updated.stationIds).toEqual([createdStation2Id])
+      expect(updated.assignedStations.length).toBe(1)
+      expect(updated.assignedStations[0]?.stationId).toBe(createdStation2Id)
+    })
 
     it("should deactivate profile and clean up active station assignments", async () => {
       const deleteResult = await stationsService.profile.deleteProfile(
         createdProfileId,
-        superAdminUser,
-      );
+        superAdminUser
+      )
 
-      expect(deleteResult.message).toContain("deactivated");
+      expect(deleteResult.message).toContain("deactivated")
 
-      const profile = await stationsService.profile.getProfileById(createdProfileId);
-      expect(profile.isActive).toBe(false);
-      expect(profile.assignedStations.length).toBe(0);
-    });
-  });
+      const profile =
+        await stationsService.profile.getProfileById(createdProfileId)
+      expect(profile.isActive).toBe(false)
+      expect(profile.assignedStations.length).toBe(0)
+    })
+  })
 
   describe("Permission-Aware Branch & Department Scope Context", () => {
     it("should return full branch & department access for SuperAdmin", async () => {
-      const context = await stationsService.lookup.getStationScopeContext(superAdminUser);
+      const context =
+        await stationsService.lookup.getStationScopeContext(superAdminUser)
 
-      expect(context.canSelectBranch).toBe(true);
-      expect(context.canSelectDepartment).toBe(true);
-      expect(context.isBranchRestricted).toBe(false);
-      expect(context.isDepartmentRestricted).toBe(false);
-      expect(Array.isArray(context.authorizedBranches)).toBe(true);
-      expect(Array.isArray(context.authorizedDepartments)).toBe(true);
-    });
+      expect(context.canSelectBranch).toBe(true)
+      expect(context.canSelectDepartment).toBe(true)
+      expect(context.isBranchRestricted).toBe(false)
+      expect(context.isDepartmentRestricted).toBe(false)
+      expect(Array.isArray(context.authorizedBranches)).toBe(true)
+      expect(Array.isArray(context.authorizedDepartments)).toBe(true)
+    })
 
     it("should reject station creation if selected department does not belong to the selected branch", async () => {
       // Create a test branch and an unrelated department
@@ -877,20 +944,20 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
           code: `BR_A_${Date.now()}`,
           name: "Branch A",
         },
-      });
+      })
       const branchB = await prisma.branch.create({
         data: {
           code: `BR_B_${Date.now()}`,
           name: "Branch B",
         },
-      });
+      })
       const deptB = await prisma.department.create({
         data: {
           code: `DEP_B_${Date.now()}`,
           name: "Department in Branch B",
           branchId: branchB.id,
         },
-      });
+      })
 
       // Try creating station with Branch A but Department in Branch B -> should throw BadRequestError
       await expect(
@@ -903,14 +970,99 @@ describe("Stations & Dynamic Profile Management Subsystem", () => {
             branchId: branchA.id,
             departmentId: deptB.id,
           },
-          superAdminUser,
-        ),
-      ).rejects.toThrow("Selected department does not belong to the specified branch");
+          superAdminUser
+        )
+      ).rejects.toThrow(
+        "Selected department does not belong to the specified branch"
+      )
 
       // Cleanup
-      await prisma.department.delete({ where: { id: deptB.id } });
-      await prisma.branch.delete({ where: { id: branchA.id } });
-      await prisma.branch.delete({ where: { id: branchB.id } });
-    });
-  });
-});
+      await prisma.department.delete({ where: { id: deptB.id } })
+      await prisma.branch.delete({ where: { id: branchA.id } })
+      await prisma.branch.delete({ where: { id: branchB.id } })
+    })
+  })
+
+  describe("High-Traffic Optimizations, Invariants, and CIDR Normalization", () => {
+    it("should evaluate batch station capabilities with parity to single-item evaluations", async () => {
+      const queryRes = await stationsService.query.getStations(
+        { limit: 10 },
+        superAdminUser
+      )
+      expect(queryRes.items.length).toBeGreaterThan(0)
+
+      for (const item of queryRes.items) {
+        expect(item._capabilities).toBeDefined()
+        expect(item._capabilities?.canEdit).toBe(true)
+        expect(item._capabilities?.canDelete).toBe(true)
+        expect(item._capabilities?.canJoin).toBe(true)
+      }
+    })
+
+    it("should enforce primary profile uniqueness invariant when assigning a new primary profile", async () => {
+      const testStation = await stationsService.mutation.createStation(
+        {
+          code: `PRIMARY_INV_${Date.now()}`,
+          name: "Primary Invariant Station",
+          stationTypeId: testStationTypeId,
+          statusId: testStationStatusId,
+        },
+        superAdminUser
+      )
+
+      // 1. Assign Profile 1 as Primary
+      const pa1 = await stationsService.assignment.assignProfile(
+        testStation.id,
+        { profileId: testProfile1Id, isPrimary: true, shift: "Day" },
+        superAdminUser
+      )
+      expect(pa1.isPrimary).toBe(true)
+
+      // 2. Assign Profile 2 as Primary on the same station
+      const pa2 = await stationsService.assignment.assignProfile(
+        testStation.id,
+        { profileId: testProfile2Id, isPrimary: true, shift: "Night" },
+        superAdminUser
+      )
+      expect(pa2.isPrimary).toBe(true)
+
+      // 3. Verify that Profile 1's active assignment was automatically demoted to isPrimary = false
+      const activeAssignments = await prisma.stationProfileAssignment.findMany({
+        where: { stationId: testStation.id, unassignedAt: null },
+      })
+
+      const prof1Assignment = activeAssignments.find(
+        (a) => a.profileId === testProfile1Id
+      )
+      const prof2Assignment = activeAssignments.find(
+        (a) => a.profileId === testProfile2Id
+      )
+
+      expect(prof1Assignment?.isPrimary).toBe(false)
+      expect(prof2Assignment?.isPrimary).toBe(true)
+
+      // Cleanup
+      await prisma.station.delete({ where: { id: testStation.id } })
+    })
+
+    it("should correctly validate and normalize IPv6 loopbacks and mapped IPv4 addresses against CIDRs", async () => {
+      const { normalizeIpAddress, isIpInCidr } = await import("./StationDTO")
+
+      // Normalization checks
+      expect(normalizeIpAddress("::1")).toBe("127.0.0.1")
+      expect(normalizeIpAddress("::ffff:192.168.1.50")).toBe("192.168.1.50")
+      expect(normalizeIpAddress("  10.0.0.15  ")).toBe("10.0.0.15")
+
+      // Loopback matching
+      expect(isIpInCidr("::1", "127.0.0.1")).toBe(true)
+      expect(isIpInCidr("::1", "127.0.0.*")).toBe(true)
+      expect(isIpInCidr("::1", "127.0.0.0/8")).toBe(true)
+
+      // CIDR subnet matching
+      expect(isIpInCidr("::ffff:192.168.1.100", "192.168.1.0/24")).toBe(true)
+      expect(isIpInCidr("::ffff:192.168.2.100", "192.168.1.0/24")).toBe(false)
+      expect(isIpInCidr("10.5.20.1", "10.0.0.0/8")).toBe(true)
+      expect(isIpInCidr("172.16.5.1", "10.0.0.0/8")).toBe(false)
+    })
+  })
+})
