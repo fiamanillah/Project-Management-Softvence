@@ -1,94 +1,92 @@
 services:
-    postgres:
-        image: postgres:17
-        container_name: manage_project_postgres
-        restart: unless-stopped
-        environment:
-            POSTGRES_USER: fiamanillah
-            POSTGRES_PASSWORD: fiamanillah
-            POSTGRES_DB: manage_project
-        ports:
-            - '5439:5432'
-        volumes:
-            - manage_project:/var/lib/postgresql/data
-        networks:
-            - manage_project_network
+  postgres:
+    image: postgres:17
+    container_name: manage_project_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fiamanillah
+      POSTGRES_PASSWORD: fiamanillah
+      POSTGRES_DB: manage_project
+    ports:
+      - "5439:5432"
+    volumes:
+      - manage_project:/var/lib/postgresql/data
+    networks:
+      - manage_project_network
 
-    rabbitmq:
-        image: rabbitmq:3-management
-        container_name: manage_project_rabbitmq
-        restart: unless-stopped
-        environment:
-            RABBITMQ_DEFAULT_USER: guest
-            RABBITMQ_DEFAULT_PASS: guest
-        ports:
-            - '5672:5672'
-            - '15672:15672'
-        networks:
-            - manage_project_network
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: manage_project_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - manage_project_network
 
-    redis:
-        image: redis:7-alpine
-        container_name: manage_project_redis
-        restart: unless-stopped
-        ports:
-            - '6379:6379'
-        networks:
-            - manage_project_network
+  redis:
+    image: redis:7-alpine
+    container_name: manage_project_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - manage_project_network
 
-    mongodb:
-        image: mongo:7.0
-        container_name: manage_project_mongodb
-        restart: unless-stopped
-        environment:
-            MONGO_INITDB_ROOT_USERNAME: root
-            MONGO_INITDB_ROOT_PASSWORD: rootpassword
-            MONGO_INITDB_DATABASE: audit_db
-        ports:
-            - '27017:27017'
-        volumes:
-            - manage_project_mongo:/data/db
-        networks:
-            - manage_project_network
+  mongodb:
+    image: mongo:7.0
+    container_name: manage_project_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+      MONGO_INITDB_DATABASE: audit_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - manage_project_mongo:/data/db
+    networks:
+      - manage_project_network
 
-    rustfs:
-        image: rustfs/rustfs:latest
-        container_name: manage_project_rustfs
-        restart: unless-stopped
-        user: "0:0"
-        environment:
-            RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-rustfsadmin}
-            RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-rustfsadmin}
-            RUSTFS_CONSOLE_ENABLE: "true"
-            RUSTFS_VOLUMES: ${RUSTFS_VOLUMES:-/data/pool1}
-        ports:
-            - '9000:9000'
-            - '9001:9001'
-        volumes:
-            - manage_project_storage:/data
-        networks:
-            - manage_project_network
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: manage_project_rustfs
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_VOLUMES: ${RUSTFS_VOLUMES:-/data/pool1}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - manage_project_storage:/data
+    networks:
+      - manage_project_network
 
-    rustfs-mc:
-        image: minio/mc:latest
-        container_name: manage_project_rustfs_mc
-        environment:
-            MC_HOST_rustfs: http://${S3_ACCESS_KEY_ID:-rustfsadmin}:${S3_SECRET_ACCESS_KEY:-rustfsadmin}@rustfs:9000
-        networks:
-            - manage_project_network
-        profiles:
-            - tools
+  rustfs-mc:
+    image: minio/mc:latest
+    container_name: manage_project_rustfs_mc
+    environment:
+      MC_HOST_rustfs: http://${S3_ACCESS_KEY_ID:-rustfsadmin}:${S3_SECRET_ACCESS_KEY:-rustfsadmin}@rustfs:9000
+    networks:
+      - manage_project_network
+    profiles:
+      - tools
 
 networks:
-    manage_project_network:
-        driver: bridge
+  manage_project_network:
+    driver: bridge
 
 volumes:
-    manage_project:
-        driver: local
-    manage_project_mongo:
-        driver: local
-    manage_project_storage:
-        driver: local
-
-
+  manage_project:
+    driver: local
+  manage_project_mongo:
+    driver: local
+  manage_project_storage:
+    driver: local
